@@ -303,33 +303,46 @@ private fun EditorApp() {
                             }
                         },
                         onGodAction = { action ->
+                            if (busy) return@CareerWorkspace
                             val latest = document ?: return@CareerWorkspace
-                            val changed = applyGodModeAction(latest, action)
-                            if (changed != null) {
-                                document = changed
-                                hasChanges = true
-                                undoStack = emptyList()
-                                redoStack = emptyList()
-                                val successText = when {
-                                    action == "official_f1_2026" -> "Preset lineup F1 berhasil diterapkan."
-                                    action == "rename_divisions" -> "Label divisi berhasil diperbarui."
-                                    action.startsWith("swap_teams|") -> "Tim berhasil ditukar antar divisi."
-                                    action.startsWith("move_driver|") -> "Pembalap berhasil dipindahkan."
-                                    action == "max_balance" -> "Saldo berhasil diatur ke £2 miliar."
-                                    action == "unlock_hq" -> "Upgrade HQ berhasil dibuka."
-                                    action == "max_research" -> "Riset berhasil dimaksimalkan."
-                                    action == "debug_unlock" -> "Debug unlock berhasil diaktifkan."
-                                    action == "unlock_suppliers" -> "Supplier berhasil dibuka."
-                                    else -> "Perubahan berhasil diterapkan."
+                            scope.launch {
+                                busy = true
+                                try {
+                                    val changed = withContext(Dispatchers.Default) {
+                                        applyGodModeAction(latest, action)
+                                    }
+                                    if (changed != null) {
+                                        document = changed
+                                        hasChanges = true
+                                        undoStack = emptyList()
+                                        redoStack = emptyList()
+                                        val successText = when {
+                                            action == "official_f1_2026" -> "Template F1–F4 berhasil divalidasi dan diterapkan."
+                                            action == "rename_divisions" -> "Label divisi berhasil diperbarui."
+                                            action.startsWith("swap_teams|") -> "Tim berhasil ditukar antar divisi."
+                                            action.startsWith("move_driver|") -> "Pembalap berhasil dipindahkan."
+                                            action == "max_balance" -> "Saldo berhasil diatur ke £2 miliar."
+                                            action == "unlock_hq" -> "Upgrade HQ berhasil dibuka."
+                                            action == "max_research" -> "Riset berhasil dimaksimalkan."
+                                            action == "debug_unlock" -> "Debug unlock berhasil diaktifkan."
+                                            action == "unlock_suppliers" -> "Supplier berhasil dibuka."
+                                            else -> "Perubahan berhasil diterapkan."
+                                        }
+                                        snackbarHostState.showSnackbar(successText)
+                                    } else {
+                                        val failureText = when {
+                                            action == "official_f1_2026" -> "Template gagal: struktur divisi, tim, atau roster tidak cocok."
+                                            action == "rename_divisions" -> "Nama divisi tidak tersimpan sebagai teks di format save ini."
+                                            action == "unlock_suppliers" -> "Supplier tidak diubah: struktur node tidak ditemukan atau sudah terbuka."
+                                            else -> "Operasi gagal. Data save tidak diubah."
+                                        }
+                                        snackbarHostState.showSnackbar(failureText)
+                                    }
+                                } catch (failure: Exception) {
+                                    snackbarHostState.showSnackbar("God Mode gagal: ${failure.message ?: "kesalahan tidak diketahui"}")
+                                } finally {
+                                    busy = false
                                 }
-                                scope.launch { snackbarHostState.showSnackbar(successText) }
-                            } else {
-                                val failureText = when {
-                                    action == "official_f1_2026" -> "Preset gagal: struktur divisi, tim, atau roster tidak cocok."
-                                    action == "rename_divisions" -> "Nama divisi tidak tersimpan sebagai teks di format save ini."
-                                    else -> "Operasi gagal. Data save tidak diubah."
-                                }
-                                scope.launch { snackbarHostState.showSnackbar(failureText) }
                             }
                         },
                         onApplyTeamColor = { colorPath, preset ->
@@ -1818,6 +1831,58 @@ internal fun renameCareerDivisions(data:JsonObject):Int {
     return changed
 }
 
+internal fun unlockSupplierNetwork(data:JsonObject):Int {
+    val supplier=data.get("supplierNetworkManager")?.takeIf { it.isJsonObject }?.asJsonObject ?: return 0
+
+    // Build an ID index iteratively. Supplier network nodes are heavily reference-linked:
+    // m_NodeDictionary contains one embedded graph and many {$ref: "..."} entries.
+    val byId=mutableMapOf<String,JsonObject>()
+    val scan=java.util.ArrayDeque<JsonElement>()
+    scan.add(data)
+    while(scan.isNotEmpty()) {
+        val element=scan.removeLast()
+        when {
+            element.isJsonObject -> {
+                val obj=element.asJsonObject
+                obj.get("\$id")?.takeIf { it.isJsonPrimitive }?.asString?.let { byId[it]=obj }
+                obj.entrySet().forEach { (_,value) -> if(!value.isJsonNull) scan.add(value) }
+            }
+            element.isJsonArray -> element.asJsonArray.forEach { if(!it.isJsonNull) scan.add(it) }
+        }
+    }
+
+    var changed=0
+    val visited=java.util.Collections.newSetFromMap(java.util.IdentityHashMap<JsonObject,Boolean>())
+    val pending=java.util.ArrayDeque<JsonElement>()
+    pending.add(supplier)
+    while(pending.isNotEmpty()) {
+        when(val element=pending.removeLast()) {
+            is com.google.gson.JsonObject -> {
+                val obj=element
+                if(!visited.add(obj)) continue
+                val reference=obj.get("\$ref")?.takeIf { it.isJsonPrimitive }?.asString
+                if(reference!=null) byId[reference]?.let { pending.add(it) }
+
+                val owned=obj.get("m_IsOwned")
+                if(owned!=null && owned.isJsonPrimitive && owned.asJsonPrimitive.isBoolean && !owned.asBoolean) {
+                    obj.addProperty("m_IsOwned",true)
+                    changed++
+                }
+                val revealed=obj.get("m_HasOwnedBeenRevealed")
+                if(revealed!=null && revealed.isJsonPrimitive && revealed.asJsonPrimitive.isBoolean && !revealed.asBoolean) {
+                    obj.addProperty("m_HasOwnedBeenRevealed",true)
+                }
+                obj.entrySet().forEach { (key,value) ->
+                    if(key!="\$ref" && !value.isJsonNull) pending.add(value)
+                }
+            }
+            is com.google.gson.JsonArray -> element.forEach { if(!it.isJsonNull) pending.add(it) }
+            else -> Unit
+        }
+    }
+    return changed
+}
+
 private fun applyGodModeAction(current:Mm4SaveCodec.Document,action:String):Mm4SaveCodec.Document? {
     val data=current.data.deepCopy().asJsonObject
     when {
@@ -1859,22 +1924,7 @@ private fun applyGodModeAction(current:Mm4SaveCodec.Document,action:String):Mm4S
             if(parts.size!=3 || !moveDriverToTeam(data,parts[1],parts[2])) return null
         }
         action=="unlock_suppliers" -> {
-            val supplier=data.getAsJsonObject("supplierNetworkManager") ?: return null
-            val nodes=supplier.getAsJsonArray("m_NodeDictionary") ?: return null
-            var changed=0
-            fun unlock(node:JsonElement) {
-                if(node.isJsonObject) {
-                    val obj=node.asJsonObject
-                    if(obj.has("m_IsOwned")) { obj.addProperty("m_IsOwned",true); changed++ }
-                    if(obj.has("m_HasOwnedBeenRevealed")) obj.addProperty("m_HasOwnedBeenRevealed",true)
-                    obj.get("m_Nodes")?.takeIf { it.isJsonArray }?.asJsonArray?.forEach { unlock(it) }
-                } else if(node.isJsonArray) node.asJsonArray.forEach { unlock(it) }
-            }
-            nodes.forEach { row ->
-                val value=row.asJsonObject.get("Value")
-                if(value!=null) unlock(value)
-            }
-            if(changed==0) return null
+            if(unlockSupplierNetwork(data)==0) return null
         }
         else -> return null
     }
