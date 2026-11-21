@@ -7,6 +7,7 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -841,21 +842,21 @@ private fun EntityCatalogPage(doc: Mm4SaveCodec.Document, category: String, onEd
                 all.mapNotNull { (path,obj) ->
                     val id=obj.get("\$id")?.asString ?: return@mapNotNull null
                     if(id in driverIds) return@mapNotNull null
-                    val stats=obj.getAsJsonObject("stats") ?: return@mapNotNull null
+                    val stats=safeObject(obj,"stats") ?: return@mapNotNull null
                     val role=when {
                         stats.has("m_Engineer") -> "Designer"
                         stats.has("m_Mechanic") -> "Mechanic"
                         stats.has("m_Strategist") -> "Strategist"
                         else -> return@mapNotNull null
                     }
-                    val person=obj.getAsJsonObject("m_PersonDetails")
+                    val person=safeObject(obj,"m_PersonDetails")
                     val personName=person?.get("name")?.takeIf { it.isJsonPrimitive }?.asString?.trim().orEmpty()
-                    val regen=obj.getAsJsonObject("m_PersonRegenDetails")
+                    val regen=safeObject(obj,"m_PersonRegenDetails")
                     val displayName=personName.ifBlank {
                         val seed=regen?.get("regenSeed")?.asString ?: id
                         "Prospek " + role + " • " + seed.takeLast(5)
                     }
-                    val teamRef=obj.getAsJsonObject("contract")?.getAsJsonObject("m_Team")?.get("\$ref")?.asString
+                    val teamRef=safeObject(obj,"contract")?.let { safeObject(it,"m_Team") }?.get("\$ref")?.asString
                     val group=teamRef?.let { teamNames[it] } ?: "Free agent / belum ditempatkan"
                     val isApplicant=path.any { it=="m_Applicants" }
                     CatalogRecord(path,obj,displayName,if(isApplicant) role + " • Kandidat" else role,group)
