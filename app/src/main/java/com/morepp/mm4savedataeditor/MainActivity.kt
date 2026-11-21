@@ -540,7 +540,18 @@ private fun DriverPage(doc: Mm4SaveCodec.Document, selected: String?, onSelect: 
                         }
                     }
                 }
-                item { Text("Label atribut resmi belum terverifikasi dari file ini. Nilai dan urutan ditampilkan apa adanya, bukan diberi nama hasil tebakan.", color = Muted, fontSize = 10.sp) }
+                item { Text("ALL DRIVER DATA", color = Gold, fontWeight = FontWeight.Bold, fontSize = 11.sp) }
+                items(flatten(d).filter { it.second.isJsonPrimitive }) { (path, value) ->
+                    val label = if (path.any { it == "m_Stats" }) statAttributeLabel("driver", "Driver", path.last().removePrefix("[").removeSuffix("]").toIntOrNull() ?: 0) else humanLabel(path.last())
+                    GlassCard(Modifier.fillMaxWidth().clickable { onEdit("Game Data", listOf("entityManager","m_Entities","[$idx]") + path, value) }) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(label, Modifier.weight(1f), fontWeight = FontWeight.SemiBold, fontSize = 11.sp)
+                            Text(preview(value), color = Gold, fontSize = 11.sp)
+                            Icon(Icons.Default.Edit, null, tint = Muted, modifier = Modifier.size(14.dp))
+                        }
+                    }
+                }
+                item { Text("Semua field primitif pada profil dapat diedit melalui kontrol bertipe. Field internal yang belum dikenal tetap dipertahankan.", color = Muted, fontSize = 10.sp) }
             }
         }
     }
