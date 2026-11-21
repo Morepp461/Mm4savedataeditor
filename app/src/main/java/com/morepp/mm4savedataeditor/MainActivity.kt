@@ -288,6 +288,23 @@ private fun EditorApp() {
                                 undoStack = emptyList()
                                 redoStack = emptyList()
                             }
+                        },
+                        onApplyTeamColor = { colorPath, preset ->
+                            val latest = document ?: return@CareerWorkspace
+                            val changed = mutateDocument(latest, "Game Data") { root ->
+                                val target = resolvePath(root, colorPath)?.takeIf { it.isJsonObject }?.asJsonObject ?: return@mutateDocument false
+                                var applied = false
+                                preset.entrySet().forEach { (channel, channelValue) ->
+                                    if (target.has(channel)) { target.add(channel, channelValue.deepCopy()); applied = true }
+                                }
+                                applied
+                            }
+                            if (changed != null) {
+                                document = changed
+                                hasChanges = true
+                                undoStack = emptyList()
+                                redoStack = emptyList()
+                            }
                         }
                     )
                 }
@@ -537,7 +554,8 @@ private fun CareerWorkspace(
     document: Mm4SaveCodec.Document, section: String, onSection: (String) -> Unit,
     selectedDriver: String?, onDriver: (String?) -> Unit,
     onEdit: (String, List<String>, JsonElement) -> Unit,
-    onGodAction: (String) -> Unit
+    onGodAction: (String) -> Unit,
+    onApplyTeamColor: (List<String>, JsonObject) -> Unit
 ) {
     Column(Modifier.fillMaxSize()) {
         LazyRow(Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 4.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -556,9 +574,9 @@ private fun CareerWorkspace(
             when (targetSection) {
                 "Overview" -> OverviewPage(document, onSection)
                 "Drivers" -> DriverPage(document, selectedDriver, onDriver, onEdit)
-                "Staff" -> EntityCatalogPage(document, "staff", onEdit)
-                "Teams" -> EntityCatalogPage(document, "team", onEdit)
-                "Cars" -> EntityCatalogPage(document, "car", onEdit)
+                "Staff" -> EntityCatalogPage(document, "staff", onEdit, onApplyTeamColor)
+                "Teams" -> EntityCatalogPage(document, "team", onEdit, onApplyTeamColor)
+                "Cars" -> EntityCatalogPage(document, "car", onEdit, onApplyTeamColor)
                 "Finance" -> FinancePage(document, onEdit)
                 "HQ" -> HqPage(document, onEdit)
                 "World" -> WorldSettingsPage(document, onEdit)
@@ -803,7 +821,7 @@ private fun TeamPage(doc: Mm4SaveCodec.Document, onEdit: (String,List<String>,Js
 
 
 @Composable
-private fun EntityCatalogPage(doc: Mm4SaveCodec.Document, category: String, onEdit: (String,List<String>,JsonElement)->Unit) {
+private fun EntityCatalogPage(doc: Mm4SaveCodec.Document, category: String, onEdit: (String,List<String>,JsonElement)->Unit, onApplyTeamColor: (List<String>,JsonObject)->Unit) {
     data class CatalogRecord(val path:List<String>,val data:JsonObject,val name:String,val type:String,val group:String="")
     var selected by remember(category) { mutableStateOf<String?>(null) }
     var query by remember(category) { mutableStateOf("") }
@@ -865,6 +883,9 @@ private fun EntityCatalogPage(doc: Mm4SaveCodec.Document, category: String, onEd
         }
     }
     val chosen=records.firstOrNull { it.path.joinToString("/") == selected }
+    val colorPath=if(category=="team") findObjectPath(records.firstOrNull { it.path.joinToString("/") == selected }?.data ?: JsonObject(),"m_TeamColors") else null
+    val colorObject=colorPath?.let { records.firstOrNull { it.path.joinToString("/") == selected }?.data?.let { root -> resolvePath(root,it)?.takeIf { node -> node.isJsonObject }?.asJsonObject } }
+    val colorPresets=remember(doc.data) { collectTeamColorPresets(doc.data) }
     if(chosen==null) {
         LazyColumn(contentPadding=PaddingValues(14.dp),verticalArrangement=Arrangement.spacedBy(9.dp)) {
             item {
@@ -909,6 +930,28 @@ private fun EntityCatalogPage(doc: Mm4SaveCodec.Document, category: String, onEd
             else -> emptyList()
         }
         LazyColumn(contentPadding=PaddingValues(14.dp),verticalArrangement=Arrangement.spacedBy(7.dp)) {
+            if(category=="team" && colorObject!=null && colorPresets.isNotEmpty()) item {
+                GlassCard(Modifier.fillMaxWidth()) {
+                    Text("TEAM COLORS",color=Gold,fontWeight=FontWeight.Bold,fontSize=11.sp)
+                    Text("Pilih warna dari kombinasi tim yang sudah tersimpan di career ini. Tidak perlu mengetik RGB atau kode warna.",color=Muted,fontSize=10.sp)
+                    colorObject.entrySet().filter { it.value.isJsonObject }.forEach { (colorName,_) ->
+                        Text(humanizeField(colorName),fontWeight=FontWeight.SemiBold,fontSize=11.sp)
+                        LazyRow(horizontalArrangement=Arrangement.spacedBy(8.dp)) {
+                            items(colorPresets) { preset ->
+                                Column(
+                                    Modifier.width(64.dp).clip(RoundedCornerShape(10.dp))
+                                        .clickable { onApplyTeamColor(chosen.path+colorPath+listOf(colorName),preset.channels) }
+                                        .padding(4.dp),
+                                    horizontalAlignment=Alignment.CenterHorizontally
+                                ) {
+                                    Box(Modifier.size(34.dp).clip(RoundedCornerShape(9.dp)).background(teamColorChipColor(preset.channels)).border(1.dp,Color.White.copy(alpha=.3f),RoundedCornerShape(9.dp)))
+                                    Text(preset.label,maxLines=1,overflow=TextOverflow.Ellipsis,fontSize=8.sp,color=Muted)
+                                }
+                            }
+                        }
+                    }
+                }
+            }
             item {
                 Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically) {
                     IconButton(onClick={selected=null}) { Icon(Icons.Default.ArrowBack,"Kembali") }
@@ -984,6 +1027,51 @@ internal fun isStaffEditablePath(path: List<String>): Boolean {
     if (root in setOf("m_PersonDetails", "contract")) return true
     val compensationTerms = listOf("salary", "wage", "pay", "perracecost", "signingfee")
     return compensationTerms.any { term -> root.contains(term, ignoreCase = true) }
+}
+
+
+private data class TeamColorPreset(val label:String,val channels:JsonObject)
+
+private fun collectTeamColorPresets(root:JsonElement):List<TeamColorPreset> {
+    val found=mutableListOf<TeamColorPreset>()
+    fun visit(node:JsonElement) {
+        if(node.isJsonObject) {
+            node.asJsonObject.entrySet().forEach { (key,value) ->
+                if(key=="m_TeamColors" && value.isJsonObject) {
+                    value.asJsonObject.entrySet().forEach { (name,color) ->
+                        if(color.isJsonObject) {
+                            val channels=color.asJsonObject
+                            if(channels.has("r") && channels.has("g") && channels.has("b")) found.add(TeamColorPreset(humanizeField(name),channels.deepCopy()))
+                        }
+                    }
+                }
+                visit(value)
+            }
+        } else if(node.isJsonArray) node.asJsonArray.forEach { visit(it) }
+    }
+    visit(root)
+    return found.distinctBy { preset -> listOf("r","g","b","a").joinToString(":") { preset.channels.get(it)?.toString() ?: "" } }
+}
+
+private fun findObjectPath(root:JsonElement,targetKey:String):List<String>? {
+    fun visit(node:JsonElement,path:List<String>):List<String>? {
+        if(node.isJsonObject) {
+            node.asJsonObject.entrySet().forEach { (key,value) ->
+                if(key==targetKey && value.isJsonObject) return path+key
+                visit(value,path+key)?.let { return it }
+            }
+        } else if(node.isJsonArray) node.asJsonArray.forEachIndexed { index,value -> visit(value,path+"[$index]")?.let { return it } }
+        return null
+    }
+    return visit(root,emptyList())
+}
+
+private fun teamColorChipColor(channels:JsonObject):Color {
+    fun channel(key:String):Float {
+        val raw=channels.get(key)?.takeIf { it.isJsonPrimitive }?.asFloat ?: 0f
+        return if(raw<=1f) raw.coerceIn(0f,1f) else (raw/255f).coerceIn(0f,1f)
+    }
+    return Color(channel("r"),channel("g"),channel("b"),1f)
 }
 
 private fun nationalityLabel(value: JsonElement): String = nationalityNameFromCareerId(value.asString)
