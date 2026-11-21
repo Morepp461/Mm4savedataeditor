@@ -15,6 +15,7 @@ import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.togetherWith
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
@@ -1793,8 +1794,19 @@ private fun GodModePage(doc:Mm4SaveCodec.Document,onAction:(String)->Unit) {
 @Composable
 private fun GlassCard(modifier: Modifier = Modifier, content: @Composable ColumnScope.() -> Unit) {
     val shape = RoundedCornerShape(18.dp)
+    var entered by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) { entered = true }
+    val entrance by animateFloatAsState(
+        targetValue = if (entered) 1f else 0.965f,
+        animationSpec = tween(320, easing = FastOutSlowInEasing),
+        label = "glass-card-entrance"
+    )
     Column(
-        modifier.animateContentSize(animationSpec = tween(240)).clip(shape)
+        modifier.graphicsLayer {
+            scaleX = entrance
+            scaleY = entrance
+            alpha = entrance
+        }.animateContentSize(animationSpec = tween(260)).clip(shape)
             .border(1.dp, Color.White.copy(alpha = 0.16f), shape)
             .background(Brush.linearGradient(listOf(Color(0xC936568A), Color(0xB91B2D58), Color(0xA51A2445))))
             .padding(1.dp)
