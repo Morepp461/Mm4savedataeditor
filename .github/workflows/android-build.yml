@@ -1,4 +1,4 @@
-name: Android build and test
+name: Android personal APK
 on:
   push:
     branches: [main]
@@ -9,7 +9,7 @@ permissions:
   contents: read
 jobs:
   verify:
-    name: Unit tests and Android debug APK
+    name: Test and build installable APK
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -34,21 +34,19 @@ jobs:
         run: |
           yes | sdkmanager --licenses >/dev/null
           sdkmanager "platforms;android-35" "build-tools;35.0.0"
-      - name: Run codec unit tests
+      - name: Run unit tests
         run: gradle --no-daemon testDebugUnitTest
-      - name: Build debug APK
-        run: gradle --no-daemon assembleDebug assembleRelease
-      - name: Verify APK exists
-        run: test -s app/build/outputs/apk/debug/app-debug.apk
-      - name: Upload installable debug APK
+      - name: Run Android lint
+        run: gradle --no-daemon lintDebug
+      - name: Build personal-use APK
+        run: gradle --no-daemon assembleDebug
+      - name: Verify APK
+        run: |
+          test -s app/build/outputs/apk/debug/app-debug.apk
+          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging app/build/outputs/apk/debug/app-debug.apk | grep -F "package: name='com.morepp.mm4savedataeditor'"
+      - name: Upload installable APK
         uses: actions/upload-artifact@v4
         with:
-          name: mm4-save-data-editor-debug
+          name: mm4-save-data-editor-personal-apk
           path: app/build/outputs/apk/debug/app-debug.apk
-          if-no-files-found: error
-      - name: Upload unsigned release APK
-        uses: actions/upload-artifact@v4
-        with:
-          name: mm4-save-data-editor-release-unsigned
-          path: app/build/outputs/apk/release/app-release-unsigned.apk
           if-no-files-found: error

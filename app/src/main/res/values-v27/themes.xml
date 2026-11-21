@@ -1,0 +1,5 @@
+<resources>
+    <style name="Theme.MM4SaveDataEditor" parent="android:style/Theme.Material.NoActionBar">
+        <item name="android:windowLightNavigationBar">false</item>
+    </style>
+</resources>
