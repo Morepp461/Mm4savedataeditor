@@ -36,12 +36,12 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
-private val Ink = Color(0xFF101216)
-private val Panel = Color(0xFF1B2027)
-private val PanelAlt = Color(0xFF282F39)
-private val Red = Color(0xFFE53935)
-private val Gold = Color(0xFFD9B45B)
-private val Muted = Color(0xFF9CA6B2)
+private val Ink = Color(0xFF091321)
+private val Panel = Color(0xCC17283D)
+private val PanelAlt = Color(0xFF203B5D)
+private val Red = Color(0xFFE5484D)
+private val Gold = Color(0xFF67B7E8)
+private val Muted = Color(0xFFAAB9CA)
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -159,7 +159,7 @@ private fun EditorApp() {
                                 letterSpacing = 1.sp
                             )
                             Text(
-                                "CAREER DATA WORKSHOP",
+                                "CAREER WORKSPACE  •  SAVE MANAGER",
                                 color = Gold,
                                 fontSize = 9.sp,
                                 letterSpacing = 1.3.sp
@@ -241,7 +241,7 @@ private fun EditorApp() {
                                 FilterChip(
                                     selected = selectedModule == module,
                                     onClick = { selectedModule = module },
-                                    label = { Text(module) }
+                                    label = { Text(humanizeField(module)) }
                                 )
                             }
                         }
@@ -438,7 +438,7 @@ private fun CareerHeader(
             onClick = onExport,
             colors = ButtonDefaults.buttonColors(containerColor = Red)
         ) {
-            Text("EXPORT")
+            Text("EKSPOR")
         }
     }
 }
@@ -515,7 +515,7 @@ private fun JsonBrowser(
                                 .clip(RoundedCornerShape(18.dp))
                                 .background(
                                     Brush.horizontalGradient(
-                                        listOf(Color(0xFF242B35), Color(0xFF1A2028), Color(0xFF292326))
+                                        listOf(Color(0xEE24466B), Color(0xE51A304A), Color(0xE51D3855))
                                     )
                                 )
                                 .clickable {
@@ -563,7 +563,7 @@ private fun JsonBrowser(
                                     Modifier.fillMaxWidth()
                                         .padding(start = 8.dp)
                                         .clip(RoundedCornerShape(14.dp))
-                                        .background(Color(0xFF1B222A))
+                                        .background(Color(0xCC172B43))
                                         .clickable { onEdit(path, value) }
                                         .padding(horizontal = 14.dp, vertical = 13.dp),
                                     verticalAlignment = Alignment.CenterVertically
@@ -688,7 +688,7 @@ private fun EditJsonDialog(
 
     AlertDialog(
         onDismissRequest = onClose,
-        title = { Text("EDIT FIELD") },
+        title = { Text("UBAH DATA") },
         text = {
             Column(
                 Modifier.fillMaxWidth().heightIn(max = 520.dp).verticalScroll(rememberScrollState())
@@ -706,7 +706,7 @@ private fun EditJsonDialog(
                     minLines = 3,
                     maxLines = 8,
                     isError = invalid,
-                    label = { Text("JSON value") }
+                    label = { Text("Nilai data") }
                 )
                 if (invalid) {
                     Text("JSON tidak valid atau operasi tidak bisa diterapkan.", color = Red, fontSize = 11.sp)
@@ -787,7 +787,7 @@ private fun EditJsonDialog(
                     }
                 },
                 colors = ButtonDefaults.buttonColors(containerColor = Red)
-            ) { Text("SIMPAN NILAI") }
+            ) { Text("SIMPAN PERUBAHAN") }
         },
         dismissButton = {
             TextButton(onClick = onClose) { Text("BATAL") }
