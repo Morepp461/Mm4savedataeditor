@@ -654,88 +654,151 @@ private fun TeamPage(doc: Mm4SaveCodec.Document, onEdit: (String,List<String>,Js
 
 @Composable
 private fun EntityCatalogPage(doc: Mm4SaveCodec.Document, category: String, onEdit: (String,List<String>,JsonElement)->Unit) {
-    var selected by remember(category) { mutableStateOf<Int?>(null) }
+    data class CatalogRecord(val path:List<String>,val data:JsonObject,val name:String,val type:String)
+    var selected by remember(category) { mutableStateOf<String?>(null) }
     var query by remember(category) { mutableStateOf("") }
-    val entities = doc.data.getAsJsonObject("entityManager")?.getAsJsonArray("m_Entities")
-    val records = entities?.mapIndexedNotNull { index, element ->
-        if (!element.isJsonObject) return@mapIndexedNotNull null
-        val obj = element.asJsonObject
-        val type = obj.get("$"+"type")?.asString ?: return@mapIndexedNotNull null
-        val match = when(category) {
-            "staff" -> listOf("staff","designer","strategist","mechanic","engineer").any { type.contains(it,true) } && !type.contains("driver",true)
-            "team" -> type.contains("team",true) && !type.contains("teamdetail",true)
-            else -> type.contains("car",true) || type.contains("vehicle",true)
+    val records=remember(doc.data,category) {
+        when(category) {
+            "team" -> {
+                val all=collectObjectsWithId(doc.data).associateBy { it.second.get("\$id")?.asString }
+                doc.data.getAsJsonObject("teamManager")?.getAsJsonArray("m_Teams")?.mapNotNull { ref ->
+                    val id=ref.asJsonObject.get("\$ref")?.asString ?: return@mapNotNull null
+                    val pair=all[id] ?: return@mapNotNull null
+                    val (path,obj)=pair
+                    val name=obj.get("name")?.asString?.ifBlank { null } ?: "Team $id"
+                    CatalogRecord(path,obj,name,"Team")
+                }?.distinctBy { it.path.joinToString("/") }.orEmpty()
+            }
+            "car" -> {
+                val all=collectObjectsWithId(doc.data).associateBy { it.second.get("\$id")?.asString }
+                doc.data.getAsJsonObject("teamManager")?.getAsJsonArray("m_Teams")?.mapNotNull { ref ->
+                    val id=ref.asJsonObject.get("\$ref")?.asString ?: return@mapNotNull null
+                    val pair=all[id] ?: return@mapNotNull null
+                    val (path,obj)=pair
+                    val car=obj.getAsJsonObject("car") ?: return@mapNotNull null
+                    val name=(obj.get("name")?.asString ?: "Team $id")+" • Car"
+                    CatalogRecord(path+listOf("car"),car,name,"Team Car")
+                }?.distinctBy { it.path.joinToString("/") }.orEmpty()
+            }
+            else -> collectTypedObjects(doc.data,"Engineer").plus(
+                collectTypedObjects(doc.data,"Designer")
+            ).plus(collectTypedObjects(doc.data,"Strategist")).plus(
+                collectTypedObjects(doc.data,"Mechanic")
+            ).filter { (path,obj) ->
+                val type=obj.get("\$type")?.asString ?: ""
+                when(category) {
+                    "staff" -> true
+                    else -> false
+                }
+            }.map { (path,obj) ->
+                val type=obj.get("\$type")?.asString ?: "Staff"
+                val person=obj.getAsJsonObject("m_PersonDetails")
+                val name=person?.get("name")?.asString ?: obj.get("name")?.asString ?: "$type • ${obj.get("\$id")?.asString ?: "—"}"
+                CatalogRecord(path,obj,name,type)
+            }.distinctBy { it.data.get("\$id")?.asString ?: it.path.joinToString("/") }
         }
-        if (!match) null else {
-            val person = obj.getAsJsonObject("m_PersonDetails")
-            val name = listOf("name","m_Name","Name","m_TeamName").firstNotNullOfOrNull { key ->
-                person?.get(key)?.takeIf { it.isJsonPrimitive }?.asString
-                    ?: obj.get(key)?.takeIf { it.isJsonPrimitive }?.asString
-            } ?: (type + " #" + (obj.get("$"+"id")?.asString ?: index.toString()))
-            Triple(index, obj, name)
-        }
-    }.orEmpty()
-    val chosen = records.firstOrNull { it.first == selected }
-    if (chosen == null) {
-        LazyColumn(contentPadding=PaddingValues(14.dp), verticalArrangement=Arrangement.spacedBy(9.dp)) {
-            item { GlassCard(Modifier.fillMaxWidth()) {
-                Text(when(category) { "staff" -> "STAFF MANAGEMENT"; "team" -> "TEAM DATABASE"; else -> "CAR DATABASE" }, color=Gold, fontWeight=FontWeight.Bold, fontSize=11.sp)
-                Text(records.size.toString()+" records found", fontSize=23.sp, fontWeight=FontWeight.Black)
-                Text("Semua record yang dikenali di save ditampilkan. Pilih satu untuk membuka profil dan mengedit field secara langsung.", color=Muted, fontSize=11.sp)
-            } }
+    }
+    val chosen=records.firstOrNull { it.path.joinToString("/") == selected }
+    if(chosen==null) {
+        LazyColumn(contentPadding=PaddingValues(14.dp),verticalArrangement=Arrangement.spacedBy(9.dp)) {
+            item {
+                GlassCard(Modifier.fillMaxWidth()) {
+                    Text(when(category) { "staff" -> "STAFF MANAGEMENT"; "team" -> "TEAM DATABASE"; else -> "CAR PERFORMANCE" },color=Gold,fontWeight=FontWeight.Bold,fontSize=11.sp)
+                    Text("${records.size} records available",fontSize=23.sp,fontWeight=FontWeight.Black)
+                    Text(when(category) {
+                        "team" -> "Seluruh tim yang direferensikan dalam career save ditampilkan. Buka profil untuk mengedit identitas, atribut, kontrak, dan pengaturan tim."
+                        "car" -> "Mobil setiap tim ditampilkan dengan statistik performa dan konfigurasi yang tersimpan."
+                        else -> "Staff yang benar-benar tersimpan pada career save ditampilkan di sini. Profil dapat diedit dengan kontrol bertipe."
+                    },color=Muted,fontSize=11.sp)
+                }
+            }
             item { OutlinedTextField(query,{query=it},Modifier.fillMaxWidth(),placeholder={Text("Cari nama atau tipe")},leadingIcon={Icon(Icons.Default.Search,null)},singleLine=true) }
-            items(records.filter { it.third.contains(query,true) || it.second.get("$"+"type")?.asString?.contains(query,true)==true },key={it.first}) { record ->
-                GlassCard(Modifier.fillMaxWidth().clickable { selected=record.first }) {
+            items(records.filter { it.name.contains(query,true) || it.type.contains(query,true) },key={it.path.joinToString("/")}) { record ->
+                GlassCard(Modifier.fillMaxWidth().clickable { selected=record.path.joinToString("/") }) {
                     Row(verticalAlignment=Alignment.CenterVertically) {
                         Icon(when(category) { "staff" -> Icons.Default.Badge; "team" -> Icons.Default.Groups; else -> Icons.Default.DirectionsCar },null,tint=Gold,modifier=Modifier.size(28.dp))
                         Spacer(Modifier.width(12.dp))
-                        Column(Modifier.weight(1f)) { Text(record.third,fontWeight=FontWeight.Bold); Text(record.second.get("$"+"type")?.asString ?: category,color=Muted,fontSize=10.sp) }
-                        Icon(Icons.Default.ChevronRight,null,tint=Muted)
-                    }
-                }
-            }
-            if(category=="team") item {
-                val player=doc.data.getAsJsonObject("player")?.getAsJsonObject("m_TeamDetails")
-                if(player!=null) GlassCard(Modifier.fillMaxWidth()) {
-                    Text("PLAYER TEAM SETTINGS",color=Gold,fontWeight=FontWeight.Bold)
-                    flatten(player).filter { it.second.isJsonPrimitive }.forEach { (path,value) ->
-                        Row(Modifier.fillMaxWidth().clickable { onEdit("Game Data",listOf("player","m_TeamDetails")+path,value) }.padding(vertical=7.dp),verticalAlignment=Alignment.CenterVertically) {
-                            Text(humanLabel(path.last()),Modifier.weight(1f),fontSize=11.sp)
-                            Text(preview(value),color=Gold,fontSize=11.sp)
-                            Icon(Icons.Default.Edit,null,tint=Muted,modifier=Modifier.size(14.dp))
+                        Column(Modifier.weight(1f)) {
+                            Text(record.name,fontWeight=FontWeight.Bold)
+                            Text(record.type,color=Muted,fontSize=10.sp)
                         }
+                        Icon(Icons.Default.ChevronRight,null,tint=Muted)
                     }
                 }
             }
         }
     } else {
-        val (index,record,name)=chosen
-        val type=record.get("$"+"type")?.asString ?: category
-        val fields=flatten(record).filter { it.second.isJsonPrimitive && it.first.lastOrNull()!="$"+"version" }
-        Column(Modifier.fillMaxSize()) {
-            Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically) {
-                IconButton(onClick={selected=null}) { Icon(Icons.Default.ArrowBack,"Kembali") }
-                Column { Text(name,fontWeight=FontWeight.Bold,fontSize=18.sp); Text(humanLabel(type),color=Muted,fontSize=10.sp) }
+        val fields=flatten(chosen.data).filter { it.second.isJsonPrimitive && it.first.lastOrNull()!="\$version" }
+        val isCar=category=="car"
+        val stats=chosen.data.getAsJsonArray("m_Stats")
+        val labels=when {
+            isCar -> listOf("Top Speed","Acceleration","Braking","Low Speed Cornering","High Speed Cornering","Tyre Wear","Fuel Efficiency","Car Reliability")
+            category=="staff" && chosen.type.contains("Designer",true) -> listOf("Performance","Reliability","Leadership","Bonus","Success Rate")
+            category=="staff" && chosen.type.contains("Strategist",true) -> listOf("Race Starts","Overtaking","Defending","Consistency","Focus")
+            category=="staff" && chosen.type.contains("Mechanic",true) -> listOf("Setup Skill","Car Knowledge","Pit Stop Skill","Reliability")
+            else -> emptyList()
+        }
+        LazyColumn(contentPadding=PaddingValues(14.dp),verticalArrangement=Arrangement.spacedBy(7.dp)) {
+            item {
+                Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically) {
+                    IconButton(onClick={selected=null}) { Icon(Icons.Default.ArrowBack,"Kembali") }
+                    Column(Modifier.weight(1f)) {
+                        Text(chosen.name,fontWeight=FontWeight.Bold,fontSize=18.sp)
+                        Text(chosen.type,color=Muted,fontSize=10.sp)
+                    }
+                }
             }
-            LazyColumn(contentPadding=PaddingValues(14.dp),verticalArrangement=Arrangement.spacedBy(7.dp)) {
-                item { GlassCard(Modifier.fillMaxWidth()) {
-                    Text("PROFILE EDITOR",color=Gold,fontWeight=FontWeight.Bold,fontSize=10.sp)
-                    Text(fields.size.toString()+" editable values",fontSize=21.sp,fontWeight=FontWeight.Black)
-                    Text("Nama, umur, kontrak, atribut, identitas, dan nilai lain pada record ini dapat diedit tanpa input JSON.",color=Muted,fontSize=10.sp)
-                } }
-                items(fields,key={it.first.joinToString("/")}) { (path,value) ->
-                    val label=if(path.any { it=="m_Stats" }) statAttributeLabel(category,type,path.last().removePrefix("[").removeSuffix("]").toIntOrNull() ?: 0) else humanLabel(path.last())
-                    GlassCard(Modifier.fillMaxWidth().clickable { onEdit("Game Data",listOf("entityManager","m_Entities","[$index]")+path,value) }) {
+            item {
+                GlassCard(Modifier.fillMaxWidth()) {
+                    Text(if(category=="team") "TEAM PROFILE" else if(isCar) "CAR PERFORMANCE" else "STAFF PROFILE",color=Gold,fontWeight=FontWeight.Bold,fontSize=10.sp)
+                    Text("${fields.size} editable values",fontSize=21.sp,fontWeight=FontWeight.Black)
+                    Text("Edit nama, identitas, atribut, kontrak, dan pengaturan tanpa memasukkan JSON.",color=Muted,fontSize=10.sp)
+                }
+            }
+            if(isCar && stats!=null) {
+                item { Text("CAR PERFORMANCE",color=Gold,fontWeight=FontWeight.Bold,fontSize=12.sp) }
+                items(stats.size()) { index ->
+                    val value=stats[index]
+                    GlassCard(Modifier.fillMaxWidth().clickable { onEdit("Game Data",chosen.path+listOf("m_Stats","[$index]"),value) }) {
                         Row(verticalAlignment=Alignment.CenterVertically) {
-                            Column(Modifier.weight(1f)) { Text(label,fontWeight=FontWeight.SemiBold,fontSize=12.sp); Text(path.dropLast(1).joinToString(" / "),color=Muted,fontSize=9.sp,maxLines=1) }
-                            Text(preview(value),color=Gold,fontWeight=FontWeight.Bold,fontSize=12.sp)
-                            Icon(Icons.Default.Edit,null,tint=Muted,modifier=Modifier.size(16.dp))
+                            Text(labels.getOrNull(index) ?: "Car attribute ${index+1}",Modifier.weight(1f),fontWeight=FontWeight.SemiBold)
+                            Text(preview(value),color=Gold,fontWeight=FontWeight.Bold)
+                            Icon(Icons.Default.Edit,null,tint=Muted,modifier=Modifier.size(15.dp))
                         }
+                    }
+                }
+            }
+            items(fields,key={it.first.joinToString("/")}) { (path,value) ->
+                val label=if(path.any { it=="m_Stats" }) statAttributeLabel(category,chosen.type,path.last().removePrefix("[").removeSuffix("]").toIntOrNull() ?: 0) else humanizeField(path.last())
+                GlassCard(Modifier.fillMaxWidth().clickable { onEdit("Game Data",chosen.path+path,value) }) {
+                    Row(verticalAlignment=Alignment.CenterVertically) {
+                        Column(Modifier.weight(1f)) {
+                            Text(label,fontWeight=FontWeight.SemiBold,fontSize=12.sp)
+                            Text(path.dropLast(1).joinToString(" / "),color=Muted,fontSize=9.sp,maxLines=1,overflow=TextOverflow.Ellipsis)
+                        }
+                        Text(preview(value),color=Gold,fontWeight=FontWeight.Bold,fontSize=12.sp)
+                        Icon(Icons.Default.Edit,null,tint=Muted,modifier=Modifier.size(16.dp))
                     }
                 }
             }
         }
     }
+}
+
+private fun collectObjectsWithId(root:JsonElement):List<Pair<List<String>,JsonObject>> {
+    val found=mutableListOf<Pair<List<String>,JsonObject>>()
+    fun visit(node:JsonElement,path:List<String>) {
+        when {
+            node.isJsonObject -> {
+                val obj=node.asJsonObject
+                if(obj.has("\$id")) found.add(path to obj)
+                obj.entrySet().forEach { (key,value) -> visit(value,path+key) }
+            }
+            node.isJsonArray -> node.asJsonArray.forEachIndexed { index,value -> visit(value,path+"[$index]") }
+        }
+    }
+    visit(root,emptyList())
+    return found
 }
 
 private fun statAttributeLabel(category:String,type:String,index:Int):String {
