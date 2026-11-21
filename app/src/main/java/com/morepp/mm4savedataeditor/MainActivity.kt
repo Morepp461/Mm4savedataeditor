@@ -742,7 +742,7 @@ private fun EntityCatalogPage(doc: Mm4SaveCodec.Document, category: String, onEd
             }
         }
     } else {
-        val fields=flatten(chosen.data).filter { it.second.isJsonPrimitive && it.first.lastOrNull()!="\$version" }
+        val fields=flatten(chosen.data).filter { row -> row.second.isJsonPrimitive && row.first.lastOrNull()!="\$version" && (category!="team" || row.first.firstOrNull() !in setOf("car","m_StaffController","m_DriverController","m_Staff","m_Drivers","m_Stats")) && (category!="car" || row.first.firstOrNull()!="m_Stats") }
         val isCar=category=="car"
         val stats=chosen.data.getAsJsonArray("m_Stats")
         val labels=when {
@@ -798,6 +798,8 @@ private fun EntityCatalogPage(doc: Mm4SaveCodec.Document, category: String, onEd
         }
     }
 }
+
+private fun nationalityLabel(value: JsonElement): String { return if (value.isJsonPrimitive) "Kode negara ${value.asString} (pemetaan ID MM4 belum tersedia)" else "Nationality belum dikenali" }
 
 private fun collectObjectsWithId(root:JsonElement):List<Pair<List<String>,JsonObject>> {
     val found=mutableListOf<Pair<List<String>,JsonObject>>()
