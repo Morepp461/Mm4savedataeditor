@@ -1,7 +1,7 @@
 name: Android build and release verification
 on:
   push:
-    branches: [main, 'release/finalize-mm4-editor']
+    branches: [main, 'release/finalize-mm4-editor', 'release/publish-ready-mm4-editor']
   pull_request:
     branches: [main]
   workflow_dispatch:
