@@ -52,3 +52,11 @@ gradle assembleDebug assembleRelease
 - The supplied sample profile needs real in-game validation with a duplicate career save before claiming full compatibility.
 - Keep the original save untouched. Export to a separate file and test that copy in Motorsport Manager 4.
 - A signed public release requires a release keystore controlled and backed up by the project owner. Never commit that private key to this repository.
+
+
+## Career editor improvements (1.2.0)
+- Driver profiles are collected from all fully stored Driver entities throughout the save graph, including embedded race/standings records.
+- Team catalog resolves team references from `teamManager.m_Teams`; car editor exposes each team's stored car performance data.
+- Headquarters reads the actual `Key` / `Value` records and edits status, unlock timer and upgrade path with typed controls.
+- Advanced data exposes searchable typed primitive fields instead of requiring raw JSON input.
+- Round-trip validation compares canonical JSON so key ordering and numeric wrapper differences do not falsely reject a valid export.
