@@ -36,12 +36,12 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
-private val Ink = Color(0xFF101216)
-private val Panel = Color(0xFF1B2027)
-private val PanelAlt = Color(0xFF282F39)
-private val Red = Color(0xFFE53935)
-private val Gold = Color(0xFFD9B45B)
-private val Muted = Color(0xFF9CA6B2)
+private val Ink = Color(0xFF091321)
+private val Panel = Color(0xCC17283D)
+private val PanelAlt = Color(0xFF203B5D)
+private val Red = Color(0xFFE5484D)
+private val Gold = Color(0xFF67B7E8)
+private val Muted = Color(0xFFAAB9CA)
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -159,7 +159,7 @@ private fun EditorApp() {
                                 letterSpacing = 1.sp
                             )
                             Text(
-                                "CAREER DATA WORKSHOP",
+                                "WORKSPACE KARIER  •  EDITOR SAVE",
                                 color = Gold,
                                 fontSize = 9.sp,
                                 letterSpacing = 1.3.sp
@@ -199,10 +199,10 @@ private fun EditorApp() {
                         Modifier.padding(horizontal = 14.dp),
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        listOf("Save Info", "Game Data").forEach { tab ->
+                        listOf("Info Karier", "Data Game").forEach { tab ->
                             FilterChip(
-                                selected = selectedTab == tab,
-                                onClick = { selectedTab = tab; selectedModule = null; search = "" },
+                                selected = (if (selectedTab == "Save Info") "Info Karier" else "Data Game") == tab,
+                                onClick = { selectedTab = if (tab == "Info Karier") "Save Info" else "Game Data"; selectedModule = null; search = "" },
                                 label = { Text(tab) }
                             )
                         }
@@ -211,7 +211,7 @@ private fun EditorApp() {
                         value = search,
                         onValueChange = { search = it },
                         modifier = Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 8.dp),
-                        placeholder = { Text("Cari field, ID, entitas, atau nilai…") },
+                        placeholder = { Text("Cari nama data, ID, tim, pembalap, atau nilai…") },
                         leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
                         trailingIcon = {
                             if (search.isNotEmpty()) {
@@ -234,14 +234,14 @@ private fun EditorApp() {
                                 FilterChip(
                                     selected = selectedModule == null,
                                     onClick = { selectedModule = null },
-                                    label = { Text("All") }
+                                    label = { Text("Semua") }
                                 )
                             }
                             items(moduleNames) { module ->
                                 FilterChip(
                                     selected = selectedModule == module,
                                     onClick = { selectedModule = module },
-                                    label = { Text(module) }
+                                    label = { Text(humanizeField(module)) }
                                 )
                             }
                         }
@@ -362,14 +362,14 @@ private fun WelcomePanel(busy: Boolean, onOpen: () -> Unit) {
             )
             Spacer(Modifier.height(22.dp))
             Text(
-                "YOUR CAREER.\nYOUR RULES.",
+                "KARIERMU.\nKENDALIMU.",
                 fontSize = 30.sp,
                 lineHeight = 33.sp,
                 fontWeight = FontWeight.Black
             )
             Spacer(Modifier.height(8.dp))
             Text(
-                "Buka save Motorsport Manager 4 untuk menjelajahi dan mengedit data karier.",
+                "Buka file karier Motorsport Manager 4 untuk melihat dan mengelola data tim, pembalap, dan kompetisi.",
                 color = Muted
             )
             Spacer(Modifier.height(20.dp))
@@ -386,7 +386,7 @@ private fun WelcomePanel(busy: Boolean, onOpen: () -> Unit) {
             }
             Spacer(Modifier.height(16.dp))
             Text(
-                "DYNAMIC DATA BROWSER • RAW JSON EDITOR • LZ4 EXPORT",
+                "JELAJAHI DATA • EDIT KARIER • EKSPOR SAVE",
                 color = Gold,
                 fontSize = 9.sp
             )
@@ -405,7 +405,7 @@ private fun CareerHeader(
         ?.takeIf { it.isJsonPrimitive && it.asJsonPrimitive.isString }
         ?.asString
         ?.takeIf { it.isNotBlank() }
-        ?: "CAREER LOADED"
+        ?: "KARIER DIMUAT"
     Row(
         Modifier.fillMaxWidth()
             .padding(14.dp)
@@ -428,7 +428,7 @@ private fun CareerHeader(
                 overflow = TextOverflow.Ellipsis
             )
             Text(
-                if (hasChanges) "UNSAVED CHANGES" else "SAVE DATA READY",
+                if (hasChanges) "PERUBAHAN BELUM DIEKSPOR" else "SAVE SIAP DIEDIT",
                 color = if (hasChanges) Gold else Color(0xFF82D7A2),
                 fontSize = 9.sp,
                 fontWeight = FontWeight.Bold
@@ -438,7 +438,7 @@ private fun CareerHeader(
             onClick = onExport,
             colors = ButtonDefaults.buttonColors(containerColor = Red)
         ) {
-            Text("EXPORT")
+            Text("EKSPOR")
         }
     }
 }
@@ -451,8 +451,9 @@ private fun JsonBrowser(
     moduleFilter: String?,
     onEdit: (List<String>, JsonElement) -> Unit
 ) {
-    val entries = remember(root, query, moduleFilter) {
-        flatten(root).filter { (path, value) ->
+    val allEntries = remember(root) { flatten(root) }
+    val filteredEntries = remember(allEntries, query, moduleFilter) {
+        allEntries.filter { (path, value) ->
             (moduleFilter == null || path.firstOrNull() == moduleFilter) &&
                 (query.isBlank() ||
                     path.joinToString(".").contains(query, ignoreCase = true) ||
@@ -460,65 +461,194 @@ private fun JsonBrowser(
                         value.toString().contains(query, ignoreCase = true)))
         }
     }
+    val groups = remember(filteredEntries) {
+        filteredEntries.groupBy { it.first.firstOrNull() ?: "Data" }
+    }
+    var expanded by remember(rootName, moduleFilter) { mutableStateOf(setOf<String>()) }
+    LaunchedEffect(query) {
+        if (query.isNotBlank()) expanded = groups.keys
+    }
+
     Column(Modifier.fillMaxSize()) {
-        Text(
-            "$rootName • ${entries.size} NODE",
-            color = Gold,
-            fontSize = 10.sp,
-            fontWeight = FontWeight.Bold,
-            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
-        )
-        LazyColumn(
-            Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp)
+        Row(
+            Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            items(entries, key = { it.first.joinToString("/") }) { (path, value) ->
-                Row(
-                    Modifier.fillMaxWidth()
-                        .padding(vertical = 3.dp)
-                        .clip(RoundedCornerShape(12.dp))
-                        .background(Panel)
-                        .clickable { onEdit(path, value) }
-                        .padding(horizontal = 12.dp, vertical = 11.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Column(Modifier.weight(1f)) {
-                        Text(
-                            path.lastOrNull() ?: rootName,
-                            fontWeight = FontWeight.SemiBold,
-                            fontSize = 13.sp
-                        )
-                        Text(
-                            path.dropLast(1).joinToString(" › "),
-                            color = Muted,
-                            fontSize = 9.sp,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
-                        Text(
-                            preview(value),
-                            color = Gold,
-                            fontSize = 11.sp,
-                            maxLines = 2,
-                            overflow = TextOverflow.Ellipsis
-                        )
+            Column(Modifier.weight(1f)) {
+                Text(
+                    if (rootName == "Save Info") "INFORMASI KARIER" else "DATABASE KARIER",
+                    color = Gold,
+                    fontSize = 10.sp,
+                    fontWeight = FontWeight.Bold,
+                    letterSpacing = 1.sp
+                )
+                Text(
+                    if (query.isBlank()) "${groups.size} kategori • ${filteredEntries.size} data" else "${filteredEntries.size} hasil pencarian",
+                    color = Muted,
+                    fontSize = 11.sp
+                )
+            }
+            if (query.isBlank()) {
+                TextButton(onClick = {
+                    expanded = if (expanded.size == groups.size) emptySet() else groups.keys
+                }) {
+                    Text(if (expanded.size == groups.size) "Tutup semua" else "Buka semua", color = Gold, fontSize = 11.sp)
+                }
+            }
+        }
+        if (filteredEntries.isEmpty()) {
+            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                Text("Tidak ada data yang cocok. Coba kata kunci lain.", color = Muted)
+            }
+        } else {
+            LazyColumn(
+                Modifier.fillMaxSize(),
+                contentPadding = PaddingValues(horizontal = 14.dp, vertical = 4.dp),
+                verticalArrangement = Arrangement.spacedBy(9.dp)
+            ) {
+                groups.forEach { (groupKey, items) ->
+                    val groupValue = root.get(groupKey)
+                    val isOpen = query.isNotBlank() || groupKey in expanded
+                    item(key = "group:$groupKey") {
+                        Column(
+                            Modifier.fillMaxWidth()
+                                .clip(RoundedCornerShape(18.dp))
+                                .background(
+                                    Brush.horizontalGradient(
+                                        listOf(Color(0xEE24466B), Color(0xE51A304A), Color(0xE51D3855))
+                                    )
+                                )
+                                .clickable {
+                                    expanded = if (groupKey in expanded) expanded - groupKey else expanded + groupKey
+                                }
+                                .padding(15.dp)
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Column(Modifier.weight(1f)) {
+                                    Text(humanizeField(groupKey), fontSize = 15.sp, fontWeight = FontWeight.Bold)
+                                    Text(
+                                        "${items.size} data • ${dataTypeLabel(groupValue)}",
+                                        color = Muted,
+                                        fontSize = 10.sp
+                                    )
+                                }
+                                Text(preview(groupValue ?: JsonParser.parseString("null")), color = Gold, fontSize = 11.sp)
+                                IconButton(
+                                    onClick = { if (groupValue != null) onEdit(listOf(groupKey), groupValue) },
+                                    enabled = groupValue != null
+                                ) {
+                                    Icon(Icons.Default.Edit, contentDescription = "Edit seluruh kategori", tint = Color(0xFFB8C1CD), modifier = Modifier.size(17.dp))
+                                }
+                                Icon(
+                                    if (isOpen) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
+                                    contentDescription = if (isOpen) "Tutup kategori" else "Buka kategori",
+                                    tint = Gold
+                                )
+                            }
+                            if (isOpen && groupValue != null) {
+                                Spacer(Modifier.height(8.dp))
+                                Text(
+                                    "PILIH DATA DI BAWAH UNTUK MELIHAT ATAU MENGUBAH NILAINYA",
+                                    color = Muted,
+                                    fontSize = 9.sp,
+                                    letterSpacing = .5.sp
+                                )
+                            }
+                        }
                     }
-                    Icon(
-                        Icons.Default.Edit,
-                        contentDescription = "Edit field",
-                        tint = Muted,
-                        modifier = Modifier.size(16.dp)
-                    )
+                    if (isOpen) {
+                        items.filter { it.first.size > 1 || query.isNotBlank() }.forEach { (path, value) ->
+                            item(key = "field:${path.joinToString("/")}") {
+                                Row(
+                                    Modifier.fillMaxWidth()
+                                        .padding(start = 8.dp)
+                                        .clip(RoundedCornerShape(14.dp))
+                                        .background(Color(0xCC172B43))
+                                        .clickable { onEdit(path, value) }
+                                        .padding(horizontal = 14.dp, vertical = 13.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Column(Modifier.weight(1f)) {
+                                        Text(
+                                            humanizeField(path.lastOrNull() ?: groupKey),
+                                            fontWeight = FontWeight.SemiBold,
+                                            fontSize = 13.sp
+                                        )
+                                        Text(
+                                            path.dropLast(1).drop(1).joinToString("  ›  ") { humanizeField(it) }
+                                                .ifBlank { humanizeField(groupKey) },
+                                            color = Muted,
+                                            fontSize = 9.sp,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis
+                                        )
+                                        Spacer(Modifier.height(5.dp))
+                                        Text(
+                                            preview(value),
+                                            color = Gold,
+                                            fontSize = 11.sp,
+                                            maxLines = 2,
+                                            overflow = TextOverflow.Ellipsis
+                                        )
+                                    }
+                                    Column(horizontalAlignment = Alignment.End) {
+                                        Text(dataTypeLabel(value), color = Muted, fontSize = 9.sp)
+                                        Icon(Icons.Default.Edit, contentDescription = "Edit data", tint = Color(0xFFB8C1CD), modifier = Modifier.padding(top = 6.dp).size(17.dp))
+                                    }
+                                }
+                            }
+                        }
+                    }
                 }
             }
         }
     }
 }
 
+private fun humanizeField(raw: String): String {
+    val known = mapOf(
+        "createdDate" to "Tanggal Dibuat",
+        "lastEditedDate" to "Terakhir Diubah",
+        "gameDate" to "Tanggal Dalam Game",
+        "teamColor" to "Warna Tim",
+        "primaryColor" to "Warna Utama",
+        "secondaryColor" to "Warna Sekunder",
+        "teamName" to "Nama Tim",
+        "playerName" to "Nama Pemain",
+        "teams" to "Daftar Tim",
+        "drivers" to "Daftar Pembalap",
+        "staff" to "Staf",
+        "sponsors" to "Sponsor",
+        "calendar" to "Kalender",
+        "races" to "Balapan",
+        "standings" to "Klasemen",
+        "contracts" to "Kontrak",
+        "finances" to "Keuangan",
+        "facilities" to "Fasilitas",
+        "car" to "Mobil Balap",
+        "research" to "Riset",
+        "championship" to "Kejuaraan"
+    )
+    known[raw]?.let { return it }
+    val spaced = raw.replace(Regex("([a-z0-9])([A-Z])"), "$1 $2")
+        .replace('_', ' ')
+        .replace('-', ' ')
+    return spaced.replaceFirstChar { if (it.isLowerCase()) it.titlecase() else it.toString() }
+}
+
+private fun dataTypeLabel(value: JsonElement?): String = when {
+    value == null || value.isJsonNull -> "KOSONG"
+    value.isJsonObject -> "OBJEK"
+    value.isJsonArray -> "DAFTAR"
+    value.asJsonPrimitive.isBoolean -> "LOGIKA"
+    value.asJsonPrimitive.isNumber -> "ANGKA"
+    else -> "TEKS"
+}
+
 private fun preview(value: JsonElement): String = when {
     value.isJsonNull -> "null"
-    value.isJsonObject -> "{ ${value.asJsonObject.size()} properties }"
-    value.isJsonArray -> "[ ${value.asJsonArray.size()} items ]"
+    value.isJsonObject -> "{ ${value.asJsonObject.size()} properti }"
+    value.isJsonArray -> "[ ${value.asJsonArray.size()} item ]"
     else -> value.toString()
 }
 
@@ -558,13 +688,13 @@ private fun EditJsonDialog(
 
     AlertDialog(
         onDismissRequest = onClose,
-        title = { Text("EDIT FIELD") },
+        title = { Text("UBAH DATA") },
         text = {
             Column(
                 Modifier.fillMaxWidth().heightIn(max = 520.dp).verticalScroll(rememberScrollState())
             ) {
                 Text(
-                    target.path.joinToString(" › "),
+                    target.path.joinToString(" › ") { humanizeField(it.removePrefix("[").removeSuffix("]")) },
                     color = Gold,
                     fontSize = 10.sp
                 )
@@ -576,10 +706,10 @@ private fun EditJsonDialog(
                     minLines = 3,
                     maxLines = 8,
                     isError = invalid,
-                    label = { Text("JSON value") }
+                    label = { Text("Nilai data") }
                 )
                 if (invalid) {
-                    Text("JSON tidak valid atau operasi tidak bisa diterapkan.", color = Red, fontSize = 11.sp)
+                    Text("Format data tidak valid atau perubahan tidak dapat diterapkan.", color = Red, fontSize = 11.sp)
                 }
                 Text(
                     "Tipe data dipertahankan sebagai JSON. Contoh: 120, true, \"Nama\", null",
@@ -594,7 +724,7 @@ private fun EditJsonDialog(
                     ) {
                         Icon(Icons.Default.Add, contentDescription = null)
                         Spacer(Modifier.width(6.dp))
-                        Text(if (isObject) "TAMBAH PROPERTY" else "TAMBAH ARRAY ITEM")
+                        Text(if (isObject) "TAMBAH PROPERTI" else "TAMBAH ITEM DAFTAR")
                     }
                     if (showAdd) {
                         if (isObject) {
@@ -602,7 +732,7 @@ private fun EditJsonDialog(
                                 value = newKey,
                                 onValueChange = { newKey = it },
                                 modifier = Modifier.fillMaxWidth(),
-                                label = { Text("Nama property baru") },
+                                label = { Text("Nama properti baru") },
                                 singleLine = true
                             )
                         }
@@ -610,7 +740,7 @@ private fun EditJsonDialog(
                             value = newValue,
                             onValueChange = { newValue = it; invalid = false },
                             modifier = Modifier.fillMaxWidth(),
-                            label = { Text("Nilai JSON baru") },
+                            label = { Text("Nilai data baru (JSON)") },
                             minLines = 2,
                             maxLines = 4
                         )
@@ -642,7 +772,7 @@ private fun EditJsonDialog(
                     ) {
                         Icon(Icons.Default.DeleteOutline, contentDescription = null)
                         Spacer(Modifier.width(6.dp))
-                        Text("HAPUS NODE INI")
+                        Text("HAPUS DATA INI")
                     }
                 }
             }
@@ -657,7 +787,7 @@ private fun EditJsonDialog(
                     }
                 },
                 colors = ButtonDefaults.buttonColors(containerColor = Red)
-            ) { Text("SIMPAN NILAI") }
+            ) { Text("SIMPAN PERUBAHAN") }
         },
         dismissButton = {
             TextButton(onClick = onClose) { Text("BATAL") }
@@ -667,8 +797,8 @@ private fun EditJsonDialog(
     if (confirmDelete) {
         AlertDialog(
             onDismissRequest = { confirmDelete = false },
-            title = { Text("Hapus node?") },
-            text = { Text("Node ini akan dihapus dari data yang sedang diedit. Export belum dilakukan.") },
+            title = { Text("Hapus data ini?") },
+            text = { Text("Data ini akan dihapus dari salinan yang sedang diedit. File asli tidak berubah sampai kamu mengekspor.") },
             confirmButton = {
                 TextButton(
                     onClick = { confirmDelete = false; onDelete() },

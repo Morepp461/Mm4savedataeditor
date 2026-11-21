@@ -1,7 +1,7 @@
-name: Android build and test
+name: Android build and release verification
 on:
   push:
-    branches: [main]
+    branches: [main, 'release/finalize-mm4-editor', 'release/publish-ready-mm4-editor']
   pull_request:
     branches: [main]
   workflow_dispatch:
@@ -9,7 +9,7 @@ permissions:
   contents: read
 jobs:
   verify:
-    name: Unit tests and Android debug APK
+    name: Test and privately sign Android APKs
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -34,21 +34,78 @@ jobs:
         run: |
           yes | sdkmanager --licenses >/dev/null
           sdkmanager "platforms;android-35" "build-tools;35.0.0"
-      - name: Run codec unit tests
+      - name: Run unit tests
         run: gradle --no-daemon testDebugUnitTest
-      - name: Build debug APK
+      - name: Run Android lint
+        run: gradle --no-daemon lintRelease
+      - name: Prepare private release signing
+        id: signing
+        env:
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          test -n "$KEYSTORE_BASE64" || { echo "::error::KEYSTORE_BASE64 secret is missing."; exit 1; }
+          test -n "$KEYSTORE_PASSWORD" || { echo "::error::KEYSTORE_PASSWORD secret is missing."; exit 1; }
+          test -n "$KEY_ALIAS" || { echo "::error::KEY_ALIAS secret is missing."; exit 1; }
+          test -n "$KEY_PASSWORD" || { echo "::error::KEY_PASSWORD secret is missing."; exit 1; }
+          STORE="$RUNNER_TEMP/mm4-release-key.jks"
+          printf '%s' "$KEYSTORE_BASE64" | base64 --decode > "$STORE"
+          test -s "$STORE"
+          echo "store=$STORE" >> "$GITHUB_OUTPUT"
+      - name: Validate keystore container and alias
+        env:
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          STORE: ${{ steps.signing.outputs.store }}
+        run: |
+          set -euo pipefail
+          keytool -list -keystore "$STORE" -storepass "$KEYSTORE_PASSWORD" || { echo "::error::Keystore file decoded, but the keystore password or keystore format is invalid."; exit 1; }
+          keytool -list -keystore "$STORE" -storepass "$KEYSTORE_PASSWORD" -alias "$KEY_ALIAS" || { echo "::error::Keystore opened, but alias '$KEY_ALIAS' was not found. Check KEY_ALIAS."; exit 1; }
+          echo "Keystore container and requested alias are present."
+      - name: Configure Gradle private signing
+        env:
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+          STORE: ${{ steps.signing.outputs.store }}
+        run: |
+          {
+            echo "MM4_KEYSTORE_PATH=$STORE"
+            echo "MM4_KEYSTORE_PASSWORD=$KEYSTORE_PASSWORD"
+            echo "MM4_KEY_ALIAS=$KEY_ALIAS"
+            echo "MM4_KEY_PASSWORD=$KEY_PASSWORD"
+          } >> "$GITHUB_ENV"
+      - name: Build debug and privately signed release APKs
         run: gradle --no-daemon assembleDebug assembleRelease
-      - name: Verify APK exists
-        run: test -s app/build/outputs/apk/debug/app-debug.apk
+      - name: Verify APK files and release signature
+        env:
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          STORE: ${{ steps.signing.outputs.store }}
+        run: |
+          set -euo pipefail
+          DEBUG_APK="app/build/outputs/apk/debug/app-debug.apk"
+          RELEASE_APK="app/build/outputs/apk/release/app-release.apk"
+          test -s "$DEBUG_APK"
+          test -s "$RELEASE_APK"
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose --print-certs "$RELEASE_APK" | tee "$RUNNER_TEMP/apk-signature.txt"
+          EXPECTED="$(keytool -exportcert -alias "$KEY_ALIAS" -keystore "$STORE" -storepass "$KEYSTORE_PASSWORD" | sha256sum | awk '{print toupper($1)}')"
+          ACTUAL="$(sed -n 's/.*certificate SHA-256 digest: //p' "$RUNNER_TEMP/apk-signature.txt" | head -n 1 | tr -d ':' | tr '[:lower:]' '[:upper:]')"
+          test -n "$ACTUAL"
+          test "$EXPECTED" = "$ACTUAL" || { echo "::error::APK certificate does not match the configured release keystore."; exit 1; }
+          echo "Release APK signature matches the configured private keystore."
       - name: Upload installable debug APK
         uses: actions/upload-artifact@v4
         with:
           name: mm4-save-data-editor-debug
           path: app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
-      - name: Upload unsigned release APK
+      - name: Upload privately signed release APK
         uses: actions/upload-artifact@v4
         with:
-          name: mm4-save-data-editor-release-unsigned
-          path: app/build/outputs/apk/release/app-release-unsigned.apk
+          name: mm4-save-data-editor-release
+          path: app/build/outputs/apk/release/app-release.apk
           if-no-files-found: error
