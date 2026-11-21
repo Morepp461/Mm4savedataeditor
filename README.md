@@ -52,3 +52,7 @@ gradle assembleDebug assembleRelease
 - The supplied sample profile needs real in-game validation with a duplicate career save before claiming full compatibility.
 - Keep the original save untouched. Export to a separate file and test that copy in Motorsport Manager 4.
 - A signed public release requires a release keystore controlled and backed up by the project owner. Never commit that private key to this repository.
+
+
+## Personal-use editor UI
+The Android app provides career overview, driver profiles, team identity and color settings, finance, headquarters, save information, and an advanced data area. Use the standard editor screens for normal work; raw structures remain under Advanced.
