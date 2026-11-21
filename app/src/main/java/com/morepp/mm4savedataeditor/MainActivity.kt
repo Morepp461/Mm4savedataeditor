@@ -71,6 +71,7 @@ private fun EditorApp() {
     var busy by remember { mutableStateOf(false) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
     var editTarget by remember { mutableStateOf<EditTarget?>(null) }
+    var confirmDiscardOpen by remember { mutableStateOf(false) }
 
     val openFile = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri: Uri? ->
         if (uri != null) scope.launch {
@@ -96,6 +97,11 @@ private fun EditorApp() {
                 busy = false
             }
         }
+    }
+
+    val requestOpen = {
+        if (hasChanges) confirmDiscardOpen = true
+        else openFile.launch(arrayOf("*/*"))
     }
 
     val exportFile = rememberLauncherForActivityResult(
@@ -161,7 +167,7 @@ private fun EditorApp() {
                         }
                     },
                     actions = {
-                        IconButton(onClick = { openFile.launch(arrayOf("*/*")) }) {
+                        IconButton(onClick = requestOpen) {
                             Icon(Icons.Default.FolderOpen, contentDescription = "Buka save")
                         }
                         IconButton(
@@ -181,7 +187,7 @@ private fun EditorApp() {
             Column(Modifier.fillMaxSize().padding(padding)) {
                 val current = document
                 if (current == null) {
-                    WelcomePanel(busy) { openFile.launch(arrayOf("*/*")) }
+                    WelcomePanel(busy, requestOpen)
                 } else {
                     CareerHeader(
                         document = current,
@@ -259,6 +265,23 @@ private fun EditorApp() {
                 confirmButton = {},
                 title = { Text("Memproses save…") },
                 text = { LinearProgressIndicator(Modifier.fillMaxWidth(), color = Red) }
+            )
+        }
+
+        if (confirmDiscardOpen) {
+            AlertDialog(
+                onDismissRequest = { confirmDiscardOpen = false },
+                title = { Text("Buang perubahan?") },
+                text = { Text("Perubahan yang belum diekspor akan hilang jika membuka save lain.") },
+                confirmButton = {
+                    TextButton(onClick = {
+                        confirmDiscardOpen = false
+                        openFile.launch(arrayOf("*/*"))
+                    }) { Text("LANJUTKAN") }
+                },
+                dismissButton = {
+                    TextButton(onClick = { confirmDiscardOpen = false }) { Text("BATAL") }
+                }
             )
         }
 
