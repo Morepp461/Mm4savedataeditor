@@ -727,19 +727,41 @@ private fun FinancePage(doc: Mm4SaveCodec.Document, onEdit: (String,List<String>
 }
 
 @Composable
-private fun HqPage(doc: Mm4SaveCodec.Document) {
-    val hq = doc.data.getAsJsonObject("headquarters") ?: JsonObject()
-    val upgrades = hq.getAsJsonArray("m_Upgrades")
-    val completed = hq.getAsJsonArray("m_CompletedUpgrades")
-    LazyColumn(contentPadding = PaddingValues(14.dp), verticalArrangement = Arrangement.spacedBy(9.dp)) {
+private fun HqPage(doc: Mm4SaveCodec.Document,onEdit:(String,List<String>,JsonElement)->Unit) {
+    val hq=doc.data.getAsJsonObject("headquarters") ?: JsonObject()
+    val upgrades=hq.get("m_Upgrades")
+    val completed=hq.get("m_CompletedUpgrades")
+    val entries:List<Pair<String,JsonElement>>=when {
+        upgrades==null -> emptyList()
+        upgrades.isJsonObject -> upgrades.asJsonObject.entrySet().map { it.key to it.value }.sortedBy { it.first.toIntOrNull() ?: Int.MAX_VALUE }
+        upgrades.isJsonArray -> upgrades.asJsonArray.mapIndexed { i,v -> i.toString() to v }
+        else -> emptyList()
+    }
+    LazyColumn(contentPadding=PaddingValues(14.dp),verticalArrangement=Arrangement.spacedBy(9.dp)) {
         item { GlassCard(Modifier.fillMaxWidth()) {
-            Text("HEADQUARTERS DEVELOPMENT", color = Gold, fontWeight = FontWeight.Bold, fontSize = 11.sp)
-            Text((completed?.size() ?: 0).toString() + " completed upgrades", fontSize = 22.sp, fontWeight = FontWeight.Black)
-            Text((upgrades?.size() ?: 0).toString() + " upgrade records in save", color = Muted, fontSize = 11.sp)
+            Text("HEADQUARTERS",color=Gold,fontWeight=FontWeight.Bold,fontSize=11.sp)
+            val count=completed?.let { if(it.isJsonArray) it.asJsonArray.size() else if(it.isJsonObject) it.asJsonObject.size() else 0 } ?: 0
+            Text("$"+"count completed upgrades",fontSize=22.sp,fontWeight=FontWeight.Black)
+            Text("$"+"{entries.size} facility records",color=Muted,fontSize=11.sp)
+            Text("Status fasilitas ditampilkan sebagai kontrol yang bisa dipahami.",color=Muted,fontSize=10.sp)
         } }
-        items(upgrades?.size() ?: 0) { i ->
-            val item = upgrades!![i].asJsonObject
-            GlassCard(Modifier.fillMaxWidth()) { InfoLine("Facility record " + (item.get("Key")?.asString ?: i.toString()), item.get("Value")?.toString() ?: "—") }
+        items(entries,key={it.first}) { (key,value) ->
+            val path=if(upgrades?.isJsonObject==true) listOf("headquarters","m_Upgrades",key) else listOf("headquarters","m_Upgrades","[$key]")
+            val obj=value.takeIf { it.isJsonObject }?.asJsonObject
+            val state=obj?.get("State")
+            val weeks=obj?.get("WeeksToUnlock")
+            val pathType=obj?.get("PathType")
+            GlassCard(Modifier.fillMaxWidth()) {
+                Text("Facility $"+"{key.toIntOrNull()?.plus(1) ?: key}",fontWeight=FontWeight.Bold)
+                Text(when(state?.takeIf { it.isJsonPrimitive }?.asInt) { 1 -> "Unlocked / Active"; 2 -> "In progress"; 0 -> "Locked"; else -> "Status not identified" },color=if(state?.takeIf { it.isJsonPrimitive }?.asInt==1) Color(0xFF82D7A2) else Gold,fontSize=11.sp)
+                if(weeks!=null) InfoLine("Weeks to unlock",preview(weeks))
+                if(pathType!=null) InfoLine("Upgrade path",preview(pathType))
+                if(state!=null) Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.spacedBy(8.dp)) {
+                    OutlinedButton(onClick={onEdit("Game Data",path+"State",state)}) { Text("EDIT STATUS") }
+                    if(weeks!=null) OutlinedButton(onClick={onEdit("Game Data",path+"WeeksToUnlock",weeks)}) { Text("EDIT TIMER") }
+                }
+                if(obj==null) Text("Detail fasilitas tersedia pada Advanced Data.",color=Muted,fontSize=10.sp)
+            }
         }
     }
 }
