@@ -1855,8 +1855,8 @@ internal fun applyOfficialF1Preset2026(data:JsonObject,templateData:JsonObject):
 
     // All structural validation is complete before the first mutation.
     teamPlan.forEach { (targetTeam,sourceTeam,_) ->
-        targetTeam.add("name",sourceTeam.get("name").deepCopy())
-        targetTeam.add("shortName",sourceTeam.get("shortName").deepCopy())
+        targetTeam.addProperty("name",sourceTeam.get("name").asString)
+        targetTeam.addProperty("shortName",sourceTeam.get("shortName").asString)
     }
     val preservedDriverFields=setOf("contract","careerHistory","id","\$id","\$version")
     driverPlan.forEach { (targetDriver,sourceDriver) ->
