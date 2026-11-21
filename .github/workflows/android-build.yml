@@ -106,3 +106,5 @@ jobs:
           name: mm4-save-data-editor-release
           path: app/build/outputs/apk/release/app-release.apk
           if-no-files-found: error
+
+# Trigger a fresh validation run after improving keystore diagnostics.
