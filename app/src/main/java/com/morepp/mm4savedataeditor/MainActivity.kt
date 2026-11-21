@@ -698,7 +698,7 @@ private fun EntityCatalogPage(doc: Mm4SaveCodec.Document, category: String, onEd
                     if(id in driverIds) return@mapNotNull null
                     val person=obj.getAsJsonObject("m_PersonDetails") ?: return@mapNotNull null
                     val personName=person.get("name")?.asString?.trim().orEmpty()
-                    if(personName.isBlank() || personName=="Morepp Del Rey") return@mapNotNull null
+                    val displayName=personName.ifBlank { "Unnamed staff • " + (obj.get("\\$id")?.asString ?: "Unknown ID") }
                     val joined=path.joinToString("/")
                     val type=when {
                         joined.contains("m_EngineerContractController") || obj.get("\$type")?.asString=="Engineer" -> "Engineer"
@@ -707,7 +707,7 @@ private fun EntityCatalogPage(doc: Mm4SaveCodec.Document, category: String, onEd
                         joined.contains("m_Applicants") -> "Staff Applicant"
                         else -> obj.get("\$type")?.asString ?: "Staff"
                     }
-                    CatalogRecord(path,obj,personName,type)
+                    CatalogRecord(path,obj,displayName,type)
                 }.distinctBy { it.data.get("\$id")?.asString }.sortedWith(compareBy({it.type},{it.name}))
             }
         }
@@ -1267,47 +1267,59 @@ private fun EditValueDialog(target: EditTarget, onClose: () -> Unit, onSave: (Js
     val isBoolean = primitive.isBoolean
     val isNumber = primitive.isNumber
     var value by remember(target) { mutableStateOf(if (primitive.isString) primitive.asString else primitive.toString()) }
-    var invalid by remember(target) { mutableStateOf(false) }
+    var choicesOpen by remember(target) { mutableStateOf(false) }
+    val currentNumber = if (isNumber) runCatching { primitive.asDouble }.getOrDefault(0.0) else 0.0
+    val isAttribute = target.path.any { it == "m_Stats" || it == "m_Stat" || it == "m_Potential" }
+    val attributeValue = currentNumber.toInt().coerceIn(0, 20)
+    val numberStep = when { kotlin.math.abs(currentNumber) >= 1000000 -> 100000.0; kotlin.math.abs(currentNumber) >= 10000 -> 1000.0; kotlin.math.abs(currentNumber) >= 100 -> 10.0; else -> 1.0 }
+    val meaning = when { attributeValue <= 4 -> "Sangat rendah"; attributeValue <= 8 -> "Rendah"; attributeValue <= 12 -> "Menengah"; attributeValue <= 16 -> "Tinggi"; else -> "Elite" }
     AlertDialog(
         onDismissRequest = onClose,
         title = { Text(humanizeField(target.path.lastOrNull() ?: "Edit value")) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text(target.path.joinToString("  /  "), color = Muted, fontSize = 10.sp)
-                if (isBoolean) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text("Off", Modifier.weight(1f))
+                when {
+                    isBoolean -> Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text("Nonaktif", Modifier.weight(1f))
                         Switch(checked = value.toBoolean(), onCheckedChange = { value = it.toString() })
-                        Text("On", Modifier.padding(start = 8.dp))
+                        Text("Aktif", Modifier.padding(start = 8.dp))
                     }
-                } else {
-                    OutlinedTextField(
-                        value = value, onValueChange = { value = it; invalid = false },
-                        modifier = Modifier.fillMaxWidth(),
-                        label = { Text(if (isNumber) "Number" else "Text") },
-                        singleLine = true,
-                        isError = invalid
-                    )
+                    isNumber && isAttribute -> {
+                        OutlinedButton(onClick = { choicesOpen = true }, modifier = Modifier.fillMaxWidth()) {
+                            Text(attributeValue.toString() + " / 20 • " + meaning)
+                            Icon(Icons.Default.ArrowDropDown, null)
+                        }
+                        DropdownMenu(expanded = choicesOpen, onDismissRequest = { choicesOpen = false }) {
+                            (0..20).forEach { choice ->
+                                val label = when { choice <= 4 -> "Sangat rendah"; choice <= 8 -> "Rendah"; choice <= 12 -> "Menengah"; choice <= 16 -> "Tinggi"; else -> "Elite" }
+                                DropdownMenuItem(text = { Text(choice.toString() + " / 20 • " + label) }, onClick = { value = choice.toString(); choicesOpen = false })
+                            }
+                        }
+                        Text("Skala atribut 0–20. Keterangan ini panduan umum, bukan label resmi game.", color = Muted, fontSize = 10.sp)
+                    }
+                    isNumber -> {
+                        Text(value, fontSize = 24.sp, fontWeight = FontWeight.Bold, color = Gold)
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                            OutlinedButton(onClick = { value = (value.toDouble() - numberStep).toLong().toString() }) { Text("−") }
+                            Text("Langkah " + numberStep.toLong(), color = Muted, fontSize = 10.sp)
+                            OutlinedButton(onClick = { value = (value.toDouble() + numberStep).toLong().toString() }) { Text("+") }
+                        }
+                        Text("Gunakan tombol untuk memilih nilai, tanpa mengetik angka manual.", color = Muted, fontSize = 10.sp)
+                    }
+                    else -> OutlinedTextField(value = value, onValueChange = { value = it }, modifier = Modifier.fillMaxWidth(), label = { Text("Text") }, singleLine = true)
                 }
-                if (invalid) Text("Nilai tidak valid.", color = Red, fontSize = 11.sp)
             }
         },
         confirmButton = {
             Button(onClick = {
-                try {
-                    val result = when {
-                        isBoolean -> com.google.gson.JsonPrimitive(value.toBoolean())
-                        isNumber -> com.google.gson.JsonParser.parseString(value).also { require(it.isJsonPrimitive && it.asJsonPrimitive.isNumber) }
-                        else -> com.google.gson.JsonPrimitive(value)
-                    }
-                    onSave(result)
-                } catch (_: Throwable) { invalid = true }
+                val result = when { isBoolean -> com.google.gson.JsonPrimitive(value.toBoolean()); isNumber -> com.google.gson.JsonPrimitive(value.toDouble()); else -> com.google.gson.JsonPrimitive(value) }
+                onSave(result)
             }, colors = ButtonDefaults.buttonColors(containerColor = Red)) { Text("SAVE CHANGES") }
         },
         dismissButton = { TextButton(onClick = onClose) { Text("CANCEL") } }
     )
 }
-
 @Composable
 private fun EditJsonDialog(
     target: EditTarget,

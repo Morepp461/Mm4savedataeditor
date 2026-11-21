@@ -112,13 +112,28 @@ object Mm4SaveCodec {
     }
 
     fun firstDifference(left: Document, right: Document): String? {
-        val infoLeft = canonical(left.info)
-        val infoRight = canonical(right.info)
-        if (infoLeft != infoRight) return "Save Info (data differs)"
-        val dataLeft = canonical(left.data)
-        val dataRight = canonical(right.data)
-        if (dataLeft != dataRight) return "Game Data (data differs)"
-        return null
+        fun find(a: com.google.gson.JsonElement, b: com.google.gson.JsonElement, path: String): String? {
+            if (a.isJsonObject && b.isJsonObject) {
+                val keys = (a.asJsonObject.keySet() + b.asJsonObject.keySet()).toSortedSet()
+                for (key in keys) {
+                    val av = a.asJsonObject.get(key)
+                    val bv = b.asJsonObject.get(key)
+                    if (av == null || bv == null) return "$path.$key (field missing)"
+                    find(av, bv, "$path.$key")?.let { return it }
+                }
+                return null
+            }
+            if (a.isJsonArray && b.isJsonArray) {
+                if (a.asJsonArray.size() != b.asJsonArray.size()) return "$path (jumlah item berubah)"
+                for (index in 0 until a.asJsonArray.size()) {
+                    find(a.asJsonArray[index], b.asJsonArray[index], "$path[$index]")?.let { return it }
+                }
+                return null
+            }
+            return if (canonical(a) == canonical(b)) null else "$path (nilai berbeda)"
+        }
+        return find(left.info, right.info, "Save Info")
+            ?: find(left.data, right.data, "Game Data")
     }
 
     private fun canonical(value: com.google.gson.JsonElement): String = when {
