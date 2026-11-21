@@ -10,6 +10,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -64,6 +65,8 @@ private fun EditorApp() {
     var selectedTab by remember { mutableStateOf("Save Info") }
     var search by remember { mutableStateOf("") }
     var sourceName by remember { mutableStateOf("Belum ada save data") }
+    var sourceUri by remember { mutableStateOf<String?>(null) }
+    var selectedModule by remember { mutableStateOf<String?>(null) }
     var hasChanges by remember { mutableStateOf(false) }
     var busy by remember { mutableStateOf(false) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
@@ -75,13 +78,16 @@ private fun EditorApp() {
             errorMessage = null
             try {
                 val loaded = withContext(Dispatchers.IO) {
-                    val bytes = context.contentResolver.openInputStream(uri)?.use { it.readBytes() }
+                    val input = context.contentResolver.openInputStream(uri)
                         ?: error("Tidak bisa membaca file.")
+                    val bytes = input.use { readSaveBytes(it) }
                     Mm4SaveCodec.decode(bytes, uri.lastPathSegment ?: "career.msv")
                 }
                 document = loaded
                 sourceName = uri.lastPathSegment ?: "MM4 career"
+                sourceUri = uri.toString()
                 selectedTab = "Save Info"
+                selectedModule = null
                 search = ""
                 hasChanges = false
             } catch (failure: Throwable) {
@@ -96,24 +102,28 @@ private fun EditorApp() {
         ActivityResultContracts.CreateDocument("application/octet-stream")
     ) { uri: Uri? ->
         val current = document
-        if (uri != null && current != null) scope.launch {
-            busy = true
-            errorMessage = null
-            try {
-                withContext(Dispatchers.IO) {
-                    val bytes = Mm4SaveCodec.encode(current)
-                    val verified = Mm4SaveCodec.decode(bytes, current.sourceName)
-                    check(verified.info == current.info && verified.data == current.data) {
-                        "Validasi round-trip gagal."
+        if (uri != null && current != null) {
+            if (uri.toString() == sourceUri) {
+                errorMessage = "Pilih file tujuan yang berbeda agar save asli tidak tertimpa."
+            } else scope.launch {
+                busy = true
+                errorMessage = null
+                try {
+                    withContext(Dispatchers.IO) {
+                        val bytes = Mm4SaveCodec.encode(current)
+                        val verified = Mm4SaveCodec.decode(bytes, current.sourceName)
+                        check(verified.info == current.info && verified.data == current.data) {
+                            "Validasi round-trip gagal."
+                        }
+                        context.contentResolver.openOutputStream(uri, "wt")?.use { it.write(bytes) }
+                            ?: error("Tidak bisa menulis file tujuan.")
                     }
-                    context.contentResolver.openOutputStream(uri, "wt")?.use { it.write(bytes) }
-                        ?: error("Tidak bisa menulis file tujuan.")
+                    hasChanges = false
+                } catch (failure: Throwable) {
+                    errorMessage = failure.message ?: "Export gagal."
+                } finally {
+                    busy = false
                 }
-                hasChanges = false
-            } catch (failure: Throwable) {
-                errorMessage = failure.message ?: "Export gagal."
-            } finally {
-                busy = false
             }
         }
     }
@@ -186,7 +196,7 @@ private fun EditorApp() {
                         listOf("Save Info", "Game Data").forEach { tab ->
                             FilterChip(
                                 selected = selectedTab == tab,
-                                onClick = { selectedTab = tab; search = "" },
+                                onClick = { selectedTab = tab; selectedModule = null; search = "" },
                                 label = { Text(tab) }
                             )
                         }
@@ -208,10 +218,33 @@ private fun EditorApp() {
                         shape = RoundedCornerShape(14.dp)
                     )
                     val root = if (selectedTab == "Save Info") current.info else current.data
+                    if (selectedTab == "Game Data") {
+                        val moduleNames = current.data.keySet().sorted()
+                        LazyRow(
+                            Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 2.dp),
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            item {
+                                FilterChip(
+                                    selected = selectedModule == null,
+                                    onClick = { selectedModule = null },
+                                    label = { Text("All") }
+                                )
+                            }
+                            items(moduleNames) { module ->
+                                FilterChip(
+                                    selected = selectedModule == module,
+                                    onClick = { selectedModule = module },
+                                    label = { Text(module) }
+                                )
+                            }
+                        }
+                    }
                     JsonBrowser(
                         root = root,
                         rootName = selectedTab,
                         query = search,
+                        moduleFilter = if (selectedTab == "Game Data") selectedModule else null,
                         onEdit = { path, value ->
                             editTarget = EditTarget(selectedTab, path, value.deepCopy())
                         }
@@ -386,13 +419,15 @@ private fun JsonBrowser(
     root: JsonObject,
     rootName: String,
     query: String,
+    moduleFilter: String?,
     onEdit: (List<String>, JsonElement) -> Unit
 ) {
-    val entries = remember(root, query) {
+    val entries = remember(root, query, moduleFilter) {
         flatten(root).filter { (path, value) ->
-            query.isBlank() ||
-                path.joinToString(".").contains(query, ignoreCase = true) ||
-                value.toString().contains(query, ignoreCase = true)
+            (moduleFilter == null || path.firstOrNull() == moduleFilter) &&
+                (query.isBlank() ||
+                    path.joinToString(".").contains(query, ignoreCase = true) ||
+                    value.toString().contains(query, ignoreCase = true))
         }
     }
     Column(Modifier.fillMaxSize()) {
@@ -685,4 +720,19 @@ private fun removePath(root: JsonObject, path: List<String>): Boolean {
         }
         else -> false
     }
+}
+
+
+private fun readSaveBytes(input: java.io.InputStream): ByteArray {
+    val output = java.io.ByteArrayOutputStream()
+    val buffer = ByteArray(8 * 1024)
+    var total = 0
+    while (true) {
+        val count = input.read(buffer)
+        if (count < 0) break
+        total += count
+        require(total <= 64 * 1024 * 1024) { "File terlalu besar untuk dibuka dengan aman." }
+        output.write(buffer, 0, count)
+    }
+    return output.toByteArray()
 }
