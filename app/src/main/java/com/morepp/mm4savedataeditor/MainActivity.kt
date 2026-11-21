@@ -1727,19 +1727,18 @@ private fun divisionTeamIds(data:JsonObject,divisionId:Int):List<String> {
 }
 
 internal fun applyOfficialF1Preset2026(data:JsonObject):Boolean {
-    // The loaded save is the template source: preserve its team names, driver names,
-    // contracts, cars and roster links instead of overwriting them with a hard-coded lineup.
+    // The loaded save is the template source. Preserve every team and driver identity.
     val all=collectObjectsWithId(data).associateBy { it.second.get("\$id")?.asString }
     val championshipRefs=data.getAsJsonObject("championshipManager")?.getAsJsonArray("championships") ?: return false
     val championships=(0..3).map { divisionId ->
-        val ref=championshipRefs.firstOrNull { row ->
-            val id=row.takeIf { it.isJsonObject }?.asJsonObject?.get("\$ref")?.asString ?: return@firstOrNull false
-            all[id]?.second?.get("m_ID")?.asInt==divisionId
-        }?.asJsonObject?.get("\$ref")?.asString ?: return false
+        val ref=championshipRefs.firstNotNullOfOrNull { row ->
+            val id=row.takeIf { it.isJsonObject }?.asJsonObject?.get("\$ref")?.asString ?: return@firstNotNullOfOrNull null
+            id.takeIf { all[id]?.second?.get("m_ID")?.asInt==divisionId }
+        } ?: return false
         all[ref]?.second ?: return false
     }
     val seenTeams=mutableSetOf<Int>()
-    for ((divisionIndex,championship) in championships.withIndex()) {
+    for (championship in championships) {
         val championshipRef=championship.get("\$id")?.asString ?: return false
         val numericIds=championship.getAsJsonArray("m_TeamIDs") ?: return false
         if(numericIds.size()!=10) return false
@@ -1757,31 +1756,34 @@ internal fun applyOfficialF1Preset2026(data:JsonObject):Boolean {
             val roster=team.getAsJsonObject("m_TeamDriverData")?.getAsJsonArray("m_Data") ?: return false
             if(roster.size()!=2) return false
             for(record in roster) {
-                val driverId=record.takeIf { it.isJsonObject }?.asJsonObject
-                    ?.get("driver")?.takeIf { it.isJsonObject }?.asJsonObject
-                    ?.get("\$ref")?.asString ?: return false
+                val driverNode=record.takeIf { it.isJsonObject }?.asJsonObject?.get("driver") ?: return false
+                val driverId=when {
+                    driverNode.isJsonObject && driverNode.asJsonObject.has("\$ref") -> driverNode.asJsonObject.get("\$ref").asString
+                    driverNode.isJsonObject -> driverNode.asJsonObject.get("\$id")?.asString ?: return false
+                    else -> return false
+                }
                 if(!divisionDrivers.add(driverId)) return false
-                val driver=all[driverId]?.second ?: return false
+                val driver=all[driverId]?.second ?: driverNode.asJsonObject
                 if(driver.getAsJsonObject("m_PersonDetails")?.get("name")?.asString.isNullOrBlank()) return false
-                val contractTeam=driver.getAsJsonObject("contract")?.getAsJsonObject("m_Team")
-                    ?.get("\$ref")?.asString
-                if(contractTeam!=teamEntityId) return false
+                val contractTeam=driver.getAsJsonObject("contract")?.getAsJsonObject("m_Team") ?: return false
+                val contractTeamId=contractTeam.get("\$ref")?.asString
+                val contractTeamEntity=contractTeamId?.let { all[it]?.second }
+                val contractNumericId=contractTeamEntity?.get("m_TeamID")?.asInt
+                    ?: contractTeam.get("m_TeamID")?.takeIf { it.isJsonPrimitive && it.asJsonPrimitive.isNumber }?.asInt
+                if(contractNumericId!=numericId && contractTeamId!=teamEntityId) return false
             }
-            // Repair only the team-to-championship pointer from the authoritative template.
+            // The template's numeric m_TeamIDs list is authoritative for division membership.
             team.add("m_Championship",JsonObject().apply { addProperty("\$ref",championshipRef) })
         }
         if(divisionTeams.size!=10 || divisionDrivers.size!=20) return false
-        // Keep the championship standings rows linked to the same team entities.
         val standingTeams=championship.getAsJsonObject("standings")?.getAsJsonArray("m_Teams")
         if(standingTeams!=null) {
             val standingRefs=standingTeams.mapNotNull { row ->
-                row.takeIf { it.isJsonObject }?.asJsonObject
-                    ?.get("m_Entity")?.takeIf { it.isJsonObject }?.asJsonObject
-                    ?.get("\$ref")?.asString
+                row.takeIf { it.isJsonObject }?.asJsonObject?.get("m_Entity")
+                    ?.takeIf { it.isJsonObject }?.asJsonObject?.get("\$ref")?.asString
             }.toSet()
-            if(standingRefs.size!=10 || !divisionTeams.all { id ->
-                val team=all.values.firstOrNull { it.second.get("m_TeamID")?.asInt==id }?.second
-                team?.get("\$id")?.asString in standingRefs
+            if(standingRefs.size!=10 || divisionTeams.any { id ->
+                all.values.firstOrNull { it.second.get("m_TeamID")?.asInt==id }?.second?.get("\$id")?.asString !in standingRefs
             }) return false
         }
     }
