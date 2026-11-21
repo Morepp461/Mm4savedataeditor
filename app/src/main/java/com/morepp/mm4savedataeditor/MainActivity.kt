@@ -608,12 +608,6 @@ private fun JsonBrowser(
 private fun humanizeField(raw: String): String {
     val known = mapOf(
         "createdDate" to "Tanggal Dibuat",
-        "driver" to "Pembalap",
-        "drivers" to "Daftar Pembalap",
-        "teams" to "Daftar Tim",
-        "staff" to "Staf Tim",
-        "calendar" to "Kalender Balapan",
-        "championship" to "Kejuaraan",
         "lastEditedDate" to "Terakhir Diubah",
         "gameDate" to "Tanggal Dalam Game",
         "teamColor" to "Warna Tim",
@@ -654,7 +648,7 @@ private fun dataTypeLabel(value: JsonElement?): String = when {
 private fun preview(value: JsonElement): String = when {
     value.isJsonNull -> "null"
     value.isJsonObject -> "{ ${value.asJsonObject.size()} properti }"
-    value.isJsonArray -> "[ ${value.asJsonArray.size()} items ]"
+    value.isJsonArray -> "[ ${value.asJsonArray.size()} item ]"
     else -> value.toString()
 }
 
@@ -700,7 +694,7 @@ private fun EditJsonDialog(
                 Modifier.fillMaxWidth().heightIn(max = 520.dp).verticalScroll(rememberScrollState())
             ) {
                 Text(
-                    target.path.joinToString(" › "),
+                    target.path.joinToString(" › ") { humanizeField(it.removePrefix("[").removeSuffix("]")) },
                     color = Gold,
                     fontSize = 10.sp
                 )
@@ -803,7 +797,7 @@ private fun EditJsonDialog(
     if (confirmDelete) {
         AlertDialog(
             onDismissRequest = { confirmDelete = false },
-            title = { Text("Hapus node?") },
+            title = { Text("Hapus data ini?") },
             text = { Text("Data ini akan dihapus dari salinan yang sedang diedit. File asli tidak berubah sampai kamu mengekspor.") },
             confirmButton = {
                 TextButton(
