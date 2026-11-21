@@ -318,7 +318,7 @@ private fun EditorApp() {
                                         undoStack = emptyList()
                                         redoStack = emptyList()
                                         val successText = when {
-                                            action == "official_f1_2026" -> "Nama 10 tim F1 berhasil diterapkan. Nama pembalap dan divisi lain tetap."
+                                            action == "official_f1_2026" -> "40 nama tim F1–F4 berhasil diterapkan dari template SlotTwo.msv. Data karier lainnya dipertahankan."
                                             action == "rename_divisions" -> "Label divisi berhasil diperbarui."
                                             action.startsWith("swap_teams|") -> "Tim berhasil ditukar antar divisi."
                                             action.startsWith("move_driver|") -> "Pembalap berhasil dipindahkan."
@@ -332,7 +332,7 @@ private fun EditorApp() {
                                         snackbarHostState.showSnackbar(successText)
                                     } else {
                                         val failureText = when {
-                                            action == "official_f1_2026" -> "Template gagal: struktur divisi, tim, atau roster tidak cocok."
+                                            action == "official_f1_2026" -> "Template gagal: empat championship harus memiliki 10 tim dan semua nama tim harus tersedia."
                                             action == "rename_divisions" -> "Nama divisi tidak tersimpan sebagai teks di format save ini."
                                             action == "unlock_suppliers" -> "Supplier tidak diubah: struktur node tidak ditemukan atau sudah terbuka."
                                             else -> "Operasi gagal. Data save tidak diubah."
@@ -1697,20 +1697,59 @@ internal fun swapTeamsBetweenDivisions(data:JsonObject,teamA:String,teamB:String
 
 
 
-private data class OfficialF1Team(val name:String,val shortName:String,val drivers:List<Pair<String,String>>)
+private data class SaveTeamTemplate(val name:String,val shortName:String)
 
-private val OfficialF1Lineup2026=listOf(
-    OfficialF1Team("McLaren Mastercard F1 Team","McLaren",listOf("Oscar" to "Piastri","Lando" to "Norris")),
-    OfficialF1Team("Scuderia Ferrari HP","Ferrari",listOf("Charles" to "Leclerc","Lewis" to "Hamilton")),
-    OfficialF1Team("Oracle Red Bull Racing","Red Bull",listOf("Max" to "Verstappen","Isack" to "Hadjar")),
-    OfficialF1Team("Mercedes-AMG Petronas Formula One Team","Mercedes",listOf("George" to "Russell","Kimi" to "Antonelli")),
-    OfficialF1Team("Aston Martin Aramco Formula One Team","Aston Martin",listOf("Lance" to "Stroll","Fernando" to "Alonso")),
-    OfficialF1Team("BWT Alpine Formula One Team","Alpine",listOf("Pierre" to "Gasly","Franco" to "Colapinto")),
-    OfficialF1Team("TGR Haas F1 Team","Haas",listOf("Esteban" to "Ocon","Oliver" to "Bearman")),
-    OfficialF1Team("Visa Cash App Racing Bulls Formula One Team","Racing Bulls",listOf("Arvid" to "Lindblad","Liam" to "Lawson")),
-    OfficialF1Team("Atlassian Williams F1 Racing","Williams",listOf("Alexander" to "Albon","Carlos" to "Sainz")),
-    OfficialF1Team("Audi Revolut F1 Team","Audi",listOf("Nico" to "Hülkenberg","Gabriel" to "Bortoleto")),
-    OfficialF1Team("Cadillac Formula 1 Team","Cadillac",listOf("Sergio" to "Pérez","Valtteri" to "Bottas"))
+// Extracted from the user's supplied SlotTwo.msv template, in each championship's m_TeamIDs order.
+// Driver names, contracts, roster, car, sponsors, staff and team identity are never copied.
+private val F1F4SaveTemplate=listOf(
+    listOf(
+        SaveTeamTemplate("Mercedes-AMG Petronas","Mercedes"),
+        SaveTeamTemplate("McLaren Racing","McLaren"),
+        SaveTeamTemplate("Aston Martin F1","Aston Martin"),
+        SaveTeamTemplate("Scuderia Ferrari","Ferrari"),
+        SaveTeamTemplate("Alpine F1 Team","Alpine"),
+        SaveTeamTemplate("Haas F1 Team","Haas"),
+        SaveTeamTemplate("Audi F1 Team","Audi"),
+        SaveTeamTemplate("Racing Bulls","Racing Bulls"),
+        SaveTeamTemplate("Red Bull Racing","Red Bull"),
+        SaveTeamTemplate("Williams Racing","Williams")
+    ),
+    listOf(
+        SaveTeamTemplate("ART Grand Prix","ART"),
+        SaveTeamTemplate("Prema Racing","Prema"),
+        SaveTeamTemplate("Invicta Racing","Invicta"),
+        SaveTeamTemplate("Hitech Pulse-Eight","Hitech"),
+        SaveTeamTemplate("Campos Racing","Campos"),
+        SaveTeamTemplate("MP Motorsport","MP"),
+        SaveTeamTemplate("DAMS Lucas Oil","DAMS"),
+        SaveTeamTemplate("AIX Racing","AIX"),
+        SaveTeamTemplate("Rodin Motorsport","Rodin"),
+        SaveTeamTemplate("Trident","Trident")
+    ),
+    listOf(
+        SaveTeamTemplate("ART GP F3","ART F3"),
+        SaveTeamTemplate("Prema Powerteam","Prema F3"),
+        SaveTeamTemplate("Trident Motorsport","Trident F3"),
+        SaveTeamTemplate("Hitech Grand Prix","Hitech F3"),
+        SaveTeamTemplate("Van Amersfoort Racing","VAR"),
+        SaveTeamTemplate("Rodin Carlin","Rodin Carlin"),
+        SaveTeamTemplate("AIX Racing F3","AIX F3"),
+        SaveTeamTemplate("DAMS F3","DAMS F3"),
+        SaveTeamTemplate("MP Motorsport F3","MP F3"),
+        SaveTeamTemplate("Campos Racing F3","Campos F3")
+    ),
+    listOf(
+        SaveTeamTemplate("Jenzer Motorsport","Jenzer"),
+        SaveTeamTemplate("US Racing","US Racing"),
+        SaveTeamTemplate("Prema F4","Prema F4"),
+        SaveTeamTemplate("Cram Motorsport","Cram"),
+        SaveTeamTemplate("Trident F4","Trident F4"),
+        SaveTeamTemplate("Maffi Racing","Maffi"),
+        SaveTeamTemplate("PHM Racing","PHM"),
+        SaveTeamTemplate("R-ace GP","R-ace"),
+        SaveTeamTemplate("AKM Motorsport","AKM"),
+        SaveTeamTemplate("Caleris VRT","Caleris VRT")
+    )
 )
 
 private fun championshipEntityById(data:JsonObject, championshipId:Int):JsonObject? {
@@ -1742,82 +1781,44 @@ private fun divisionTeamIds(data:JsonObject,divisionId:Int):List<String> {
 }
 
 internal fun applyOfficialF1Preset2026(data:JsonObject):Boolean {
-    // The loaded save is the template source. Preserve every team and driver identity.
+    // Apply the exact F1-F4 team-name template from SlotTwo.msv by championship order.
+    // Keep every entity ID, team membership, driver, contract, car, sponsor and staff record intact.
     val all=collectObjectsWithId(data).associateBy { it.second.get("\$id")?.asString }
-    val championshipRefs=data.getAsJsonObject("championshipManager")?.getAsJsonArray("championships") ?: return false
+    val championshipRefs=data.getAsJsonObject("championshipManager")
+        ?.getAsJsonArray("championships") ?: return false
     val championships=(0..3).map { divisionId ->
         val ref=championshipRefs.firstNotNullOfOrNull { row ->
-            val id=row.takeIf { it.isJsonObject }?.asJsonObject?.get("\$ref")?.asString ?: return@firstNotNullOfOrNull null
+            val id=row.takeIf { it.isJsonObject }?.asJsonObject?.get("\$ref")?.asString
+                ?: return@firstNotNullOfOrNull null
             id.takeIf { all[id]?.second?.get("m_ID")?.asInt==divisionId }
         } ?: return false
         all[ref]?.second ?: return false
     }
-    val seenTeams=mutableSetOf<Int>()
-    for (championship in championships) {
-        val championshipRef=championship.get("\$id")?.asString ?: return false
-        val numericIds=championship.getAsJsonArray("m_TeamIDs") ?: return false
-        if(numericIds.size()!=10) return false
-        val divisionTeams=mutableSetOf<Int>()
-        val divisionDrivers=mutableSetOf<String>()
-        for (numericIdElement in numericIds) {
-            if(!numericIdElement.isJsonPrimitive || !numericIdElement.asJsonPrimitive.isNumber) return false
-            val numericId=numericIdElement.asInt
-            if(!divisionTeams.add(numericId) || !seenTeams.add(numericId)) return false
-            val team=all.values.firstOrNull {
-                it.second.get("m_TeamID")?.takeIf { value -> value.isJsonPrimitive && value.asJsonPrimitive.isNumber }?.asInt==numericId
+
+    val renamePlan=mutableListOf<Triple<JsonObject,SaveTeamTemplate,Int>>()
+    val seenTeamIds=mutableSetOf<Int>()
+    championships.forEachIndexed { divisionId,championship ->
+        val ids=championship.get("m_TeamIDs")?.takeIf { it.isJsonArray }?.asJsonArray ?: return false
+        val templates=F1F4SaveTemplate.getOrNull(divisionId) ?: return false
+        if(ids.size()!=templates.size) return false
+        ids.forEachIndexed { index,teamIdElement ->
+            if(!teamIdElement.isJsonPrimitive || !teamIdElement.asJsonPrimitive.isNumber) return false
+            val numericId=teamIdElement.asInt
+            if(!seenTeamIds.add(numericId)) return false
+            val team=all.values.firstOrNull { entry ->
+                entry.second.get("m_TeamID")?.let { it.isJsonPrimitive && it.asJsonPrimitive.isNumber && it.asInt==numericId }==true
             }?.second ?: return false
-            if(team.get("name")?.takeIf { it.isJsonPrimitive }?.asString.isNullOrBlank()) return false
-            val teamEntityId=team.get("\$id")?.asString ?: return false
-            val roster=team.getAsJsonObject("m_TeamDriverData")?.getAsJsonArray("m_Data") ?: return false
-            if(roster.size()!=2) return false
-            for(record in roster) {
-                val driverNode=record.takeIf { it.isJsonObject }?.asJsonObject?.get("driver") ?: return false
-                val driverId=when {
-                    driverNode.isJsonObject && driverNode.asJsonObject.has("\$ref") -> driverNode.asJsonObject.get("\$ref").asString
-                    driverNode.isJsonObject -> driverNode.asJsonObject.get("\$id")?.asString ?: return false
-                    else -> return false
-                }
-                if(!divisionDrivers.add(driverId)) return false
-                val driver=all[driverId]?.second ?: driverNode.asJsonObject
-                if(driver.getAsJsonObject("m_PersonDetails")?.get("name")?.asString.isNullOrBlank()) return false
-                val contractTeam=driver.getAsJsonObject("contract")?.getAsJsonObject("m_Team") ?: return false
-                val contractTeamId=contractTeam.get("\$ref")?.asString
-                val contractTeamEntity=contractTeamId?.let { all[it]?.second }
-                val contractNumericId=contractTeamEntity?.get("m_TeamID")?.asInt
-                    ?: contractTeam.get("m_TeamID")?.takeIf { it.isJsonPrimitive && it.asJsonPrimitive.isNumber }?.asInt
-                if(contractNumericId!=numericId && contractTeamId!=teamEntityId) return false
-            }
-            // The template's numeric m_TeamIDs list is authoritative for division membership.
-            team.add("m_Championship",JsonObject().apply { addProperty("\$ref",championshipRef) })
-        }
-        if(divisionTeams.size!=10 || divisionDrivers.size!=20) return false
-        val standingTeams=championship.getAsJsonObject("standings")?.getAsJsonArray("m_Teams")
-        if(standingTeams!=null) {
-            val standingRefs=standingTeams.mapNotNull { row ->
-                row.takeIf { it.isJsonObject }?.asJsonObject?.get("m_Entity")
-                    ?.takeIf { it.isJsonObject }?.asJsonObject?.get("\$ref")?.asString
-            }.toSet()
-            if(standingRefs.size!=10 || divisionTeams.any { id ->
-                all.values.firstOrNull { it.second.get("m_TeamID")?.asInt==id }?.second?.get("\$id")?.asString !in standingRefs
-            }) return false
+            if(team.get("name")?.isJsonPrimitive!=true || team.get("shortName")?.isJsonPrimitive!=true) return false
+            renamePlan.add(Triple(team,templates[index],divisionId))
         }
     }
-    if(seenTeams.size!=40) return false
-    // Rename only the ten teams in championship ID 0. Driver identities, contracts,
-    // rosters and teams in divisions 1-3 remain unchanged.
-    val f1Ids=championships.first().getAsJsonArray("m_TeamIDs")
-    val renamePlan=f1Ids.mapIndexed { index, numericIdElement ->
-        val numericId=numericIdElement.asInt
-        val team=all.values.firstOrNull {
-            it.second.get("m_TeamID")?.takeIf { value -> value.isJsonPrimitive && value.asJsonPrimitive.isNumber }?.asInt==numericId
-        }?.second ?: return false
-        val preset=OfficialF1Lineup2026.getOrNull(index) ?: return false
-        if(team.get("name")?.isJsonPrimitive!=true || team.get("shortName")?.isJsonPrimitive!=true) return false
-        Triple(team,preset.name,preset.shortName)
-    }
-    renamePlan.forEach { (team,name,shortName) ->
-        team.addProperty("name",name)
-        team.addProperty("shortName",shortName)
+    if(seenTeamIds.size!=40 || renamePlan.size!=40) return false
+
+    // No m_Championship rewrite here: this is a game-owned value object, not a $ref.
+    // Replacing it with a reference corrupts the original MM4 object graph.
+    renamePlan.forEach { (team,template,_) ->
+        team.addProperty("name",template.name)
+        team.addProperty("shortName",template.shortName)
     }
     return true
 }
@@ -1989,15 +1990,15 @@ private fun GodModePage(doc:Mm4SaveCodec.Document,onAction:(String)->Unit,onEdit
         item {
             GlassCard(Modifier.fillMaxWidth()) {
                 Text("F1–F4 SAVE TEMPLATE",color=Gold,fontWeight=FontWeight.Bold)
-                Text("Menggunakan nama tim, profil pembalap, kontrak, dan roster yang sudah ada di save. Validasi 10 tim dan 20 pembalap pada masing-masing divisi F1–F4.",color=Muted,fontSize=10.sp)
-                Text("Sumber template: m_TeamIDs dan m_TeamDriverData pada championship ID 0–3. Tidak menimpa nama atau data pembalap.",color=Gold,fontSize=10.sp)
-                Button(onClick={onAction("official_f1_2026")},modifier=Modifier.fillMaxWidth(),colors=ButtonDefaults.buttonColors(containerColor=Red)) { Text("VALIDASI & TERAPKAN TEMPLATE F1–F4") }
+                Text("Menggunakan 40 nama tim dan short name persis dari template SlotTwo.msv, sesuai urutan tim pada championship ID 0–3.",color=Muted,fontSize=10.sp)
+                Text("Hanya nama tim dan short name yang diganti. Identitas tim, pembalap, kontrak, roster, mobil, sponsor, staff dan divisi tetap dipertahankan.",color=Gold,fontSize=10.sp)
+                Button(onClick={onAction("official_f1_2026")},modifier=Modifier.fillMaxWidth(),colors=ButtonDefaults.buttonColors(containerColor=Red)) { Text("TERAPKAN TEMPLATE TIM F1–F4") }
             }
         }
         item {
             GlassCard(Modifier.fillMaxWidth()) {
                 Text("NAMA DIVISI RESMI",color=Gold,fontWeight=FontWeight.Bold)
-                Text("Nama yang ditampilkan mengikuti ID championship MM4. Editor tidak menulis properti nama palsu ke file save.",color=Muted,fontSize=10.sp)
+                Text("Label F1–F4 dipakai editor berdasarkan championship ID. SlotOne.msv tidak menyimpan field nama divisi; judul seperti “World Motorsport Championship” berasal dari teks internal game dan tidak bisa diganti lewat save data saja.",color=Muted,fontSize=10.sp)
                 InfoLine("ID 0",careerDivisionLabel(0))
                 InfoLine("ID 1",careerDivisionLabel(1))
                 InfoLine("ID 2",careerDivisionLabel(2))

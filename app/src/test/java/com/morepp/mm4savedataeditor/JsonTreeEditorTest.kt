@@ -290,10 +290,13 @@ class JsonTreeEditorTest {
 
         assertTrue(applyOfficialF1Preset2026(data))
         val byId=collectObjectsWithId(data).associate { it.second.get("\$id").asString to it.second }
-        assertEquals("McLaren Mastercard F1 Team",byId["team-1"]!!.get("name").asString)
-        assertEquals("McLaren",byId["team-1"]!!.get("shortName").asString)
+        assertEquals("Mercedes-AMG Petronas",byId["team-1"]!!.get("name").asString)
+        assertEquals("Mercedes",byId["team-1"]!!.get("shortName").asString)
+        assertEquals("ART Grand Prix",byId["team-11"]!!.get("name").asString)
+        assertEquals("ART GP F3",byId["team-21"]!!.get("name").asString)
+        assertEquals("Jenzer Motorsport",byId["team-31"]!!.get("name").asString)
         assertEquals("Template Driver 1-0",byId["driver-1-0"]!!.getAsJsonObject("m_PersonDetails").get("name").asString)
-        assertEquals("Template Team 11",byId["team-11"]!!.get("name").asString)
+        assertEquals("champ-0",byId["team-1"]!!.getAsJsonObject("m_Championship").get("\$ref").asString)
         assertEquals(40,(0..3).sumOf { division ->
             byId["champ-$division"]!!.getAsJsonArray("m_TeamIDs").size()
         })
