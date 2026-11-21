@@ -18,6 +18,9 @@ android {
         release {
             isMinifyEnabled = false
             isShrinkResources = false
+            // Allows direct device installation for testing. Replace with a private
+            // release keystore before publishing to Google Play or distributing updates.
+            signingConfig = signingConfigs.getByName("debug")
         }
     }
     compileOptions {
