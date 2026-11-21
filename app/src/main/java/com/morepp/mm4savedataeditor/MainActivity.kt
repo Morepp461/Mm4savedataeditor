@@ -2225,7 +2225,7 @@ private fun WatermarkFooter() {
 
 @Composable
 
-private fun editorBounds(document:Mm4SaveCodec.Document?,root:String,path:List<String>):Pair<String?,String?> {
+internal fun editorBounds(document:Mm4SaveCodec.Document?,root:String,path:List<String>):Pair<String?,String?> {
     if(root!="Game Data" || path.isEmpty()) return null to null
     return when {
         path.last() in setOf("m_Stat","m_Potential") -> "0" to "20"
