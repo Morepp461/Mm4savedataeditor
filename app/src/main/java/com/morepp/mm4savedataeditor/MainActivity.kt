@@ -1517,29 +1517,6 @@ internal fun mutateDocument(
         current.copy(data = editedRoot)
     }
 }
-}{numberStep.toLong()}", color = Muted, fontSize = 10.sp)
-                            OutlinedButton(onClick = { value = (value.toDouble() + numberStep).toLong().toString() }) { Text("+") }
-                        }
-                        Text("Gunakan tombol untuk memilih nilai. Tidak perlu mengetik angka manual.", color = Muted, fontSize = 10.sp)
-                    }
-                    else -> OutlinedTextField(value = value, onValueChange = { value = it }, modifier = Modifier.fillMaxWidth(), label = { Text("Text") }, singleLine = true)
-                }
-            }
-        },
-        confirmButton = {
-            Button(onClick = {
-                val result = when {
-                    isBoolean -> com.google.gson.JsonPrimitive(value.toBoolean())
-                    isNumber -> com.google.gson.JsonPrimitive(value.toDouble())
-                    else -> com.google.gson.JsonPrimitive(value)
-                }
-                onSave(result)
-            }, colors = ButtonDefaults.buttonColors(containerColor = Red)) { Text("SAVE CHANGES") }
-        },
-        dismissButton = { TextButton(onClick = onClose) { Text("CANCEL") } }
-    )
-}
-
 @Composable
 private fun EditJsonDialog(
     target: EditTarget,
