@@ -300,29 +300,35 @@ private fun EditorApp() {
             EditJsonDialog(
                 target = target,
                 onClose = { editTarget = null },
-                onSave = { replacement ->
+                onSave = { value ->
                     val current = document ?: return@EditJsonDialog
-                    val root = if (target.root == "Save Info") current.info else current.data
-                    if (setPath(root, target.path, replacement)) {
-                        document = current.copy()
+                    val updated = mutateDocument(current, target.root) {
+                        setPath(it, target.path, value)
+                    }
+                    if (updated != null) {
+                        document = updated
                         hasChanges = true
                         editTarget = null
                     }
                 },
                 onAddChild = { key, value ->
                     val current = document ?: return@EditJsonDialog
-                    val root = if (target.root == "Save Info") current.info else current.data
-                    if (appendChild(root, target.path, key, value)) {
-                        document = current.copy()
+                    val updated = mutateDocument(current, target.root) {
+                        appendChild(it, target.path, key, value)
+                    }
+                    if (updated != null) {
+                        document = updated
                         hasChanges = true
                         editTarget = null
                     }
                 },
                 onDelete = {
                     val current = document ?: return@EditJsonDialog
-                    val root = if (target.root == "Save Info") current.info else current.data
-                    if (removePath(root, target.path)) {
-                        document = current.copy()
+                    val updated = mutateDocument(current, target.root) {
+                        removePath(it, target.path)
+                    }
+                    if (updated != null) {
+                        document = updated
                         hasChanges = true
                         editTarget = null
                     }
@@ -758,4 +764,20 @@ private fun readSaveBytes(input: java.io.InputStream): ByteArray {
         output.write(buffer, 0, count)
     }
     return output.toByteArray()
+}
+
+
+private fun mutateDocument(
+    current: Mm4SaveCodec.Document,
+    rootName: String,
+    mutation: (JsonObject) -> Boolean
+): Mm4SaveCodec.Document? {
+    val sourceRoot = if (rootName == "Save Info") current.info else current.data
+    val editedRoot = sourceRoot.deepCopy().asJsonObject
+    if (!mutation(editedRoot)) return null
+    return if (rootName == "Save Info") {
+        current.copy(info = editedRoot)
+    } else {
+        current.copy(data = editedRoot)
+    }
 }
