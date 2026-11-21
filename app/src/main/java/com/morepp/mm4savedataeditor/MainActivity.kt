@@ -169,7 +169,22 @@ private fun EditorApp() {
                         }
                         val output = context.contentResolver.openOutputStream(uri, "wt")
                             ?: error("Penyedia file tidak bisa membuka tujuan export untuk ditulis.")
-                        output.use { stream -> stream.write(bytes); stream.flush() }
+                        output.use { stream ->
+                            stream.write(bytes)
+                            stream.flush()
+                        }
+                        // SAF providers can create a destination entry even when a write
+                        // was interrupted. Re-open the exact URI and validate the persisted
+                        // bytes before reporting export success.
+                        val persisted = context.contentResolver.openInputStream(uri)
+                            ?: error("File hasil export tidak dapat dibaca kembali.")
+                        val persistedBytes = persisted.use { readSaveBytes(it) }
+                        check(persistedBytes.isNotEmpty()) { "Export menghasilkan file kosong (0 byte)." }
+                        val persistedDocument = Mm4SaveCodec.decode(persistedBytes, current.sourceName)
+                        val persistedMismatch = Mm4SaveCodec.firstDifference(persistedDocument, current)
+                        check(persistedMismatch == null) {
+                            "Verifikasi file setelah ditulis gagal pada $persistedMismatch. Jangan gunakan file ini."
+                        }
                     }
                     hasChanges = false
                 } catch (failure: Exception) {
