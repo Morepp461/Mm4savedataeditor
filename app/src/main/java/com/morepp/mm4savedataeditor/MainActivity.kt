@@ -2316,6 +2316,16 @@ private fun EditValueDialog(target: EditTarget, onClose: () -> Unit, onSave: (Js
                         }
                         Text("Skala atribut 0–20. Pilih nilai dengan menggeser slider.", color = Muted, fontSize = 10.sp)
                     }
+                    isNumber && target.path==listOf("financeManager","m_Balance") -> {
+                        OutlinedTextField(
+                            value=value,
+                            onValueChange={ typed -> if(typed.isEmpty()) value="0" else if(typed.all { it.isDigit() }) value=typed },
+                            modifier=Modifier.fillMaxWidth(),
+                            label={ Text("Saldo (£)") },
+                            supportingText={ Text("Masukkan 0 sampai £2.000.000.000") },
+                            singleLine=true
+                        )
+                    }
                     isNumber && target.minValue != null && target.maxValue != null -> {
                         val min = target.minValue.toFloat()
                         val max = target.maxValue.toFloat()
