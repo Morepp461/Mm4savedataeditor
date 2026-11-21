@@ -2319,7 +2319,10 @@ private fun EditValueDialog(target: EditTarget, onClose: () -> Unit, onSave: (Js
                         com.google.gson.JsonPrimitive(number)
                     }
                     target.path.lastOrNull()=="dateOfBirth" -> {
-                        val date=java.time.LocalDate.parse(value.take(10)).toString()
+                        val date=runCatching { java.time.LocalDate.parse(value.take(10)).toString() }.getOrElse {
+                            validationMessage="Masukkan tanggal dengan format YYYY-MM-DD."
+                            return@Button
+                        }
                         com.google.gson.JsonPrimitive(date+"T00:00:00.0000000")
                     }
                     else -> com.google.gson.JsonPrimitive(value)
