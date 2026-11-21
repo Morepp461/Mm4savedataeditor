@@ -159,7 +159,7 @@ private fun EditorApp() {
                                 letterSpacing = 1.sp
                             )
                             Text(
-                                "CAREER WORKSPACE  •  SAVE MANAGER",
+                                "WORKSPACE KARIER  •  EDITOR SAVE",
                                 color = Gold,
                                 fontSize = 9.sp,
                                 letterSpacing = 1.3.sp
@@ -199,10 +199,10 @@ private fun EditorApp() {
                         Modifier.padding(horizontal = 14.dp),
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        listOf("Save Info", "Game Data").forEach { tab ->
+                        listOf("Info Karier", "Data Game").forEach { tab ->
                             FilterChip(
-                                selected = selectedTab == tab,
-                                onClick = { selectedTab = tab; selectedModule = null; search = "" },
+                                selected = (if (selectedTab == "Save Info") "Info Karier" else "Data Game") == tab,
+                                onClick = { selectedTab = if (tab == "Info Karier") "Save Info" else "Game Data"; selectedModule = null; search = "" },
                                 label = { Text(tab) }
                             )
                         }
@@ -211,7 +211,7 @@ private fun EditorApp() {
                         value = search,
                         onValueChange = { search = it },
                         modifier = Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 8.dp),
-                        placeholder = { Text("Cari field, ID, entitas, atau nilai…") },
+                        placeholder = { Text("Cari nama data, ID, tim, pembalap, atau nilai…") },
                         leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
                         trailingIcon = {
                             if (search.isNotEmpty()) {
@@ -234,7 +234,7 @@ private fun EditorApp() {
                                 FilterChip(
                                     selected = selectedModule == null,
                                     onClick = { selectedModule = null },
-                                    label = { Text("All") }
+                                    label = { Text("Semua") }
                                 )
                             }
                             items(moduleNames) { module ->
@@ -362,14 +362,14 @@ private fun WelcomePanel(busy: Boolean, onOpen: () -> Unit) {
             )
             Spacer(Modifier.height(22.dp))
             Text(
-                "YOUR CAREER.\nYOUR RULES.",
+                "KARIERMU.\nKENDALIMU.",
                 fontSize = 30.sp,
                 lineHeight = 33.sp,
                 fontWeight = FontWeight.Black
             )
             Spacer(Modifier.height(8.dp))
             Text(
-                "Buka save Motorsport Manager 4 untuk menjelajahi dan mengedit data karier.",
+                "Buka file karier Motorsport Manager 4 untuk melihat dan mengelola data tim, pembalap, dan kompetisi.",
                 color = Muted
             )
             Spacer(Modifier.height(20.dp))
@@ -386,7 +386,7 @@ private fun WelcomePanel(busy: Boolean, onOpen: () -> Unit) {
             }
             Spacer(Modifier.height(16.dp))
             Text(
-                "DYNAMIC DATA BROWSER • RAW JSON EDITOR • LZ4 EXPORT",
+                "JELAJAHI DATA • EDIT KARIER • EKSPOR SAVE",
                 color = Gold,
                 fontSize = 9.sp
             )
@@ -405,7 +405,7 @@ private fun CareerHeader(
         ?.takeIf { it.isJsonPrimitive && it.asJsonPrimitive.isString }
         ?.asString
         ?.takeIf { it.isNotBlank() }
-        ?: "CAREER LOADED"
+        ?: "KARIER DIMUAT"
     Row(
         Modifier.fillMaxWidth()
             .padding(14.dp)
@@ -428,7 +428,7 @@ private fun CareerHeader(
                 overflow = TextOverflow.Ellipsis
             )
             Text(
-                if (hasChanges) "UNSAVED CHANGES" else "SAVE DATA READY",
+                if (hasChanges) "PERUBAHAN BELUM DIEKSPOR" else "SAVE SIAP DIEDIT",
                 color = if (hasChanges) Gold else Color(0xFF82D7A2),
                 fontSize = 9.sp,
                 fontWeight = FontWeight.Bold
@@ -608,6 +608,12 @@ private fun JsonBrowser(
 private fun humanizeField(raw: String): String {
     val known = mapOf(
         "createdDate" to "Tanggal Dibuat",
+        "driver" to "Pembalap",
+        "drivers" to "Daftar Pembalap",
+        "teams" to "Daftar Tim",
+        "staff" to "Staf Tim",
+        "calendar" to "Kalender Balapan",
+        "championship" to "Kejuaraan",
         "lastEditedDate" to "Terakhir Diubah",
         "gameDate" to "Tanggal Dalam Game",
         "teamColor" to "Warna Tim",
@@ -647,7 +653,7 @@ private fun dataTypeLabel(value: JsonElement?): String = when {
 
 private fun preview(value: JsonElement): String = when {
     value.isJsonNull -> "null"
-    value.isJsonObject -> "{ ${value.asJsonObject.size()} properties }"
+    value.isJsonObject -> "{ ${value.asJsonObject.size()} properti }"
     value.isJsonArray -> "[ ${value.asJsonArray.size()} items ]"
     else -> value.toString()
 }
@@ -709,7 +715,7 @@ private fun EditJsonDialog(
                     label = { Text("Nilai data") }
                 )
                 if (invalid) {
-                    Text("JSON tidak valid atau operasi tidak bisa diterapkan.", color = Red, fontSize = 11.sp)
+                    Text("Format data tidak valid atau perubahan tidak dapat diterapkan.", color = Red, fontSize = 11.sp)
                 }
                 Text(
                     "Tipe data dipertahankan sebagai JSON. Contoh: 120, true, \"Nama\", null",
@@ -724,7 +730,7 @@ private fun EditJsonDialog(
                     ) {
                         Icon(Icons.Default.Add, contentDescription = null)
                         Spacer(Modifier.width(6.dp))
-                        Text(if (isObject) "TAMBAH PROPERTY" else "TAMBAH ARRAY ITEM")
+                        Text(if (isObject) "TAMBAH PROPERTI" else "TAMBAH ITEM DAFTAR")
                     }
                     if (showAdd) {
                         if (isObject) {
@@ -732,7 +738,7 @@ private fun EditJsonDialog(
                                 value = newKey,
                                 onValueChange = { newKey = it },
                                 modifier = Modifier.fillMaxWidth(),
-                                label = { Text("Nama property baru") },
+                                label = { Text("Nama properti baru") },
                                 singleLine = true
                             )
                         }
@@ -740,7 +746,7 @@ private fun EditJsonDialog(
                             value = newValue,
                             onValueChange = { newValue = it; invalid = false },
                             modifier = Modifier.fillMaxWidth(),
-                            label = { Text("Nilai JSON baru") },
+                            label = { Text("Nilai data baru (JSON)") },
                             minLines = 2,
                             maxLines = 4
                         )
@@ -772,7 +778,7 @@ private fun EditJsonDialog(
                     ) {
                         Icon(Icons.Default.DeleteOutline, contentDescription = null)
                         Spacer(Modifier.width(6.dp))
-                        Text("HAPUS NODE INI")
+                        Text("HAPUS DATA INI")
                     }
                 }
             }
@@ -798,7 +804,7 @@ private fun EditJsonDialog(
         AlertDialog(
             onDismissRequest = { confirmDelete = false },
             title = { Text("Hapus node?") },
-            text = { Text("Node ini akan dihapus dari data yang sedang diedit. Export belum dilakukan.") },
+            text = { Text("Data ini akan dihapus dari salinan yang sedang diedit. File asli tidak berubah sampai kamu mengekspor.") },
             confirmButton = {
                 TextButton(
                     onClick = { confirmDelete = false; onDelete() },
