@@ -82,9 +82,38 @@ object Mm4SaveCodec {
         )
     }
 
+    fun prepareForExport(document: Document): Document {
+        val snapshot=document.originalDataSnapshot ?: return document
+        val repaired=document.data.deepCopy().asJsonObject
+        val originalEntities=snapshot.get("entityManager")?.takeIf { it.isJsonObject }?.asJsonObject
+            ?.get("m_Entities")?.takeIf { it.isJsonArray }?.asJsonArray ?: return document
+        val currentEntities=repaired.get("entityManager")?.takeIf { it.isJsonObject }?.asJsonObject
+            ?.get("m_Entities")?.takeIf { it.isJsonArray }?.asJsonArray ?: return document
+        var restored=0
+        val count=minOf(originalEntities.size(),currentEntities.size())
+        for(index in 0 until count) {
+            val originalEntity=originalEntities[index].takeIf { it.isJsonObject }?.asJsonObject ?: continue
+            val currentEntity=currentEntities[index].takeIf { it.isJsonObject }?.asJsonObject ?: continue
+            val originalContract=originalEntity.get("contract")?.takeIf { it.isJsonObject }?.asJsonObject ?: continue
+            val currentContract=currentEntity.get("contract")?.takeIf { it.isJsonObject }?.asJsonObject ?: continue
+            val originalTeam=originalContract.get("m_Team")?.takeIf { it.isJsonObject }?.asJsonObject ?: continue
+            val currentTeam=currentContract.get("m_Team")?.takeIf { it.isJsonObject }?.asJsonObject ?: continue
+            val originalChamp=originalTeam.get("m_Championship")?.takeIf { it.isJsonObject }?.asJsonObject ?: continue
+            val currentChamp=currentTeam.get("m_Championship")?.takeIf { it.isJsonObject }?.asJsonObject ?: continue
+            val originalId=originalChamp.get("\$id")?.takeIf { it.isJsonPrimitive }?.asString ?: continue
+            val currentRef=currentChamp.get("\$ref")?.takeIf { it.isJsonPrimitive }?.asString
+            if(currentChamp.size()==1 && currentRef==originalId) {
+                currentTeam.add("m_Championship",originalChamp.deepCopy())
+                restored++
+            }
+        }
+        return if(restored>0) document.copy(data=repaired) else document
+    }
+
     fun encode(document: Document): ByteArray {
-        val infoPlain = gson.toJson(document.info).toByteArray(Charsets.UTF_8)
-        val dataPlain = gson.toJson(document.data).toByteArray(Charsets.UTF_8)
+        val exportDocument = prepareForExport(document)
+        val infoPlain = gson.toJson(exportDocument.info).toByteArray(Charsets.UTF_8)
+        val dataPlain = gson.toJson(exportDocument.data).toByteArray(Charsets.UTF_8)
         require(infoPlain.size in 1..MAX_BLOCK_BYTES && dataPlain.size in 1..MAX_BLOCK_BYTES) {
             "Data hasil edit melebihi batas ukuran blok."
         }
@@ -92,15 +121,15 @@ object Mm4SaveCodec {
         // Keep untouched game-generated LZ4 blocks byte-for-byte. This avoids
         // needlessly rewriting opaque save sections when only one JSON tree changed.
         val infoCompressed = if (
-            document.originalInfoCompressed != null &&
-            document.originalInfoSnapshot != null &&
-            canonical(document.info) == canonical(document.originalInfoSnapshot)
-        ) document.originalInfoCompressed else deflate(infoPlain)
+            exportDocument.originalInfoCompressed != null &&
+            exportDocument.originalInfoSnapshot != null &&
+            canonical(exportDocument.info) == canonical(exportDocument.originalInfoSnapshot)
+        ) exportDocument.originalInfoCompressed else deflate(infoPlain)
         val dataCompressed = if (
-            document.originalDataCompressed != null &&
-            document.originalDataSnapshot != null &&
-            canonical(document.data) == canonical(document.originalDataSnapshot)
-        ) document.originalDataCompressed else deflate(dataPlain)
+            exportDocument.originalDataCompressed != null &&
+            exportDocument.originalDataSnapshot != null &&
+            canonical(exportDocument.data) == canonical(exportDocument.originalDataSnapshot)
+        ) exportDocument.originalDataCompressed else deflate(dataPlain)
         val totalSize = HEADER_SIZE.toLong() + infoCompressed.size + dataCompressed.size
         require(totalSize <= MAX_CONTAINER_BYTES) { "Save hasil edit terlalu besar." }
 

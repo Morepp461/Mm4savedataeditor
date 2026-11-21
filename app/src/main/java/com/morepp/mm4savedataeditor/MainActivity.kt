@@ -162,9 +162,10 @@ private fun EditorApp() {
                 errorMessage = null
                 try {
                     withContext(Dispatchers.IO) {
+                        val expected = Mm4SaveCodec.prepareForExport(current)
                         val bytes = Mm4SaveCodec.encode(current)
                         val verified = Mm4SaveCodec.decode(bytes, current.sourceName)
-                        val mismatch = Mm4SaveCodec.firstDifference(verified, current)
+                        val mismatch = Mm4SaveCodec.firstDifference(verified, expected)
                         check(mismatch == null) {
                             "Validasi round-trip gagal pada $mismatch. File belum ditulis agar save tidak rusak."
                         }
@@ -180,7 +181,7 @@ private fun EditorApp() {
                         val persistedBytes = persisted.use { readSaveBytes(it) }
                         check(persistedBytes.isNotEmpty()) { "Export menghasilkan file kosong (0 byte)." }
                         val persistedDocument = Mm4SaveCodec.decode(persistedBytes, current.sourceName)
-                        val persistedMismatch = Mm4SaveCodec.firstDifference(persistedDocument, current)
+                        val persistedMismatch = Mm4SaveCodec.firstDifference(persistedDocument, expected)
                         check(persistedMismatch == null) {
                             "Verifikasi file setelah ditulis gagal pada $persistedMismatch. Jangan gunakan file ini."
                         }
@@ -1325,9 +1326,10 @@ private val HqGroupNames = listOf("Garage","Academy","Logistics","Event Space","
 @Composable
 private fun HqPage(doc: Mm4SaveCodec.Document, onEdit: (String,List<String>,JsonElement)->Unit) {
  val hq=doc.data.getAsJsonObject("headquarters") ?: JsonObject()
- val upgrades=hq.getAsJsonArray("m_Upgrades")
- val completed=hq.getAsJsonArray("m_CompletedUpgrades")
- val tierRows=hq.getAsJsonArray("m_CurrentTierInformation")
+ val upgrades=hq.get("m_Upgrades")?.takeIf { it.isJsonArray }?.asJsonArray
+ val completed=hq.get("m_CompletedUpgrades")?.takeIf { it.isJsonArray }?.asJsonArray
+ // In real MM4 saves these two fields are JSON objects (often empty), not arrays.
+ val tierRows=hq.get("m_CurrentTierInformation")?.takeIf { it.isJsonArray }?.asJsonArray
  val grouped=upgrades?.mapIndexedNotNull { index,element ->
   if(!element.isJsonObject) return@mapIndexedNotNull null
   val row=element.asJsonObject
@@ -1833,50 +1835,50 @@ internal fun renameCareerDivisions(data:JsonObject):Int {
 
 internal fun unlockSupplierNetwork(data:JsonObject):Int {
     val supplier=data.get("supplierNetworkManager")?.takeIf { it.isJsonObject }?.asJsonObject ?: return 0
+    val dictionary=supplier.get("m_NodeDictionary")?.takeIf { it.isJsonObject }?.asJsonObject ?: return 0
 
-    // Build an ID index iteratively. Supplier network nodes are heavily reference-linked:
-    // m_NodeDictionary contains one embedded graph and many {$ref: "..."} entries.
+    // MM4 stores this dictionary as a JSON object keyed by node ID, not as an array.
+    // The uploaded SlotOne career has an empty dictionary and no start/target nodes.
+    if(dictionary.size()==0) return 0
+    val pending=java.util.ArrayDeque<JsonElement>()
+    dictionary.entrySet().forEach { (_,value) -> if(!value.isJsonNull) pending.add(value) }
+    supplier.get("m_StartNode")?.takeIf { !it.isJsonNull }?.let { pending.add(it) }
+    supplier.get("m_TargetNodes")?.takeIf { it.isJsonArray }?.asJsonArray?.forEach { if(!it.isJsonNull) pending.add(it) }
+
     val byId=mutableMapOf<String,JsonObject>()
     val scan=java.util.ArrayDeque<JsonElement>()
     scan.add(data)
     while(scan.isNotEmpty()) {
-        val element=scan.removeLast()
-        when {
-            element.isJsonObject -> {
-                val obj=element.asJsonObject
-                obj.get("\$id")?.takeIf { it.isJsonPrimitive }?.asString?.let { byId[it]=obj }
-                obj.entrySet().forEach { (_,value) -> if(!value.isJsonNull) scan.add(value) }
+        when(val element=scan.removeLast()) {
+            is JsonObject -> {
+                element.get("\$id")?.takeIf { it.isJsonPrimitive }?.asString?.let { byId[it]=element }
+                element.entrySet().forEach { (_,v) -> if(!v.isJsonNull) scan.add(v) }
             }
-            element.isJsonArray -> element.asJsonArray.forEach { if(!it.isJsonNull) scan.add(it) }
+            is JsonArray -> element.forEach { if(!it.isJsonNull) scan.add(it) }
+            else -> Unit
         }
     }
 
     var changed=0
     val visited=java.util.Collections.newSetFromMap(java.util.IdentityHashMap<JsonObject,Boolean>())
-    val pending=java.util.ArrayDeque<JsonElement>()
-    pending.add(supplier)
     while(pending.isNotEmpty()) {
         when(val element=pending.removeLast()) {
-            is com.google.gson.JsonObject -> {
-                val obj=element
-                if(!visited.add(obj)) continue
-                val reference=obj.get("\$ref")?.takeIf { it.isJsonPrimitive }?.asString
-                if(reference!=null) byId[reference]?.let { pending.add(it) }
-
-                val owned=obj.get("m_IsOwned")
-                if(owned!=null && owned.isJsonPrimitive && owned.asJsonPrimitive.isBoolean && !owned.asBoolean) {
-                    obj.addProperty("m_IsOwned",true)
-                    changed++
+            is JsonObject -> {
+                if(!visited.add(element)) continue
+                val ref=element.get("\$ref")?.takeIf { it.isJsonPrimitive }?.asString
+                if(ref!=null) byId[ref]?.let { pending.add(it) }
+                listOf("m_IsOwned","m_HasOwnedBeenRevealed").forEach { field ->
+                    val value=element.get(field)
+                    if(value!=null && value.isJsonPrimitive && value.asJsonPrimitive.isBoolean && !value.asBoolean) {
+                        element.addProperty(field,true)
+                        if(field=="m_IsOwned") changed++
+                    }
                 }
-                val revealed=obj.get("m_HasOwnedBeenRevealed")
-                if(revealed!=null && revealed.isJsonPrimitive && revealed.asJsonPrimitive.isBoolean && !revealed.asBoolean) {
-                    obj.addProperty("m_HasOwnedBeenRevealed",true)
-                }
-                obj.entrySet().forEach { (key,value) ->
+                element.entrySet().forEach { (key,value) ->
                     if(key!="\$ref" && !value.isJsonNull) pending.add(value)
                 }
             }
-            is com.google.gson.JsonArray -> element.forEach { if(!it.isJsonNull) pending.add(it) }
+            is JsonArray -> element.forEach { if(!it.isJsonNull) pending.add(it) }
             else -> Unit
         }
     }
@@ -1893,11 +1895,14 @@ private fun applyGodModeAction(current:Mm4SaveCodec.Document,action:String):Mm4S
         action=="unlock_hq" -> {
             val hq=data.getAsJsonObject("headquarters") ?: return null
             val upgrades=hq.getAsJsonArray("m_Upgrades") ?: return null
+            var changed=0
             upgrades.forEach { row ->
-                val value=row.asJsonObject.getAsJsonObject("Value") ?: return@forEach
-                if(value.has("State")) value.addProperty("State",1)
-                if(value.has("weeksToUnlock")) value.addProperty("weeksToUnlock",0)
+                val value=row.takeIf { it.isJsonObject }?.asJsonObject
+                    ?.get("Value")?.takeIf { it.isJsonObject }?.asJsonObject ?: return@forEach
+                if(value.get("State")?.isJsonPrimitive == true) { value.addProperty("State",1); changed++ }
+                if(value.get("weeksToUnlock")?.isJsonPrimitive == true) value.addProperty("weeksToUnlock",0)
             }
+            if(changed==0) return null
         }
         action=="max_research" -> {
             val research=data.getAsJsonObject("researchManager") ?: return null
@@ -1935,7 +1940,10 @@ private fun applyGodModeAction(current:Mm4SaveCodec.Document,action:String):Mm4S
 private fun GodModePage(doc:Mm4SaveCodec.Document,onAction:(String)->Unit) {
     val balance=doc.data.getAsJsonObject("financeManager")?.get("m_Balance")?.asLong ?: 0L
     val hq=doc.data.getAsJsonObject("headquarters")?.getAsJsonArray("m_Upgrades")
-    val unlocked=hq?.count { it.asJsonObject.getAsJsonObject("Value")?.get("State")?.asInt==1 } ?: 0
+    val unlocked=hq?.count { row ->
+        row.isJsonObject && row.asJsonObject.get("Value")?.takeIf { it.isJsonObject }
+            ?.asJsonObject?.get("State")?.let { it.isJsonPrimitive && it.asInt==1 } == true
+    } ?: 0
     val research=doc.data.getAsJsonObject("researchManager")
     val teams=remember(doc.data) { teamOptions(doc.data) }
     val drivers=remember(doc.data) { driverOptions(doc.data) }

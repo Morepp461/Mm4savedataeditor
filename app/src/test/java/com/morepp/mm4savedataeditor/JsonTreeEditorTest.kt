@@ -301,25 +301,18 @@ class JsonTreeEditorTest {
     fun supplierUnlockResolvesReferencesAndSkipsMalformedEntries() {
         val data=JsonObject().apply {
             add("supplierNetworkManager",JsonObject().apply {
-                add("m_NodeDictionary",JsonArray().apply {
-                    add(JsonObject().apply {
-                        addProperty("Key",0)
-                        add("Value",JsonObject().apply {
-                            addProperty("\$id","supplier-root")
-                            addProperty("m_IsOwned",false)
-                            addProperty("m_HasOwnedBeenRevealed",false)
-                            add("m_Nodes",JsonArray().apply {
-                                add(JsonObject().apply { addProperty("\$ref","company-1") })
-                                add(JsonNull.INSTANCE)
-                            })
+                add("m_NodeDictionary",JsonObject().apply {
+                    add("root",JsonObject().apply {
+                        addProperty("\$id","supplier-root")
+                        addProperty("m_IsOwned",false)
+                        addProperty("m_HasOwnedBeenRevealed",false)
+                        add("m_Nodes",JsonArray().apply {
+                            add(JsonObject().apply { addProperty("\$ref","company-1") })
+                            add(JsonNull.INSTANCE)
                         })
                     })
-                    add(JsonObject().apply {
-                        addProperty("Key",1)
-                        add("Value",JsonObject().apply { addProperty("\$ref","supplier-root") })
-                    })
-                    add(JsonPrimitive("unexpected-entry"))
-                    add(JsonNull.INSTANCE)
+                    add("alias",JsonObject().apply { addProperty("\$ref","supplier-root") })
+                    add("malformed",JsonPrimitive("unexpected-entry"))
                 })
             })
             add("entities",JsonArray().apply {
@@ -334,7 +327,7 @@ class JsonTreeEditorTest {
 
         assertEquals(2,unlockSupplierNetwork(data))
         val root=data.getAsJsonObject("supplierNetworkManager")
-            .getAsJsonArray("m_NodeDictionary")[0].asJsonObject.getAsJsonObject("Value")
+            .getAsJsonObject("m_NodeDictionary").getAsJsonObject("root")
         val company=data.getAsJsonArray("entities")[0].asJsonObject
         assertTrue(root.get("m_IsOwned").asBoolean)
         assertTrue(root.get("m_HasOwnedBeenRevealed").asBoolean)
@@ -346,6 +339,66 @@ class JsonTreeEditorTest {
     @Test
     fun supplierUnlockRejectsMissingManagerWithoutThrowing() {
         assertEquals(0,unlockSupplierNetwork(JsonObject()))
+    }
+
+    @Test
+    fun exportRestoresOriginalInlineChampionshipPayloadInsteadOfLeavingReferenceStub() {
+        val originalChampionship=JsonObject().apply {
+            addProperty("\$id","815")
+            addProperty("m_ID",3)
+            add("m_TeamIDs",JsonArray().apply { add(63); add(64) })
+            add("rules",JsonObject().apply { addProperty("raceDuration",2700.0) })
+        }
+        val originalData=JsonObject().apply {
+            add("entityManager",JsonObject().apply {
+                add("m_Entities",JsonArray().apply {
+                    add(JsonObject().apply {
+                        add("contract",JsonObject().apply {
+                            add("m_Team",JsonObject().apply { add("m_Championship",originalChampionship) })
+                        })
+                    })
+                })
+            })
+        }
+        val editedData=originalData.deepCopy().asJsonObject
+        editedData.getAsJsonObject("entityManager").getAsJsonArray("m_Entities")[0]
+            .asJsonObject.getAsJsonObject("contract").getAsJsonObject("m_Team")
+            .add("m_Championship",JsonObject().apply { addProperty("\$ref","815") })
+        val doc=Mm4SaveCodec.Document(
+            JsonObject(),
+            editedData,
+            "inline-ref-test.msv",
+            originalDataSnapshot=originalData
+        )
+
+        val prepared=Mm4SaveCodec.prepareForExport(doc)
+        val restored=prepared.data.getAsJsonObject("entityManager").getAsJsonArray("m_Entities")[0]
+            .asJsonObject.getAsJsonObject("contract").getAsJsonObject("m_Team")
+            .getAsJsonObject("m_Championship")
+        assertEquals("815",restored.get("\$id").asString)
+        assertEquals(3,restored.get("m_ID").asInt)
+        assertEquals(2,restored.getAsJsonArray("m_TeamIDs").size())
+        assertTrue(restored.has("rules"))
+    }
+
+    @Test
+    fun supplierUnlockHandlesRealEmptyDictionaryWithoutClaimingSuccess() {
+        val data=JsonObject().apply {
+            add("supplierNetworkManager",JsonObject().apply {
+                add("m_NodeDictionary",JsonObject())
+                add("m_Manufacturers",JsonArray())
+                add("m_Companies",JsonArray())
+                add("m_TargetNodes",JsonArray().apply {
+                    add(JsonNull.INSTANCE); add(JsonNull.INSTANCE); add(JsonNull.INSTANCE)
+                })
+                add("m_SupplierUnlocked",JsonArray().apply {
+                    repeat(3) { add(JsonObject().apply { addProperty("Key",it); addProperty("Value",0) }) }
+                })
+            })
+        }
+        assertEquals(0,unlockSupplierNetwork(data))
+        assertEquals(0,data.getAsJsonObject("supplierNetworkManager")
+            .getAsJsonObject("m_NodeDictionary").size())
     }
 
     @Test
