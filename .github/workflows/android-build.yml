@@ -9,7 +9,7 @@ permissions:
   contents: read
 jobs:
   verify:
-    name: Unit tests and Android debug APK
+    name: Unit tests and Android APKs
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -34,21 +34,45 @@ jobs:
         run: |
           yes | sdkmanager --licenses >/dev/null
           sdkmanager "platforms;android-35" "build-tools;35.0.0"
+      - name: Prepare private release signing
+        id: signing
+        env:
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+        run: |
+          if [ -n "$KEYSTORE_BASE64" ]; then
+            echo "$KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/mm4-release-key.jks"
+            echo "MM4_KEYSTORE_PATH=$RUNNER_TEMP/mm4-release-key.jks" >> "$GITHUB_ENV"
+            echo "MM4_KEYSTORE_PASSWORD=$KEYSTORE_PASSWORD" >> "$GITHUB_ENV"
+            echo "MM4_KEY_ALIAS=$KEY_ALIAS" >> "$GITHUB_ENV"
+            echo "MM4_KEY_PASSWORD=$KEY_PASSWORD" >> "$GITHUB_ENV"
+            echo "has_keystore=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "has_keystore=false" >> "$GITHUB_OUTPUT"
+          fi
       - name: Run codec unit tests
         run: gradle --no-daemon testDebugUnitTest
-      - name: Build debug APK
+      - name: Build debug and release APKs
         run: gradle --no-daemon assembleDebug assembleRelease
-      - name: Verify APK exists
-        run: test -s app/build/outputs/apk/debug/app-debug.apk
+      - name: Verify APKs exist
+        run: |
+          test -s app/build/outputs/apk/debug/app-debug.apk
+          test -s app/build/outputs/apk/release/app-release.apk
+      - name: Verify release signing
+        if: steps.signing.outputs.has_keystore == 'true'
+        run: |
+          jarsigner -verify -verbose -certs app/build/outputs/apk/release/app-release.apk
       - name: Upload installable debug APK
         uses: actions/upload-artifact@v4
         with:
           name: mm4-save-data-editor-debug
           path: app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
-      - name: Upload unsigned release APK
+      - name: Upload release APK
         uses: actions/upload-artifact@v4
         with:
-          name: mm4-save-data-editor-release-unsigned
-          path: app/build/outputs/apk/release/app-release-unsigned.apk
+          name: mm4-save-data-editor-release
+          path: app/build/outputs/apk/release/app-release.apk
           if-no-files-found: error
