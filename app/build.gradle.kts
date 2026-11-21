@@ -21,6 +21,9 @@ val downloadAppIcon by tasks.registering {
 }
 
 val releaseKeystorePath = System.getenv("MM4_KEYSTORE_PATH")
+val releaseKeystorePassword = System.getenv("MM4_KEYSTORE_PASSWORD")
+val releaseKeyAlias = System.getenv("MM4_KEY_ALIAS")
+val releaseKeyPassword = System.getenv("MM4_KEY_PASSWORD")
 val hasPrivateReleaseKey = !releaseKeystorePath.isNullOrBlank()
 android {
     namespace = "com.morepp.mm4savedataeditor"
@@ -37,9 +40,12 @@ android {
         if (hasPrivateReleaseKey) {
             create("privateRelease") {
                 storeFile = file(releaseKeystorePath!!)
-                storePassword = System.getenv("MM4_KEYSTORE_PASSWORD")
-                keyAlias = System.getenv("MM4_KEY_ALIAS")
-                keyPassword = System.getenv("MM4_KEY_PASSWORD")
+                require(!releaseKeystorePassword.isNullOrBlank()) { "MM4_KEYSTORE_PASSWORD is required for private release signing." }
+                require(!releaseKeyAlias.isNullOrBlank()) { "MM4_KEY_ALIAS is required for private release signing." }
+                require(!releaseKeyPassword.isNullOrBlank()) { "MM4_KEY_PASSWORD is required for private release signing." }
+                storePassword = releaseKeystorePassword
+                keyAlias = releaseKeyAlias
+                keyPassword = releaseKeyPassword
             }
         }
     }
@@ -48,9 +54,8 @@ android {
         release {
             isMinifyEnabled = false
             isShrinkResources = false
-            // Private signing is enabled only when GitHub Actions secrets are configured.
-            signingConfig = if (hasPrivateReleaseKey) signingConfigs.getByName("privateRelease")
-                else signingConfigs.getByName("debug")
+            // Never silently publish a release APK signed with the development debug key.
+            signingConfig = if (hasPrivateReleaseKey) signingConfigs.getByName("privateRelease") else null
         }
     }
     compileOptions {
