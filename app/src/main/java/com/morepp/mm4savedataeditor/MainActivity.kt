@@ -883,8 +883,8 @@ private fun EntityCatalogPage(doc: Mm4SaveCodec.Document, category: String, onEd
         }
     }
     val chosen=records.firstOrNull { it.path.joinToString("/") == selected }
-    val colorPath=if(category=="team") findObjectPath(records.firstOrNull { it.path.joinToString("/") == selected }?.data ?: JsonObject(),"m_TeamColors") else null
-    val colorObject=colorPath?.let { records.firstOrNull { it.path.joinToString("/") == selected }?.data?.let { root -> resolvePath(root,it)?.takeIf { node -> node.isJsonObject }?.asJsonObject } }
+    val colorPath=if(category=="team") findObjectPath(records.firstOrNull { it.path.joinToString("/") == selected }?.data ?: JsonObject(),"m_TeamColors") ?: emptyList() else emptyList()
+    val colorObject=if(colorPath.isNotEmpty()) records.firstOrNull { it.path.joinToString("/") == selected }?.data?.let { root -> resolvePath(root,colorPath)?.takeIf { node -> node.isJsonObject }?.asJsonObject } else null
     val colorPresets=remember(doc.data) { collectTeamColorPresets(doc.data) }
     if(chosen==null) {
         LazyColumn(contentPadding=PaddingValues(14.dp),verticalArrangement=Arrangement.spacedBy(9.dp)) {
