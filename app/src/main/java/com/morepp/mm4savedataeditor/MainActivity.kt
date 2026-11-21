@@ -6,7 +6,13 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.animateContentSize
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
+import androidx.compose.animation.togetherWith
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -60,6 +66,13 @@ private data class EditTarget(
     val value: JsonElement
 )
 
+private data class EditOperation(
+    val root: String,
+    val path: List<String>,
+    val before: JsonElement,
+    val after: JsonElement
+)
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun EditorApp() {
@@ -77,6 +90,8 @@ private fun EditorApp() {
     var errorMessage by remember { mutableStateOf<String?>(null) }
     var editTarget by remember { mutableStateOf<EditTarget?>(null) }
     var confirmDiscardOpen by remember { mutableStateOf(false) }
+    var undoStack by remember { mutableStateOf(emptyList<EditOperation>()) }
+    var redoStack by remember { mutableStateOf(emptyList<EditOperation>()) }
 
     val openFile = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri: Uri? ->
         if (uri != null) scope.launch {
@@ -96,7 +111,9 @@ private fun EditorApp() {
                 selectedModule = null
                 search = ""
                 hasChanges = false
-            } catch (failure: Throwable) {
+                undoStack = emptyList()
+                redoStack = emptyList()
+            } catch (failure: Exception) {
                 errorMessage = failure.message ?: "Gagal membuka save."
             } finally {
                 busy = false
@@ -132,7 +149,7 @@ private fun EditorApp() {
                         output.use { stream -> stream.write(bytes); stream.flush() }
                     }
                     hasChanges = false
-                } catch (failure: Throwable) {
+                } catch (failure: Exception) {
                     errorMessage = failure.message ?: "Export gagal."
                 } finally {
                     busy = false
@@ -174,6 +191,38 @@ private fun EditorApp() {
                         }
                     },
                     actions = {
+                        IconButton(
+                            onClick = {
+                                val operation = undoStack.lastOrNull() ?: return@IconButton
+                                val current = document ?: return@IconButton
+                                val updated = mutateDocument(current, operation.root) {
+                                    setPath(it, operation.path, operation.before)
+                                }
+                                if (updated != null) {
+                                    document = updated
+                                    undoStack = undoStack.dropLast(1)
+                                    redoStack = (redoStack + operation).takeLast(50)
+                                    hasChanges = true
+                                }
+                            },
+                            enabled = undoStack.isNotEmpty() && !busy
+                        ) { Icon(Icons.Default.Undo, contentDescription = "Undo edit") }
+                        IconButton(
+                            onClick = {
+                                val operation = redoStack.lastOrNull() ?: return@IconButton
+                                val current = document ?: return@IconButton
+                                val updated = mutateDocument(current, operation.root) {
+                                    setPath(it, operation.path, operation.after)
+                                }
+                                if (updated != null) {
+                                    document = updated
+                                    redoStack = redoStack.dropLast(1)
+                                    undoStack = (undoStack + operation).takeLast(50)
+                                    hasChanges = true
+                                }
+                            },
+                            enabled = redoStack.isNotEmpty() && !busy
+                        ) { Icon(Icons.Default.Redo, contentDescription = "Redo edit") }
                         IconButton(onClick = requestOpen) {
                             Icon(Icons.Default.FolderOpen, contentDescription = "Buka save")
                         }
@@ -189,7 +238,8 @@ private fun EditorApp() {
                         titleContentColor = Color.White
                     )
                 )
-            }
+            },
+            bottomBar = { WatermarkFooter() }
         ) { padding ->
             Column(Modifier.fillMaxSize().padding(padding)) {
                 val current = document
@@ -208,11 +258,16 @@ private fun EditorApp() {
                         onSection = { selectedTab = it; selectedDriver = null },
                         selectedDriver = selectedDriver,
                         onDriver = { selectedDriver = it },
-                        onEdit = { root, path, value -> editTarget = EditTarget(root, path, value.deepCopy()) },
+                        onEdit = { root, path, value -> if (value.isJsonPrimitive) editTarget = EditTarget(root, path, value.deepCopy()) },
                         onGodAction = { action ->
                             val latest = document ?: return@CareerWorkspace
                             val changed = applyGodModeAction(latest, action)
-                            if (changed != null) { document = changed; hasChanges = true }
+                            if (changed != null) {
+                                document = changed
+                                hasChanges = true
+                                undoStack = emptyList()
+                                redoStack = emptyList()
+                            }
                         }
                     )
                 }
@@ -256,48 +311,22 @@ private fun EditorApp() {
             )
         }
 
-        editTarget?.let { target ->
-            if (target.value.isJsonPrimitive) {
-                EditValueDialog(
-                    target = target,
-                    onClose = { editTarget = null },
-                    onSave = { value ->
-                        val current = document ?: return@EditValueDialog
-                        val updated = mutateDocument(current, target.root) { setPath(it, target.path, value) }
-                        if (updated != null) { document = updated; hasChanges = true; editTarget = null }
-                    }
-                )
-            } else EditJsonDialog(
+        editTarget?.takeIf { it.value.isJsonPrimitive }?.let { target ->
+            EditValueDialog(
                 target = target,
                 onClose = { editTarget = null },
                 onSave = { value ->
-                    val current = document ?: return@EditJsonDialog
-                    val updated = mutateDocument(current, target.root) {
-                        setPath(it, target.path, value)
-                    }
+                    val current = document ?: return@EditValueDialog
+                    val rootBefore = if (target.root == "Save Info") current.info else current.data
+                    val before = resolvePath(rootBefore, target.path)?.deepCopy()
+                    val updated = mutateDocument(current, target.root) { setPath(it, target.path, value) }
                     if (updated != null) {
-                        document = updated
-                        hasChanges = true
-                        editTarget = null
-                    }
-                },
-                onAddChild = { key, value ->
-                    val current = document ?: return@EditJsonDialog
-                    val updated = mutateDocument(current, target.root) {
-                        appendChild(it, target.path, key, value)
-                    }
-                    if (updated != null) {
-                        document = updated
-                        hasChanges = true
-                        editTarget = null
-                    }
-                },
-                onDelete = {
-                    val current = document ?: return@EditJsonDialog
-                    val updated = mutateDocument(current, target.root) {
-                        removePath(it, target.path)
-                    }
-                    if (updated != null) {
+                        val rootAfter = if (target.root == "Save Info") updated.info else updated.data
+                        val after = resolvePath(rootAfter, target.path)?.deepCopy()
+                        if (before != null && after != null) {
+                            undoStack = (undoStack + EditOperation(target.root, target.path, before, after)).takeLast(50)
+                            redoStack = emptyList()
+                        }
                         document = updated
                         hasChanges = true
                         editTarget = null
@@ -356,7 +385,7 @@ private fun WelcomePanel(busy: Boolean, onOpen: () -> Unit) {
             }
             Spacer(Modifier.height(16.dp))
             Text(
-                "DYNAMIC DATA BROWSER • RAW JSON EDITOR • LZ4 EXPORT",
+                "CAREER EDITOR • KONTROL TERARAH • LZ4 EXPORT",
                 color = Gold,
                 fontSize = 9.sp
             )
@@ -414,7 +443,7 @@ private fun CareerHeader(
 }
 
 
-private val Sections = listOf("Overview", "Drivers", "Staff", "Teams", "Cars", "Finance", "HQ", "World", "Save Info", "Advanced", "God Mode")
+private val Sections = listOf("Overview", "Drivers", "Staff", "Teams", "Cars", "Shop", "Finance", "HQ", "World", "Diagnostics", "Save Info", "Advanced", "God Mode")
 
 @Composable
 private fun CareerWorkspace(
@@ -427,18 +456,31 @@ private fun CareerWorkspace(
         LazyRow(Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 4.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             items(Sections) { s -> FilterChip(selected = section == s, onClick = { onSection(s) }, label = { Text(s, fontSize = 11.sp) }) }
         }
-        when (section) {
-            "Overview" -> OverviewPage(document, onSection)
-            "Drivers" -> DriverPage(document, selectedDriver, onDriver, onEdit)
-            "Staff" -> EntityCatalogPage(document, "staff", onEdit)
-            "Teams" -> EntityCatalogPage(document, "team", onEdit)
-            "Cars" -> EntityCatalogPage(document, "car", onEdit)
-            "Finance" -> FinancePage(document, onEdit)
-            "HQ" -> HqPage(document, onEdit)
-            "World" -> WorldSettingsPage(document, onEdit)
-            "Save Info" -> InfoPage(document, onEdit)
-            "God Mode" -> GodModePage(document, onGodAction)
-            else -> AdvancedPage(document, onEdit)
+        AnimatedContent(
+            targetState = section,
+            transitionSpec = {
+                (fadeIn(animationSpec = tween(190)) +
+                    slideInVertically(animationSpec = tween(220)) { height -> height / 18 }) togetherWith
+                    (fadeOut(animationSpec = tween(130)) +
+                        slideOutVertically(animationSpec = tween(170)) { height -> -height / 24 })
+            },
+            label = "career-workspace-transition"
+        ) { targetSection ->
+            when (targetSection) {
+                "Overview" -> OverviewPage(document, onSection)
+                "Drivers" -> DriverPage(document, selectedDriver, onDriver, onEdit)
+                "Staff" -> EntityCatalogPage(document, "staff", onEdit)
+                "Teams" -> EntityCatalogPage(document, "team", onEdit)
+                "Cars" -> EntityCatalogPage(document, "car", onEdit)
+                "Shop" -> ComponentMarketplacePage(document, onEdit)
+                "Finance" -> FinancePage(document, onEdit)
+                "HQ" -> HqPage(document, onEdit)
+                "World" -> WorldSettingsPage(document, onEdit)
+                "Diagnostics" -> SaveDiagnosticsPage(document)
+                "Save Info" -> InfoPage(document, onEdit)
+                "God Mode" -> GodModePage(document, onGodAction)
+                else -> AdvancedPage(document, onEdit)
+            }
         }
     }
 }
@@ -527,7 +569,7 @@ private fun DriverPage(doc: Mm4SaveCodec.Document, selected: String?, onSelect: 
                             Column(Modifier.weight(1f)) {
                                 Text(driver.name,fontWeight=FontWeight.Bold)
                                 val details=driver.data.getAsJsonObject("m_PersonDetails")
-                                Text("${driver.team} • Age ${ageFromDate(details?.get("dateOfBirth")?.asString)} • Driver ID ${driver.data.get("m_DriverID")?.asString ?: "—"}",color=Muted,fontSize=10.sp)
+                                Text("${driver.team} • Age ${ageFromDate(details?.get("dateOfBirth")?.asString, doc.info.get("gameDate")?.takeIf { it.isJsonPrimitive }?.asString)} • Driver ID ${driver.data.get("m_DriverID")?.asString ?: "—"}",color=Muted,fontSize=10.sp)
                             }
                             Icon(Icons.Default.ChevronRight,null,tint=Muted)
                         }
@@ -601,27 +643,20 @@ private fun DriverPage(doc: Mm4SaveCodec.Document, selected: String?, onSelect: 
                     }
                 }
             }
-            item { Text("OTHER DRIVER SETTINGS",color=Gold,fontWeight=FontWeight.Bold,fontSize=11.sp) }
-            items(flatten(d).filter { it.second.isJsonPrimitive && it.first.firstOrNull()!="m_Stats" },key={it.first.joinToString("/")}) { (path,value) ->
-                GlassCard(Modifier.fillMaxWidth().clickable { onEdit("Game Data",profilePath+path,value) }) {
-                    Row(verticalAlignment=Alignment.CenterVertically) {
-                        Text(humanizeField(path.last()),Modifier.weight(1f),fontSize=11.sp)
-                        Text(preview(value),color=Gold,fontSize=11.sp)
-                        Icon(Icons.Default.Edit,null,tint=Muted,modifier=Modifier.size(14.dp))
-                    }
-                }
-            }
+
         }
     }
 }
 
-private fun ageFromDate(date:String?):String {
+internal fun ageFromDate(date:String?, careerDate:String? = null):String {
     if(date.isNullOrBlank()) return "—"
     return try {
         val birth=java.time.LocalDate.parse(date.take(10))
-        val today=java.time.LocalDate.now()
-        java.time.Period.between(birth,today).years.coerceAtLeast(0).toString()
-    } catch(_:Throwable) { "—" }
+        val reference=careerDate?.takeIf { it.length >= 10 }
+            ?.let { java.time.LocalDate.parse(it.take(10)) }
+            ?: java.time.LocalDate.now()
+        java.time.Period.between(birth,reference).years.coerceAtLeast(0).toString()
+    } catch(_:Exception) { "—" }
 }
 
 private fun collectTypedObjects(root:JsonElement,type:String):List<Pair<List<String>,JsonObject>> {
@@ -769,14 +804,18 @@ private fun EntityCatalogPage(doc: Mm4SaveCodec.Document, category: String, onEd
             }
         }
     } else {
-        val fields=flatten(chosen.data).filter { row -> row.second.isJsonPrimitive && row.first.lastOrNull()!="\$version" && (category!="team" || row.first.lastOrNull()!="\$version") && (category!="car" || row.first.firstOrNull()!="m_Stats") }
+        val fields=flatten(chosen.data).filter { row ->
+            row.second.isJsonPrimitive &&
+                row.first.lastOrNull() != "\$version" &&
+                isCatalogPrimitiveEditable(category, row.first)
+        }
         val isCar=category=="car"
         val stats=if(category=="staff") chosen.data.getAsJsonObject("stats")?.getAsJsonArray("m_Stats") else chosen.data.getAsJsonArray("m_Stats")
         val labels=when {
             isCar -> listOf("Top Speed","Acceleration","Braking","Low Speed Cornering","High Speed Cornering","Tyre Wear","Fuel Efficiency")
             category=="staff" && chosen.type.contains("Designer",true) -> listOf("Performance","Reliability","Leadership","Bonus","Success Rate")
             category=="staff" && chosen.type.contains("Strategist",true) -> listOf("Race Starts","Overtaking","Defending","Consistency","Focus")
-            category=="staff" && chosen.type.contains("Mechanic",true) -> listOf("Setup Skill","Car Knowledge","Pit Stop Skill","Reliability")
+            category=="staff" && chosen.type.contains("Mechanic",true) -> listOf("Setup Skill","Car Knowledge")
             else -> emptyList()
         }
         LazyColumn(contentPadding=PaddingValues(14.dp),verticalArrangement=Arrangement.spacedBy(7.dp)) {
@@ -797,7 +836,7 @@ private fun EntityCatalogPage(doc: Mm4SaveCodec.Document, category: String, onEd
                 }
             }
             if((isCar || category=="staff") && stats!=null) {
-                item { Text("CAR PERFORMANCE",color=Gold,fontWeight=FontWeight.Bold,fontSize=12.sp) }
+                item { Text(if (isCar) "ATRIBUT MOBIL" else "ATRIBUT STAFF",color=Gold,fontWeight=FontWeight.Bold,fontSize=12.sp) }
                 items(stats.size()) { index ->
                     val value=stats[index]
                     val statValue=if(category=="staff" && value.isJsonObject) value.asJsonObject.get("m_Stat") ?: value else value
@@ -828,6 +867,35 @@ private fun EntityCatalogPage(doc: Mm4SaveCodec.Document, category: String, onEd
     }
 }
 
+internal fun isCatalogPrimitiveEditable(category: String, path: List<String>): Boolean = when (category) {
+    "team" -> isTeamEditablePath(path)
+    "staff" -> isStaffEditablePath(path)
+    "car" -> false // Car attributes are rendered exclusively from the team's m_Stats array.
+    else -> true
+}
+
+internal fun isTeamEditablePath(path: List<String>): Boolean {
+    if (path.isEmpty()) return false
+    val root = path.first()
+    if (path.size == 1 && root in setOf("name", "shortName", "m_Reputation", "reputation")) return true
+    val financialTerms = listOf(
+        "financial", "finance", "budget", "balance", "cash", "debt", "loan",
+        "wage", "salary", "sponsor", "income", "revenue", "expense", "cost",
+        "profit", "loss", "bank", "payroll"
+    )
+    // Match only the top-level financial section. Nested car/driver fields can also
+    // contain words such as "cost" or "salary" and must not leak into Team editing.
+    return financialTerms.any { term -> root.contains(term, ignoreCase = true) }
+}
+
+internal fun isStaffEditablePath(path: List<String>): Boolean {
+    if (path.isEmpty()) return false
+    val root = path.first()
+    if (root in setOf("m_PersonDetails", "contract")) return true
+    val compensationTerms = listOf("salary", "wage", "pay", "perracecost", "signingfee")
+    return compensationTerms.any { term -> root.contains(term, ignoreCase = true) }
+}
+
 private fun nationalityLabel(value: JsonElement): String { return if (value.isJsonPrimitive) "Kode negara ${value.asString} (pemetaan ID MM4 belum tersedia)" else "Nationality belum dikenali" }
 
 private fun collectObjectsWithId(root:JsonElement):List<Pair<List<String>,JsonObject>> {
@@ -850,7 +918,7 @@ private fun statAttributeLabel(category:String,type:String,index:Int):String {
     val labels=when {
         category=="staff" && type.contains("designer",true) -> listOf("Performance","Reliability","Leadership","Bonus","Success Rate")
         category=="staff" && type.contains("strategist",true) -> listOf("Race Starts","Overtaking","Defending","Consistency","Focus")
-        category=="staff" && type.contains("mechanic",true) -> listOf("Setup Skill","Car Knowledge","Pit Stop Skill","Reliability")
+        category=="staff" && type.contains("mechanic",true) -> listOf("Setup Skill","Car Knowledge")
         category=="car" -> listOf("Top Speed","Acceleration","Braking","Low Speed Cornering","High Speed Cornering","Tyre Wear","Fuel Efficiency","Car Reliability")
         else -> listOf("Braking","Smoothness","Control","Consistency","Race Starts","Awareness","Cornering","Defending","Instinct","Focus","Reactions","Decisions","Overtaking","Bravery","Composure")
     }
@@ -898,73 +966,319 @@ private fun FinancePage(doc: Mm4SaveCodec.Document, onEdit: (String,List<String>
             }
         }
         item { Text("TRANSACTION HISTORY", color = Gold, fontWeight = FontWeight.Bold, fontSize = 11.sp) }
-        items(history?.size() ?: 0) { i -> GlassCard(Modifier.fillMaxWidth()) { InfoLine("Transaction " + (i + 1), formatMoney(history!![i].asLong)) } }
+        items(history?.size() ?: 0) { i -> GlassCard(Modifier.fillMaxWidth()) { InfoLine("Transaction " + (i + 1), financeHistoryLabel(history!![i])) } }
     }
+}
+
+internal fun financeHistoryLabel(value: JsonElement): String {
+    if (value.isJsonPrimitive && value.asJsonPrimitive.isNumber) {
+        return runCatching { formatMoney(value.asLong) }.getOrDefault(preview(value))
+    }
+    if (value.isJsonObject) {
+        val obj = value.asJsonObject
+        val amount = listOf("amount", "m_Amount", "value", "m_Value", "balance")
+            .firstNotNullOfOrNull { key -> obj.get(key)?.takeIf { it.isJsonPrimitive && it.asJsonPrimitive.isNumber } }
+        if (amount != null) return runCatching { formatMoney(amount.asLong) }.getOrDefault(preview(value))
+    }
+    return preview(value)
 }
 
 @Composable
-private fun HqPage(doc:Mm4SaveCodec.Document,onEdit:(String,List<String>,JsonElement)->Unit) {
-    val hq=doc.data.getAsJsonObject("headquarters") ?: JsonObject()
-    val upgrades=hq.getAsJsonArray("m_Upgrades")
-    val completed=hq.getAsJsonArray("m_CompletedUpgrades")
-    data class Facility(val listIndex:Int,val gameKey:String,val value:JsonObject)
-    val facilities=upgrades?.mapIndexedNotNull { index, element ->
-        if (!element.isJsonObject) return@mapIndexedNotNull null
-        val row=element.asJsonObject
-        val key=row.get("Key")?.asString ?: index.toString()
-        val value=row.getAsJsonObject("Value") ?: return@mapIndexedNotNull null
-        Facility(index,key,value)
-    }.orEmpty()
-    val tierRows=hq.getAsJsonArray("m_CurrentTierInformation")
-    LazyColumn(contentPadding=PaddingValues(14.dp),verticalArrangement=Arrangement.spacedBy(10.dp)) {
+private fun SaveDiagnosticsPage(doc: Mm4SaveCodec.Document) {
+    val entities = remember(doc.data) { collectObjectsWithId(doc.data) }
+    val ids = remember(entities) { entities.mapNotNull { it.second.get("\$id")?.takeIf { v -> v.isJsonPrimitive }?.asString } }
+    val idCounts = remember(ids) { ids.groupingBy { it }.eachCount() }
+    val duplicateIds = remember(idCounts) { idCounts.filterValues { it > 1 } }
+    val entityIdSet = remember(ids) { ids.toSet() }
+    val driverRefs = doc.data.getAsJsonObject("driverManager")?.getAsJsonArray("m_Drivers")
+        ?.mapNotNull { ref -> ref.takeIf { it.isJsonObject }?.asJsonObject?.get("\$ref")?.takeIf { it.isJsonPrimitive }?.asString }
+        .orEmpty()
+    val teamRefs = doc.data.getAsJsonObject("teamManager")?.getAsJsonArray("m_Teams")
+        ?.mapNotNull { ref -> ref.takeIf { it.isJsonObject }?.asJsonObject?.get("\$ref")?.takeIf { it.isJsonPrimitive }?.asString }
+        .orEmpty()
+    val unresolvedDrivers = driverRefs.count { it !in entityIdSet }
+    val unresolvedTeams = teamRefs.count { it !in entityIdSet }
+    val explicitNulls = remember(doc.data) { flatten(doc.data).count { it.second.isJsonNull } }
+    LazyColumn(contentPadding = PaddingValues(14.dp), verticalArrangement = Arrangement.spacedBy(9.dp)) {
         item {
             GlassCard(Modifier.fillMaxWidth()) {
-                Text("HEADQUARTERS",color=Gold,fontWeight=FontWeight.Bold,fontSize=11.sp)
-                Text("${completed?.size() ?: 0} completed upgrades",fontSize=23.sp,fontWeight=FontWeight.Black)
-                Text("${facilities.size} facility upgrade records",color=Muted,fontSize=11.sp)
-                Text("Status fasilitas, waktu pembukaan, dan jalur upgrade dapat diubah dari kontrol di bawah.",color=Muted,fontSize=10.sp)
+                Text("SAVE HEALTH CHECK", color = Gold, fontWeight = FontWeight.Black, fontSize = 12.sp)
+                Text("Pemeriksaan hanya-baca terhadap struktur dan referensi career save. Tidak ada data yang diubah.", color = Muted, fontSize = 11.sp)
+                Text("${doc.data.size()} top-level data groups", fontSize = 20.sp, fontWeight = FontWeight.Black)
             }
         }
         item {
             GlassCard(Modifier.fillMaxWidth()) {
-                Text("FACILITY LEVELS",color=Gold,fontWeight=FontWeight.Bold,fontSize=11.sp)
-                tierRows?.forEachIndexed { i, row ->
-                    if(row.isJsonObject) {
-                        val key=row.asJsonObject.get("Key")?.asString ?: i.toString()
-                        val value=row.asJsonObject.get("Value")
-                        Row(Modifier.fillMaxWidth().padding(vertical=4.dp),verticalAlignment=Alignment.CenterVertically) {
-                            Text(facilityGroupLabel(key.toIntOrNull() ?: i),Modifier.weight(1f),color=Muted,fontSize=11.sp)
-                            Text(value?.asString ?: "—",color=Gold,fontWeight=FontWeight.Bold)
-                        }
-                    }
-                }
+                Text("ENTITY & ROSTER REFERENCES", color = Gold, fontWeight = FontWeight.Bold, fontSize = 11.sp)
+                InfoLine("Objects with entity IDs", entities.size.toString())
+                InfoLine("Unique entity IDs", entityIdSet.size.toString())
+                InfoLine("Driver roster references", driverRefs.size.toString())
+                InfoLine("Unresolved driver references", unresolvedDrivers.toString())
+                InfoLine("Team references", teamRefs.size.toString())
+                InfoLine("Unresolved team references", unresolvedTeams.toString())
             }
         }
-        items(facilities,key={it.listIndex}) { facility ->
-            val state=facility.value.get("State")
-            val weeks=facility.value.get("weeksToUnlock")
-            val pathType=facility.value.get("pathType")
-            val stateNumber=state?.asInt ?: -1
-            val status=when(stateNumber) { 0 -> "Locked"; 1 -> "Unlocked"; 2 -> "Upgrade in progress"; else -> "Unknown status" }
+        item {
             GlassCard(Modifier.fillMaxWidth()) {
-                Row(verticalAlignment=Alignment.CenterVertically) {
-                    Column(Modifier.weight(1f)) {
-                        Text("${facilityGroupLabel(facility.value.get("pathType")?.asInt ?: 0)} • Upgrade ${facility.gameKey}",fontWeight=FontWeight.Bold,fontSize=14.sp)
-                        Text(status,color=when(stateNumber){1->Color(0xFF82D7A2);0->Red;else->Gold},fontSize=11.sp)
-                    }
-                    TextButton(onClick={onEdit("Game Data",listOf("headquarters","m_Upgrades","[${facility.listIndex}]","Value","State"),state ?: com.google.gson.JsonPrimitive(0))}) { Text("CHANGE STATUS") }
-                }
-                if(weeks!=null) InfoLine("Weeks until unlock",weeks.asString)
-                if(pathType!=null) InfoLine("Upgrade path",pathType.asString)
-                Row(horizontalArrangement=Arrangement.spacedBy(7.dp)) {
-                    if(weeks!=null) OutlinedButton(onClick={onEdit("Game Data",listOf("headquarters","m_Upgrades","[${facility.listIndex}]","Value","weeksToUnlock"),weeks)}) { Text("EDIT TIMER",fontSize=10.sp) }
-                    if(pathType!=null) OutlinedButton(onClick={onEdit("Game Data",listOf("headquarters","m_Upgrades","[${facility.listIndex}]","Value","pathType"),pathType)}) { Text("EDIT PATH",fontSize=10.sp) }
+                Text("STRUCTURE WARNINGS", color = Gold, fontWeight = FontWeight.Bold, fontSize = 11.sp)
+                InfoLine("Duplicate entity IDs", duplicateIds.size.toString())
+                InfoLine("Explicit null values", explicitNulls.toString())
+                InfoLine("Save container version", "40 (supported profile)")
+                Text(
+                    if (unresolvedDrivers == 0 && unresolvedTeams == 0 && duplicateIds.isEmpty())
+                        "Tidak ditemukan masalah referensi pada pemeriksaan dasar ini."
+                    else "Ada referensi atau ID yang perlu diperiksa. Angka ini merupakan indikator, bukan bukti save rusak.",
+                    color = if (unresolvedDrivers == 0 && unresolvedTeams == 0 && duplicateIds.isEmpty()) Color(0xFF82D7A2) else Gold,
+                    fontSize = 10.sp
+                )
+            }
+        }
+        if (duplicateIds.isNotEmpty()) {
+            item {
+                GlassCard(Modifier.fillMaxWidth()) {
+                    Text("DUPLICATE ID SAMPLE", color = Gold, fontWeight = FontWeight.Bold)
+                    duplicateIds.entries.take(20).forEach { (id, count) -> InfoLine(id, "${count} occurrences") }
                 }
             }
         }
     }
 }
 
+private data class HqFacilityInfo(val name: String, val group: Int, val effect: String)
+private val HqFacilityCatalog = listOf(
+ HqFacilityInfo("Fabrication Pipeline",0,"+2 Part Build Limit"),
+ HqFacilityInfo("Factory",0,"+2 Mechanical Bonus to Both Cars"),
+ HqFacilityInfo("Telemetry Department",0,"New Setup Card available in Qualifying"),
+ HqFacilityInfo("Simulator",0,"+2 Part Build Limit"),
+ HqFacilityInfo("Staff Gym",1,"+0.25 Driver Improvement Points Per Race"),
+ HqFacilityInfo("Publicity",1,"Drivers receive +1 Sponsor Appeal"),
+ HqFacilityInfo("Education",1,"+0.25 Driver Improvement Points Per Race"),
+ HqFacilityInfo("Sporting Psychology Center",1,"Can Give Focus to 2 Young Drivers"),
+ HqFacilityInfo("Forecasting Center",2,"Forecasting Center Unlocked"),
+ HqFacilityInfo("Outsourced Logistics",2,"Can Target 1 Additional Node in the Supplier Network"),
+ HqFacilityInfo("Promotions",2,"+10% chance of a Discounted Item appearing in each store"),
+ HqFacilityInfo("Satellite Array",2,"Can Target 1 Additional Node in the Supplier Network"),
+ HqFacilityInfo("Public Relations Team",3,"+1 Sponsor Appeal"),
+ HqFacilityInfo("Income",3,"+$200,000 Income Per Race"),
+ HqFacilityInfo("Hospitality Tents",3,"Unlock 6th Sponsor Slot"),
+ HqFacilityInfo("Companion App Development",4,"+5 Influence Per Race; +$200,000 per Race"),
+ HqFacilityInfo("Social Media Centre",4,"+25 Influence"),
+ HqFacilityInfo("Part Development Contracts",4,"+5 Influence Per Race"),
+ HqFacilityInfo("Rapport",4,"Negotiations are 5% Easier")
+)
+private val HqGroupNames = listOf("Garage","Academy","Logistics","Event Space","Communications")
+
+@Composable
+private fun HqPage(doc: Mm4SaveCodec.Document, onEdit: (String,List<String>,JsonElement)->Unit) {
+ val hq=doc.data.getAsJsonObject("headquarters") ?: JsonObject()
+ val upgrades=hq.getAsJsonArray("m_Upgrades")
+ val completed=hq.getAsJsonArray("m_CompletedUpgrades")
+ val tierRows=hq.getAsJsonArray("m_CurrentTierInformation")
+ val grouped=upgrades?.mapIndexedNotNull { index,element ->
+  if(!element.isJsonObject) return@mapIndexedNotNull null
+  val row=element.asJsonObject
+  val key=row.get("Key")?.asString ?: index.toString()
+  val value=row.getAsJsonObject("Value") ?: return@mapIndexedNotNull null
+  Triple(index,key,value)
+ }?.groupBy { it.third.get("pathType")?.asInt ?: -1 }.orEmpty()
+ LazyColumn(contentPadding=PaddingValues(14.dp),verticalArrangement=Arrangement.spacedBy(10.dp)) {
+  item {
+   GlassCard(Modifier.fillMaxWidth()) {
+    Text("HEADQUARTERS",color=Gold,fontWeight=FontWeight.Bold,fontSize=11.sp)
+    Text(HqFacilityCatalog.size.toString()+" named facilities",fontSize=23.sp,fontWeight=FontWeight.Black)
+    Text((completed?.size() ?: 0).toString()+" completed upgrades • "+(upgrades?.size() ?: 0).toString()+" upgrade nodes",color=Muted,fontSize=10.sp)
+    Text("Nama dan efek fasilitas diambil dari video gameplay kamu. Upgrade node ditampilkan terpisah agar ID game tidak dipasangkan ke fasilitas secara asal.",color=Muted,fontSize=10.sp)
+   }
+  }
+  item {
+   GlassCard(Modifier.fillMaxWidth()) {
+    Text("HQ CATEGORY LEVELS",color=Gold,fontWeight=FontWeight.Bold,fontSize=11.sp)
+    tierRows?.forEachIndexed { index,row ->
+     if(row.isJsonObject) {
+      val key=row.asJsonObject.get("Key")?.asInt ?: index
+      val value=row.asJsonObject.get("Value")
+      val group=HqGroupNames.getOrNull(key) ?: "HQ Category #"+key
+      Row(Modifier.fillMaxWidth().padding(vertical=4.dp),verticalAlignment=Alignment.CenterVertically) {
+       Text(group,Modifier.weight(1f),color=Color.White,fontSize=12.sp)
+       Text(value?.asString ?: "—",color=Gold,fontWeight=FontWeight.Bold)
+       if(value!=null) IconButton(onClick={onEdit("Game Data",listOf("headquarters","m_CurrentTierInformation","["+index+"]","Value"),value)}) {
+        Icon(Icons.Default.Edit,contentDescription="Edit "+group+" level",tint=Muted)
+       }
+      }
+     }
+    }
+   }
+  }
+  HqGroupNames.forEachIndexed { groupIndex,groupName ->
+   val facilities=HqFacilityCatalog.filter { it.group==groupIndex }
+   item {
+    GlassCard(Modifier.fillMaxWidth()) {
+     Text(groupName.uppercase(),color=Gold,fontWeight=FontWeight.Black,fontSize=12.sp)
+     Text(facilities.size.toString()+" facilities shown in your gameplay video",color=Muted,fontSize=10.sp)
+    }
+   }
+   items(facilities) { facility ->
+    GlassCard(Modifier.fillMaxWidth()) {
+     Text(facility.name,fontWeight=FontWeight.Bold,fontSize=14.sp)
+     Text(facility.effect,color=Color(0xFF9BE36A),fontSize=11.sp)
+    }
+   }
+  }
+  item {
+   GlassCard(Modifier.fillMaxWidth()) {
+    Text("RAW UPGRADE NODES",color=Gold,fontWeight=FontWeight.Bold,fontSize=11.sp)
+    Text("Edit State, weeksToUnlock, dan pathType menggunakan Key asli dari save.",color=Muted,fontSize=10.sp)
+   }
+  }
+  grouped.toSortedMap().forEach { (pathType,rows) ->
+   item {
+    GlassCard(Modifier.fillMaxWidth()) {
+     Text(HqGroupNames.getOrNull(pathType) ?: "Unmapped path type "+pathType,color=Gold,fontWeight=FontWeight.Bold)
+     Text(rows.size.toString()+" upgrade nodes",color=Muted,fontSize=10.sp)
+    }
+   }
+   items(rows,key={it.first}) { (listIndex,gameKey,value) ->
+    val state=value.get("State")
+    val weeks=value.get("weeksToUnlock")
+    val path=value.get("pathType")
+    val stateNumber=state?.asInt ?: -1
+    val status=when(stateNumber){0->"Locked";1->"Unlocked";2->"Upgrade in progress";else->"State "+stateNumber}
+    GlassCard(Modifier.fillMaxWidth()) {
+     Row(verticalAlignment=Alignment.CenterVertically) {
+      Column(Modifier.weight(1f)) {
+       Text("Upgrade node #"+gameKey,fontWeight=FontWeight.Bold,fontSize=13.sp)
+       Text(status,color=when(stateNumber){1->Color(0xFF82D7A2);0->Red;else->Gold},fontSize=11.sp)
+      }
+      if(state!=null) TextButton(onClick={onEdit("Game Data",listOf("headquarters","m_Upgrades","["+listIndex+"]","Value","State"),state)}){Text("STATE")}
+     }
+     if(weeks!=null) {
+      InfoLine("Weeks to unlock",weeks.asString)
+      TextButton(onClick={onEdit("Game Data",listOf("headquarters","m_Upgrades","["+listIndex+"]","Value","weeksToUnlock"),weeks)}){Text("EDIT TIMER")}
+     }
+     if(path!=null) {
+      InfoLine("Upgrade path",HqGroupNames.getOrNull(path.asInt) ?: path.asString)
+      TextButton(onClick={onEdit("Game Data",listOf("headquarters","m_Upgrades","["+listIndex+"]","Value","pathType"),path)}){Text("EDIT PATH")}
+     }
+    }
+   }
+  }
+ }
+}
+
+private val SupplierNames=listOf("Micronix Racing","Shimizu","Polymat Group","Tectra Fibres","Norex","Mersault","Kitano")
+private fun componentTypeName(type:Int)=when(type){1->"Suspension";3->"Exhaust";4->"ECU";5->"Gearbox";else->"Component type #"+type}
+private fun componentRarityName(rarity:Int)=when(rarity){0->"Common";1->"Uncommon";else->"Rarity #"+rarity}
+private fun componentStatName(stat:Int)=when(stat){
+ 0->"Top Speed";1->"Acceleration";2->"Braking";3->"Low Speed Cornering";4->"High Speed Cornering";5->"Tyre Wear";6->"Fuel Efficiency";else->"Stat #"+stat
+}
+
+@Composable
+private fun ComponentMarketplacePage(doc:Mm4SaveCodec.Document,onEdit:(String,List<String>,JsonElement)->Unit) {
+ val market=doc.data.getAsJsonObject("componentMarketplace") ?: JsonObject()
+ val openItems=market.getAsJsonArray("m_Components")?.mapIndexed { index,element->index to element }.orEmpty()
+ val supplierRows=market.getAsJsonArray("m_CompanyComponents")?.mapIndexed { index,element->index to element }.orEmpty()
+ LazyColumn(contentPadding=PaddingValues(14.dp),verticalArrangement=Arrangement.spacedBy(9.dp)) {
+  item {
+   GlassCard(Modifier.fillMaxWidth()) {
+    Text("COMPONENT MARKETPLACE",color=Gold,fontWeight=FontWeight.Black,fontSize=12.sp)
+    Text("Open Market & 7 supplier stores",fontSize=21.sp,fontWeight=FontWeight.Black)
+    Text("Edit harga, rarity, diskon, status stok, tipe komponen, serta bonus statistik. Nama supplier mengikuti tab di video.",color=Muted,fontSize=10.sp)
+   }
+  }
+  item {
+   GlassCard(Modifier.fillMaxWidth()) {
+    Text("PREMIUM STORE • READ ONLY",color=Gold,fontWeight=FontWeight.Black,fontSize=12.sp)
+    Text("Investments",fontWeight=FontWeight.Bold,fontSize=11.sp)
+    Text("$15,000,000 pack • Rp 52,000  |  $60,000,000 pack • Rp 109,000",color=Muted,fontSize=10.sp)
+    Text("Game Changers",fontWeight=FontWeight.Bold,fontSize=11.sp)
+    Text("Chairman's Payment • Game Editor",color=Muted,fontSize=10.sp)
+    Text("Bundles",fontWeight=FontWeight.Bold,fontSize=11.sp)
+    Text("Game Editor + Chairman's Payment • Premium Liveries Bundle",color=Muted,fontSize=10.sp)
+    Text("Katalog premium ini terlihat di video, tetapi tidak tersimpan di SlotTwo.msv. Bagian ini hanya referensi; tidak ada kontrol edit palsu untuk data yang tidak ada di save.",color=Muted,fontSize=10.sp)
+   }
+  }
+  item {
+   GlassCard(Modifier.fillMaxWidth()) {
+    Text("MARKET SETTINGS",color=Gold,fontWeight=FontWeight.Bold,fontSize=11.sp)
+    listOf("OutOfStockChance","m_CompanyRacesToRestock").forEach { key ->
+     val value=market.get(key)
+     if(value!=null && value.isJsonPrimitive) {
+      Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically) {
+       Column(Modifier.weight(1f)) {
+        Text(humanizeField(key),fontSize=11.sp)
+        Text(preview(value),color=Gold,fontWeight=FontWeight.Bold,fontSize=11.sp)
+       }
+       IconButton(onClick={onEdit("Game Data",listOf("componentMarketplace",key),value)}){Icon(Icons.Default.Edit,contentDescription="Edit "+key,tint=Muted)}
+      }
+     }
+    }
+    market.getAsJsonArray("m_ComponentMarks")?.forEachIndexed { index,value ->
+     Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically) {
+      Text(SupplierNames.getOrNull(index) ?: "Supplier #"+index,Modifier.weight(1f),fontSize=10.sp)
+      Text(preview(value),color=Gold,fontSize=10.sp)
+      IconButton(onClick={onEdit("Game Data",listOf("componentMarketplace","m_ComponentMarks","["+index+"]"),value)}){Icon(Icons.Default.Edit,contentDescription="Edit supplier mark",tint=Muted)}
+     }
+    }
+   }
+  }
+  item { GlassCard(Modifier.fillMaxWidth()) { Text("OPEN MARKET",color=Gold,fontWeight=FontWeight.Black,fontSize=13.sp); Text(openItems.size.toString()+" components in this save",color=Muted,fontSize=10.sp) } }
+  items(openItems,key={"open-"+it.first}) { (index,element)->MarketplaceComponentCard(element,"m_Components",index,"Open Market",onEdit) }
+  supplierRows.forEach { (supplierIndex,supplierElement)->
+   val components=if(supplierElement.isJsonArray)supplierElement.asJsonArray.mapIndexed{index,item->index to item}else emptyList()
+   item { GlassCard(Modifier.fillMaxWidth()) { Text(SupplierNames.getOrNull(supplierIndex) ?: "Supplier #"+supplierIndex,color=Gold,fontWeight=FontWeight.Black,fontSize=13.sp); Text(components.size.toString()+" supplier components",color=Muted,fontSize=10.sp) } }
+   items(components,key={"supplier-"+supplierIndex+"-"+it.first}) { (componentIndex,component)->MarketplaceComponentCard(component,"m_CompanyComponents",componentIndex,SupplierNames.getOrNull(supplierIndex) ?: "Supplier #"+supplierIndex,onEdit,supplierIndex) }
+  }
+ }
+}
+
+@Composable
+private fun MarketplaceComponentCard(element:JsonElement,arrayKey:String,componentIndex:Int,sourceLabel:String,onEdit:(String,List<String>,JsonElement)->Unit,supplierIndex:Int?=null) {
+ if(!element.isJsonObject)return
+ val component=element.asJsonObject
+ val prefix=buildList {
+  add("componentMarketplace");add(arrayKey)
+  if(supplierIndex!=null)add("["+supplierIndex+"]")
+  add("["+componentIndex+"]")
+ }
+ fun edit(field:String,value:JsonElement?){if(value!=null)onEdit("Game Data",prefix+field,value)}
+ val type=component.get("m_Type")?.asInt ?: -1
+ val rarity=component.get("m_Rarity")?.asInt ?: -1
+ val stats=component.getAsJsonArray("m_Stats")
+ GlassCard(Modifier.fillMaxWidth()) {
+  Row(verticalAlignment=Alignment.CenterVertically) {
+   Column(Modifier.weight(1f)) {
+    Text(componentTypeName(type),fontWeight=FontWeight.Black,fontSize=14.sp)
+    Text(sourceLabel+" • "+componentRarityName(rarity),color=Muted,fontSize=10.sp)
+   }
+   TextButton(onClick={edit("m_Type",component.get("m_Type"))}){Text("TYPE")}
+  }
+  Row(horizontalArrangement=Arrangement.spacedBy(8.dp),verticalAlignment=Alignment.CenterVertically) {
+   listOf("m_Price" to "Price","m_Discount" to "Discount","m_State" to "Stock state","m_Rarity" to "Rarity").forEach { (key,label)->
+    val value=component.get(key)
+    if(value!=null) Column(Modifier.weight(1f).clickable{edit(key,value)}.padding(vertical=4.dp)) {
+     Text(label,color=Muted,fontSize=9.sp);Text(preview(value),color=Gold,fontWeight=FontWeight.Bold,fontSize=11.sp)
+    }
+   }
+  }
+  if(stats!=null) {
+   Divider(color=Color.White.copy(alpha=0.12f))
+   Text("PERFORMANCE STATS",color=Gold,fontWeight=FontWeight.Bold,fontSize=9.sp)
+   stats.forEachIndexed { statIndex,stat->
+    if(stat.isJsonObject) {
+     val statObject=stat.asJsonObject
+     val statId=statObject.get("Stat")?.asInt ?: -1
+     val statValue=statObject.get("Value")
+     Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically) {
+      Text(componentStatName(statId),Modifier.weight(1f),fontSize=11.sp)
+      Text(statValue?.asString ?: "—",color=Gold,fontWeight=FontWeight.Bold,fontSize=11.sp)
+      if(statValue!=null)TextButton(onClick={onEdit("Game Data",prefix+listOf("m_Stats","["+statIndex+"]","Value"),statValue)}){Text("EDIT")}
+      statObject.get("Stat")?.let{statField->IconButton(onClick={onEdit("Game Data",prefix+listOf("m_Stats","["+statIndex+"]","Stat"),statField)}){Icon(Icons.Default.Edit,contentDescription="Edit stat type",tint=Muted)}}
+     }
+    }
+   }
+  }
+ }
+}
 @Composable
 private fun InfoPage(doc: Mm4SaveCodec.Document, onEdit: (String,List<String>,JsonElement)->Unit) {
     val fields = listOf("teamName" to "Team name", "playerFirstName" to "Manager first name", "playerLastName" to "Manager last name", "gameDate" to "Career date", "playerAge" to "Manager age", "championshipTier" to "Championship tier", "championshipSeries" to "Championship series", "eventNumber" to "Event number", "hardMode" to "Hard mode", "timePlayed" to "Play time")
@@ -1416,6 +1730,28 @@ internal fun flatten(root: JsonElement): List<Pair<List<String>, JsonElement>> {
 }
 
 
+internal fun stepNumericValue(current: String, step: Double, direction: Int): String? = runCatching {
+    val currentValue = java.math.BigDecimal(current)
+    val stepValue = java.math.BigDecimal.valueOf(step).multiply(java.math.BigDecimal.valueOf(direction.toLong()))
+    currentValue.add(stepValue).stripTrailingZeros().toPlainString()
+}.getOrNull()
+
+@Composable
+private fun WatermarkFooter() {
+    Row(
+        Modifier.fillMaxWidth()
+            .background(Ink)
+            .border(width = 0.5.dp, color = Color.White.copy(alpha = 0.10f))
+            .padding(horizontal = 16.dp, vertical = 9.dp),
+        horizontalArrangement = Arrangement.Center,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text("Created by :", color = Muted, fontSize = 10.sp, letterSpacing = 0.4.sp)
+        Spacer(Modifier.width(4.dp))
+        Text("Morepp", color = Gold, fontSize = 10.sp, fontWeight = FontWeight.Black, letterSpacing = 0.8.sp)
+    }
+}
+
 @Composable
 private fun EditValueDialog(target: EditTarget, onClose: () -> Unit, onSave: (JsonElement) -> Unit) {
     val primitive = target.value.asJsonPrimitive
@@ -1424,7 +1760,7 @@ private fun EditValueDialog(target: EditTarget, onClose: () -> Unit, onSave: (Js
     var value by remember(target) { mutableStateOf(if (primitive.isString) primitive.asString else primitive.toString()) }
     var choicesOpen by remember(target) { mutableStateOf(false) }
     val currentNumber = if (isNumber) runCatching { primitive.asDouble }.getOrDefault(0.0) else 0.0
-    val isAttribute = target.path.any { it == "m_Stats" || it == "m_Stat" || it == "m_Potential" }
+    val isAttribute = target.path.lastOrNull() in setOf("m_Stat", "m_Potential")
     val attributeValue = currentNumber.toInt().coerceIn(0, 20)
     val numberStep = when { kotlin.math.abs(currentNumber) >= 1000000 -> 100000.0; kotlin.math.abs(currentNumber) >= 10000 -> 1000.0; kotlin.math.abs(currentNumber) >= 100 -> 10.0; else -> 1.0 }
     val meaning = when { attributeValue <= 4 -> "Sangat rendah"; attributeValue <= 8 -> "Rendah"; attributeValue <= 12 -> "Menengah"; attributeValue <= 16 -> "Tinggi"; else -> "Elite" }
@@ -1456,9 +1792,9 @@ private fun EditValueDialog(target: EditTarget, onClose: () -> Unit, onSave: (Js
                     isNumber -> {
                         Text(value, fontSize = 24.sp, fontWeight = FontWeight.Bold, color = Gold)
                         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                            OutlinedButton(onClick = { value = (value.toDouble() - numberStep).toLong().toString() }) { Text("−") }
+                            OutlinedButton(onClick = { value = stepNumericValue(value, numberStep, -1) ?: value }) { Text("−") }
                             Text("Langkah " + numberStep.toLong(), color = Muted, fontSize = 10.sp)
-                            OutlinedButton(onClick = { value = (value.toDouble() + numberStep).toLong().toString() }) { Text("+") }
+                            OutlinedButton(onClick = { value = stepNumericValue(value, numberStep, 1) ?: value }) { Text("+") }
                         }
                         Text("Gunakan tombol untuk memilih nilai, tanpa mengetik angka manual.", color = Muted, fontSize = 10.sp)
                     }
@@ -1468,110 +1804,17 @@ private fun EditValueDialog(target: EditTarget, onClose: () -> Unit, onSave: (Js
         },
         confirmButton = {
             Button(onClick = {
-                val result = when { isBoolean -> com.google.gson.JsonPrimitive(value.toBoolean()); isNumber -> com.google.gson.JsonPrimitive(value.toDouble()); else -> com.google.gson.JsonPrimitive(value) }
+                val result = when {
+                    isBoolean -> com.google.gson.JsonPrimitive(value.toBoolean())
+                    isNumber -> com.google.gson.JsonPrimitive(java.math.BigDecimal(value))
+                    else -> com.google.gson.JsonPrimitive(value)
+                }
                 onSave(result)
             }, colors = ButtonDefaults.buttonColors(containerColor = Red)) { Text("SAVE CHANGES") }
         },
         dismissButton = { TextButton(onClick = onClose) { Text("CANCEL") } }
     )
 }
-@Composable
-private fun EditJsonDialog(
-    target: EditTarget,
-    onClose: () -> Unit,
-    onSave: (JsonElement) -> Unit,
-    onAddChild: (String?, JsonElement) -> Unit,
-    onDelete: () -> Unit
-) {
-    var working by remember(target) { mutableStateOf(target.value.deepCopy()) }
-    var newKey by remember(target) { mutableStateOf("") }
-    var newValue by remember(target) { mutableStateOf("") }
-    var newType by remember(target) { mutableStateOf("Text") }
-    var showAdd by remember(target) { mutableStateOf(false) }
-    var invalid by remember(target) { mutableStateOf(false) }
-    var confirmDelete by remember(target) { mutableStateOf(false) }
-    val fields = remember(working) { flatten(working).filter { it.second.isJsonPrimitive } }
-    AlertDialog(
-        onDismissRequest = onClose,
-        title = { Text("EDIT DATA GROUP") },
-        text = {
-            Column(Modifier.fillMaxWidth().heightIn(max=520.dp).verticalScroll(rememberScrollState()), verticalArrangement=Arrangement.spacedBy(8.dp)) {
-                Text(target.path.joinToString(" › "), color=Gold, fontSize=10.sp)
-                Text(fields.size.toString()+" editable values",color=Muted,fontSize=10.sp)
-                fields.forEach { (path,value) ->
-                    val primitive=value.asJsonPrimitive
-                    Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).background(Panel).padding(9.dp)) {
-                        Text(humanLabel(path.last()),fontWeight=FontWeight.SemiBold,fontSize=11.sp)
-                        if(primitive.isBoolean) {
-                            Row(verticalAlignment=Alignment.CenterVertically) {
-                                Text(if(primitive.asBoolean) "Enabled" else "Disabled",Modifier.weight(1f),color=Muted)
-                                Switch(checked=primitive.asBoolean,onCheckedChange={ next -> working=replaceNested(working,path,com.google.gson.JsonPrimitive(next)) })
-                            }
-                        } else {
-                            var textValue by remember(target,path,working.toString()) { mutableStateOf(if(primitive.isString) primitive.asString else primitive.toString()) }
-                            OutlinedTextField(textValue,{ textValue=it },Modifier.fillMaxWidth(),singleLine=true)
-                            TextButton(onClick={
-                                try {
-                                    val next=if(primitive.isNumber) com.google.gson.JsonParser.parseString(textValue).also { require(it.isJsonPrimitive && it.asJsonPrimitive.isNumber) } else com.google.gson.JsonPrimitive(textValue)
-                                    working=replaceNested(working,path,next)
-                                } catch(_:Throwable) { invalid=true }
-                            }) { Text("APPLY FIELD") }
-                        }
-                    }
-                }
-                if(working.isJsonObject || working.isJsonArray) {
-                    OutlinedButton(onClick={showAdd=!showAdd},modifier=Modifier.fillMaxWidth()) { Icon(Icons.Default.Add,null); Text("ADD FIELD / ITEM") }
-                    if(showAdd) {
-                        if(working.isJsonObject) OutlinedTextField(newKey,{newKey=it},Modifier.fillMaxWidth(),label={Text("Field name")},singleLine=true)
-                        OutlinedTextField(newValue,{newValue=it},Modifier.fillMaxWidth(),label={Text("Value")},singleLine=true)
-                        Text("Value type",color=Muted,fontSize=10.sp)
-                        Row(horizontalArrangement=Arrangement.spacedBy(5.dp)) {
-                            listOf("Text","Number","Boolean","Object","List").forEach { type ->
-                                FilterChip(selected=newType==type,onClick={newType=type},label={Text(type,fontSize=9.sp)})
-                            }
-                        }
-                        Button(onClick={
-                            try {
-                                val value=when(newType) {
-                                    "Number" -> com.google.gson.JsonParser.parseString(newValue).also { require(it.isJsonPrimitive && it.asJsonPrimitive.isNumber) }
-                                    "Boolean" -> com.google.gson.JsonPrimitive(newValue.toBooleanStrict())
-                                    "Object" -> JsonObject()
-                                    "List" -> JsonArray()
-                                    else -> com.google.gson.JsonPrimitive(newValue)
-                                }
-                                if(working.isJsonObject) {
-                                    require(newKey.isNotBlank() && !working.asJsonObject.has(newKey))
-                                    working=working.deepCopy().also { it.asJsonObject.add(newKey,value) }
-                                } else working=working.deepCopy().also { it.asJsonArray.add(value) }
-                                newKey=""; newValue=""; showAdd=false; invalid=false
-                            } catch(_:Throwable) { invalid=true }
-                        },modifier=Modifier.fillMaxWidth(),colors=ButtonDefaults.buttonColors(containerColor=Gold)) { Text("ADD") }
-                        if(invalid) Text("Periksa nama field dan tipe nilainya.",color=Red,fontSize=10.sp)
-                    }
-                }
-                if(target.path.isNotEmpty()) TextButton(onClick={confirmDelete=true},colors=ButtonDefaults.textButtonColors(contentColor=Red)) { Text("DELETE GROUP") }
-            }
-        },
-        confirmButton={ Button(onClick={onSave(working)},colors=ButtonDefaults.buttonColors(containerColor=Red)) { Text("SAVE CHANGES") } },
-        dismissButton={ TextButton(onClick=onClose) { Text("CANCEL") } }
-    )
-    if(confirmDelete) AlertDialog(
-        onDismissRequest={confirmDelete=false},
-        title={Text("Delete this data group?")},
-        text={Text("This removes the selected group from the edited save.")},
-        confirmButton={TextButton(onClick={onDelete}) { Text("DELETE") }},
-        dismissButton={TextButton(onClick={confirmDelete=false}) { Text("CANCEL") }}
-    )
-}
-
-private fun replaceNested(root:JsonElement,path:List<String>,value:JsonElement):JsonElement {
-    if(path.isEmpty()) return value.deepCopy()
-    val wrapper=JsonObject()
-    wrapper.add("root",root.deepCopy())
-    val ok=setPath(wrapper,listOf("root")+path,value)
-    return if(ok) wrapper.get("root") else root
-}
-
 internal fun resolvePath(root: JsonElement, path: List<String>): JsonElement? {
     var node = root
     for (part in path) {
