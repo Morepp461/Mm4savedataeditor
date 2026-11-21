@@ -297,6 +297,57 @@ class JsonTreeEditorTest {
 
 
     @Test
+    fun supplierUnlockResolvesReferencesAndSkipsMalformedEntries() {
+        val data=JsonObject().apply {
+            add("supplierNetworkManager",JsonObject().apply {
+                add("m_NodeDictionary",JsonArray().apply {
+                    add(JsonObject().apply {
+                        addProperty("Key",0)
+                        add("Value",JsonObject().apply {
+                            addProperty("\$id","supplier-root")
+                            addProperty("m_IsOwned",false)
+                            addProperty("m_HasOwnedBeenRevealed",false)
+                            add("m_Nodes",JsonArray().apply {
+                                add(JsonObject().apply { addProperty("\$ref","company-1") })
+                                add(JsonNull.INSTANCE)
+                            })
+                        })
+                    })
+                    add(JsonObject().apply {
+                        addProperty("Key",1)
+                        add("Value",JsonObject().apply { addProperty("\$ref","supplier-root") })
+                    })
+                    add(JsonPrimitive("unexpected-entry"))
+                    add(JsonNull.INSTANCE)
+                })
+            })
+            add("entities",JsonArray().apply {
+                add(JsonObject().apply {
+                    addProperty("\$id","company-1")
+                    addProperty("m_IsOwned",false)
+                    addProperty("m_HasOwnedBeenRevealed",false)
+                    add("m_Nodes",JsonArray())
+                })
+            })
+        }
+
+        assertEquals(2,unlockSupplierNetwork(data))
+        val root=data.getAsJsonObject("supplierNetworkManager")
+            .getAsJsonArray("m_NodeDictionary")[0].asJsonObject.getAsJsonObject("Value")
+        val company=data.getAsJsonArray("entities")[0].asJsonObject
+        assertTrue(root.get("m_IsOwned").asBoolean)
+        assertTrue(root.get("m_HasOwnedBeenRevealed").asBoolean)
+        assertTrue(company.get("m_IsOwned").asBoolean)
+        assertTrue(company.get("m_HasOwnedBeenRevealed").asBoolean)
+        assertEquals(0,unlockSupplierNetwork(data))
+    }
+
+    @Test
+    fun supplierUnlockRejectsMissingManagerWithoutThrowing() {
+        assertEquals(0,unlockSupplierNetwork(JsonObject()))
+    }
+
+    @Test
     fun financeBalanceEditorHasTwoBillionPoundLimit() {
         val bounds = editorBounds(
             Mm4SaveCodec.Document(JsonObject(), JsonObject(), "finance.msv"),
