@@ -403,7 +403,7 @@ private fun CareerHeader(
 }
 
 
-private val Sections = listOf("Overview", "Drivers", "Finance", "HQ", "Save Info", "Advanced")
+private val Sections = listOf("Overview", "Drivers", "Team", "Finance", "HQ", "Save Info", "Advanced")
 
 @Composable
 private fun CareerWorkspace(
@@ -418,6 +418,7 @@ private fun CareerWorkspace(
         when (section) {
             "Overview" -> OverviewPage(document, onSection)
             "Drivers" -> DriverPage(document, selectedDriver, onDriver, onEdit)
+            "Team" -> TeamPage(document, onEdit)
             "Finance" -> FinancePage(document, onEdit)
             "HQ" -> HqPage(document)
             "Save Info" -> InfoPage(document, onEdit)
@@ -537,6 +538,43 @@ private fun DriverPage(doc: Mm4SaveCodec.Document, selected: String?, onSelect: 
                     }
                 }
                 item { Text("Label atribut resmi belum terverifikasi dari file ini. Nilai dan urutan ditampilkan apa adanya, bukan diberi nama hasil tebakan.", color = Muted, fontSize = 10.sp) }
+            }
+        }
+    }
+}
+
+
+@Composable
+private fun TeamPage(doc: Mm4SaveCodec.Document, onEdit: (String,List<String>,JsonElement)->Unit) {
+    val details = doc.data.getAsJsonObject("player")?.getAsJsonObject("m_TeamDetails")
+    val colors = details?.getAsJsonObject("m_TeamColors")
+    val teamName = doc.info.get("teamName")?.asString ?: "Career team"
+    val colorNames = listOf("primaryColor", "secondaryColor", "tertiaryColor", "trimColor", "carColor", "staffPrimaryColor", "staffSecondaryColor", "helmetColour")
+    LazyColumn(contentPadding = PaddingValues(14.dp), verticalArrangement = Arrangement.spacedBy(9.dp)) {
+        item { GlassCard(Modifier.fillMaxWidth()) {
+            Text("TEAM PROFILE", color = Gold, fontWeight = FontWeight.Bold, fontSize = 10.sp)
+            Text(teamName, fontSize = 24.sp, fontWeight = FontWeight.Black)
+            Text("Team identity and visual configuration", color = Muted, fontSize = 11.sp)
+        } }
+        item { GlassCard(Modifier.fillMaxWidth()) {
+            Text("TEAM COLORS", color = Gold, fontWeight = FontWeight.Bold, fontSize = 11.sp)
+            Text("RGB values stored in the career save. Tap a channel to edit it.", color = Muted, fontSize = 10.sp)
+        } }
+        items(colorNames.filter { colors?.get(it)?.isJsonObject == true }) { key ->
+            val color = colors!!.getAsJsonObject(key)
+            GlassCard(Modifier.fillMaxWidth()) {
+                Text(humanizeField(key), fontWeight = FontWeight.Bold)
+                listOf("r","g","b","a").forEach { channel ->
+                    val value = color.get(channel)
+                    if (value != null) Row(
+                        Modifier.fillMaxWidth().clickable { onEdit("Game Data", listOf("player","m_TeamDetails","m_TeamColors",key,channel), value) }.padding(vertical = 3.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(channel.uppercase(), Modifier.weight(1f), color = Muted, fontSize = 10.sp)
+                        Text((if (value.isJsonPrimitive && value.asJsonPrimitive.isString) value.asString else value.toString()), color = Gold, fontWeight = FontWeight.Bold, fontSize = 11.sp)
+                        Icon(Icons.Default.Edit, null, tint = Muted, modifier = Modifier.size(15.dp))
+                    }
+                }
             }
         }
     }
