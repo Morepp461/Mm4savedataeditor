@@ -162,9 +162,10 @@ private fun EditorApp() {
                 errorMessage = null
                 try {
                     withContext(Dispatchers.IO) {
+                        val expected = Mm4SaveCodec.prepareForExport(current)
                         val bytes = Mm4SaveCodec.encode(current)
                         val verified = Mm4SaveCodec.decode(bytes, current.sourceName)
-                        val mismatch = Mm4SaveCodec.firstDifference(verified, current)
+                        val mismatch = Mm4SaveCodec.firstDifference(verified, expected)
                         check(mismatch == null) {
                             "Validasi round-trip gagal pada $mismatch. File belum ditulis agar save tidak rusak."
                         }
@@ -180,7 +181,7 @@ private fun EditorApp() {
                         val persistedBytes = persisted.use { readSaveBytes(it) }
                         check(persistedBytes.isNotEmpty()) { "Export menghasilkan file kosong (0 byte)." }
                         val persistedDocument = Mm4SaveCodec.decode(persistedBytes, current.sourceName)
-                        val persistedMismatch = Mm4SaveCodec.firstDifference(persistedDocument, current)
+                        val persistedMismatch = Mm4SaveCodec.firstDifference(persistedDocument, expected)
                         check(persistedMismatch == null) {
                             "Verifikasi file setelah ditulis gagal pada $persistedMismatch. Jangan gunakan file ini."
                         }
