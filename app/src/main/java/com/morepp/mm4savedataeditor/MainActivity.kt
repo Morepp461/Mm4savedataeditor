@@ -108,6 +108,7 @@ private fun EditorApp() {
     var confirmDiscardOpen by remember { mutableStateOf(false) }
     var undoStack by remember { mutableStateOf(emptyList<EditOperation>()) }
     var redoStack by remember { mutableStateOf(emptyList<EditOperation>()) }
+    val snackbarHostState = remember { SnackbarHostState() }
     var showIntro by remember { mutableStateOf(true) }
     var showTutorial by remember { mutableStateOf(false) }
     LaunchedEffect(Unit) {
@@ -195,6 +196,7 @@ private fun EditorApp() {
     ) {
         Scaffold(
             containerColor = Ink,
+            snackbarHost = { SnackbarHost(hostState = snackbarHostState) },
             topBar = {
                 TopAppBar(
                     title = {
@@ -295,6 +297,26 @@ private fun EditorApp() {
                                 hasChanges = true
                                 undoStack = emptyList()
                                 redoStack = emptyList()
+                                val successText = when {
+                                    action == "official_f1_2026" -> "Preset lineup F1 berhasil diterapkan."
+                                    action == "rename_divisions" -> "Label divisi berhasil diperbarui."
+                                    action.startsWith("swap_teams|") -> "Tim berhasil ditukar antar divisi."
+                                    action.startsWith("move_driver|") -> "Pembalap berhasil dipindahkan."
+                                    action == "max_balance" -> "Saldo berhasil diatur ke £2 miliar."
+                                    action == "unlock_hq" -> "Upgrade HQ berhasil dibuka."
+                                    action == "max_research" -> "Riset berhasil dimaksimalkan."
+                                    action == "debug_unlock" -> "Debug unlock berhasil diaktifkan."
+                                    action == "unlock_suppliers" -> "Supplier berhasil dibuka."
+                                    else -> "Perubahan berhasil diterapkan."
+                                }
+                                scope.launch { snackbarHostState.showSnackbar(successText) }
+                            } else {
+                                val failureText = when {
+                                    action == "official_f1_2026" -> "Preset gagal: struktur divisi, tim, atau roster tidak cocok."
+                                    action == "rename_divisions" -> "Nama divisi tidak tersimpan sebagai teks di format save ini."
+                                    else -> "Operasi gagal. Data save tidak diubah."
+                                }
+                                scope.launch { snackbarHostState.showSnackbar(failureText) }
                             }
                         },
                         onApplyTeamColor = { colorPath, preset ->
@@ -312,6 +334,9 @@ private fun EditorApp() {
                                 hasChanges = true
                                 undoStack = emptyList()
                                 redoStack = emptyList()
+                                scope.launch { snackbarHostState.showSnackbar("Warna tim berhasil diterapkan.") }
+                            } else {
+                                scope.launch { snackbarHostState.showSnackbar("Gagal menerapkan warna tim.") }
                             }
                         }
                     )
@@ -1142,7 +1167,7 @@ private fun WorldSettingsPage(doc:Mm4SaveCodec.Document,onEdit:(String,List<Stri
             GlassCard(Modifier.fillMaxWidth()) {
                 Text(worldGroupLabel(group.key),fontWeight=FontWeight.Bold)
                 Text(categoryDescription(group.value,flatten(group.value).size),color=Muted,fontSize=10.sp)
-                flatten(group.value).filter { it.second.isJsonPrimitive }.forEach { (path,value) ->
+                flatten(group.value).filter { (path,value) -> path.none { it == "\\$ref" || it == "\\$version" } && value.isJsonPrimitive }.forEach { (path,value) ->
                     Row(Modifier.fillMaxWidth().clickable { onEdit("Game Data",listOf(group.key)+path,value) }.padding(vertical=6.dp),verticalAlignment=Alignment.CenterVertically) {
                         Text(humanLabel(path.last()),Modifier.weight(1f),fontSize=11.sp)
                         Text(preview(value),color=Gold,fontSize=11.sp)
@@ -1501,7 +1526,7 @@ private fun AdvancedPage(doc: Mm4SaveCodec.Document, onEdit: (String,List<String
     var query by remember { mutableStateOf("") }
     val fields=remember(doc.data,query) {
         flatten(doc.data).filter { (path,value) ->
-            value.isJsonPrimitive && (query.isBlank() ||
+            path.none { it == "\\$ref" || it == "\\$version" } && value.isJsonPrimitive && (query.isBlank() ||
                 humanizeField(path.last()).contains(query,true) ||
                 path.joinToString(" ").contains(query,true))
         }
@@ -1660,32 +1685,38 @@ private val OfficialF1Lineup2026=listOf(
     OfficialF1Team("Cadillac Formula 1 Team","Cadillac",listOf("Sergio" to "Pérez","Valtteri" to "Bottas"))
 )
 
-private fun divisionTeamIds(data:JsonObject,divisionNames:Set<String>):List<String> {
-    val candidates=mutableListOf<List<String>>()
-    fun visit(node:JsonElement,inheritedName:String?) {
-        if(node.isJsonObject) {
-            val obj=node.asJsonObject
-            val localName=listOf("name","m_Name","displayName","m_DisplayName","seriesName","m_SeriesName")
-                .firstNotNullOfOrNull { key -> obj.get(key)?.takeIf { it.isJsonPrimitive && it.asJsonPrimitive.isString }?.asString }
-                ?: inheritedName
-            obj.entrySet().forEach { (key,value) ->
-                if(key.contains("team",true) && value.isJsonArray && localName!=null && localName in divisionNames) {
-                    val refs=value.asJsonArray.mapNotNull { item ->
-                        item.takeIf { it.isJsonObject }?.asJsonObject?.get("\$ref")?.asString
-                    }
-                    if(refs.isNotEmpty()) candidates.add(refs)
-                }
-                visit(value,localName)
-            }
-        } else if(node.isJsonArray) node.asJsonArray.forEach { visit(it,inheritedName) }
+private fun championshipEntityById(data:JsonObject, championshipId:Int):JsonObject? {
+    val all=collectObjectsWithId(data).associateBy { it.second.get("\$id")?.asString }
+    val refs=data.getAsJsonObject("championshipManager")?.getAsJsonArray("championships") ?: return null
+    return refs.firstNotNullOfOrNull { ref ->
+        val id=ref.takeIf { it.isJsonObject }?.asJsonObject?.get("\$ref")?.asString ?: return@firstNotNullOfOrNull null
+        all[id]?.second?.takeIf { it.get("m_ID")?.asInt==championshipId }
     }
-    data.get("championshipManager")?.let { visit(it,null) }
-    return candidates.firstOrNull().orEmpty()
+}
+
+internal fun careerDivisionLabel(championshipId:Int):String = when(championshipId) {
+    0 -> "F1 • World Motorsport"
+    1 -> "F2 • Asia Pacific Super Cup"
+    2 -> "F3 • European Racing"
+    3 -> "F4 • Open Wheel Sprint"
+    else -> "Divisi $championshipId"
+}
+
+private fun divisionTeamIds(data:JsonObject,divisionId:Int):List<String> {
+    val championship=championshipEntityById(data,divisionId) ?: return emptyList()
+    val ids=championship.getAsJsonArray("m_TeamIDs") ?: return emptyList()
+    val teamObjects=collectObjectsWithId(data).map { it.second }
+    return ids.mapNotNull { teamId ->
+        val numericId=teamId.takeIf { it.isJsonPrimitive && it.asJsonPrimitive.isNumber }?.asInt ?: return@mapNotNull null
+        teamObjects.firstOrNull { it.get("m_TeamID")?.takeIf { v -> v.isJsonPrimitive && v.asJsonPrimitive.isNumber }?.asInt==numericId }
+            ?.get("\$id")?.asString
+    }
 }
 
 internal fun applyOfficialF1Preset2026(data:JsonObject):Boolean {
-    val teamIds=divisionTeamIds(data,setOf("F1","World Motorsport"))
-    if(teamIds.size!=OfficialF1Lineup2026.size || teamIds.distinct().size!=teamIds.size) return false
+    val teamIds=divisionTeamIds(data,0)
+    val lineup=OfficialF1Lineup2026.take(10)
+    if(teamIds.size!=10 || teamIds.distinct().size!=10 || lineup.size!=10) return false
     val all=collectObjectsWithId(data).associateBy { it.second.get("\$id")?.asString }
     val driverRefs=data.getAsJsonObject("driverManager")?.getAsJsonArray("m_Drivers") ?: return false
     val drivers=driverRefs.mapNotNull { it.takeIf { v -> v.isJsonObject }?.asJsonObject?.get("\$ref")?.asString }
@@ -1698,7 +1729,7 @@ internal fun applyOfficialF1Preset2026(data:JsonObject):Boolean {
     }
     if(driverGroups.any { it.size!=2 }) return false
     teamObjects.forEachIndexed { index,team ->
-        val preset=OfficialF1Lineup2026[index]
+        val preset=lineup[index]
         if(!team.has("name")) return false
         team.addProperty("name",preset.name)
         if(team.has("shortName")) team.addProperty("shortName",preset.shortName)
@@ -1832,15 +1863,15 @@ private fun GodModePage(doc:Mm4SaveCodec.Document,onAction:(String)->Unit) {
         item {
             GlassCard(Modifier.fillMaxWidth()) {
                 Text("OFFICIAL F1 TEAMS AND DRIVER",color=Gold,fontWeight=FontWeight.Bold)
-                Text("Mengganti 11 nama tim dan 22 pembalap pada divisi F1 menggunakan susunan resmi 2026. Urutan tim mengikuti urutan yang tersimpan pada championship.",color=Muted,fontSize=10.sp)
-                Text("Syarat: divisi F1/World Motorsport berisi tepat 11 tim dan setiap tim memiliki tepat 2 pembalap dengan kontrak yang terbaca.",color=Gold,fontSize=10.sp)
+                Text("Mengisi 10 slot F1 dengan 10 tim dan 20 pembalap. Cadillac tidak masuk grid F1 dan dialokasikan ke F2 sesuai aturan template.",color=Muted,fontSize=10.sp)
+                Text("Preset membaca m_TeamIDs pada championship ID 0 lalu mencocokkan m_TeamID dan kontrak pembalap.",color=Gold,fontSize=10.sp)
                 Button(onClick={onAction("official_f1_2026")},modifier=Modifier.fillMaxWidth(),colors=ButtonDefaults.buttonColors(containerColor=Red)) { Text("TERAPKAN LINEUP F1 2026") }
             }
         }
         item {
             GlassCard(Modifier.fillMaxWidth()) {
                 Text("NAMA DIVISI RESMI",color=Gold,fontWeight=FontWeight.Bold)
-                Text("Ubah nama divisi bawaan menjadi F1, F2, F3, dan F4. Hanya nama yang cocok persis yang akan diganti.",color=Muted,fontSize=10.sp)
+                Text("Divisi MM4 disimpan sebagai ID numerik 0–3, bukan nama teks. Editor memakai label F1, F2, F3, dan F4 berdasarkan ID tanpa menambahkan properti nama fiktif ke save.",color=Muted,fontSize=10.sp)
                 Button(onClick={onAction("rename_divisions")},modifier=Modifier.fillMaxWidth(),colors=ButtonDefaults.buttonColors(containerColor=Blue)) { Text("UBAH NAMA DIVISI F1–F4") }
             }
         }
@@ -2227,6 +2258,7 @@ internal fun editorBounds(document:Mm4SaveCodec.Document?,root:String,path:List<
     if(root!="Game Data" || path.isEmpty()) return null to null
     return when {
         path.last() in setOf("m_Stat","m_Potential") -> "0" to "20"
+        path==listOf("financeManager","m_Balance") -> "0" to "2000000000"
         path.firstOrNull()=="headquarters" && path.lastOrNull()=="State" -> "0" to "2"
         path.firstOrNull()=="headquarters" && path.lastOrNull()=="pathType" -> "0" to "4"
         path.size==4 && path[0]=="headquarters" && path[1]=="m_CurrentTierInformation" && path[3]=="Value" -> {
@@ -2288,6 +2320,16 @@ private fun EditValueDialog(target: EditTarget, onClose: () -> Unit, onSave: (Js
                         Text(value + " • batas " + target.minValue + "–" + target.maxValue, fontSize = 18.sp, fontWeight = FontWeight.Bold, color = Gold)
                         Slider(value=selected,onValueChange={value=it.toInt().coerceIn(min.toInt(),max.toInt()).toString()},valueRange=min..max,steps=(max-min-1f).toInt().coerceAtLeast(0))
                         Text("Nilai dibatasi sesuai rentang yang dikenali dari struktur save.",color=Muted,fontSize=10.sp)
+                    }
+                    isNumber && target.path==listOf("financeManager","m_Balance") -> {
+                        OutlinedTextField(
+                            value=value,
+                            onValueChange={ typed -> if(typed.isEmpty() || typed.all { it.isDigit() }) value=typed },
+                            modifier=Modifier.fillMaxWidth(),
+                            label={ Text("Saldo (£)") },
+                            supportingText={ Text("Masukkan 0 sampai £2.000.000.000") },
+                            singleLine=true
+                        )
                     }
                     isNumber -> {
                         Text(value, fontSize = 24.sp, fontWeight = FontWeight.Bold, color = Gold)
