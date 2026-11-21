@@ -25,7 +25,11 @@ object Mm4SaveCodec {
     data class Document(
         val info: JsonObject,
         val data: JsonObject,
-        val sourceName: String
+        val sourceName: String,
+        internal val originalInfoCompressed: ByteArray? = null,
+        internal val originalDataCompressed: ByteArray? = null,
+        internal val originalInfoSnapshot: JsonObject? = null,
+        internal val originalDataSnapshot: JsonObject? = null
     )
 
     fun decode(bytes: ByteArray, sourceName: String = "save.msv"): Document {
@@ -67,7 +71,15 @@ object Mm4SaveCodec {
         require(infoJson.isJsonObject && dataJson.isJsonObject) {
             "Blok Save Info atau Game Data bukan JSON object."
         }
-        return Document(infoJson.asJsonObject, dataJson.asJsonObject, sourceName)
+        return Document(
+            info = infoJson.asJsonObject,
+            data = dataJson.asJsonObject,
+            sourceName = sourceName,
+            originalInfoCompressed = bytes.copyOfRange(HEADER_SIZE, split),
+            originalDataCompressed = bytes.copyOfRange(split, bytes.size),
+            originalInfoSnapshot = infoJson.asJsonObject.deepCopy(),
+            originalDataSnapshot = dataJson.asJsonObject.deepCopy()
+        )
     }
 
     fun encode(document: Document): ByteArray {
@@ -77,8 +89,18 @@ object Mm4SaveCodec {
             "Data hasil edit melebihi batas ukuran blok."
         }
 
-        val infoCompressed = deflate(infoPlain)
-        val dataCompressed = deflate(dataPlain)
+        // Keep untouched game-generated LZ4 blocks byte-for-byte. This avoids
+        // needlessly rewriting opaque save sections when only one JSON tree changed.
+        val infoCompressed = if (
+            document.originalInfoCompressed != null &&
+            document.originalInfoSnapshot != null &&
+            canonical(document.info) == canonical(document.originalInfoSnapshot)
+        ) document.originalInfoCompressed else deflate(infoPlain)
+        val dataCompressed = if (
+            document.originalDataCompressed != null &&
+            document.originalDataSnapshot != null &&
+            canonical(document.data) == canonical(document.originalDataSnapshot)
+        ) document.originalDataCompressed else deflate(dataPlain)
         val totalSize = HEADER_SIZE.toLong() + infoCompressed.size + dataCompressed.size
         require(totalSize <= MAX_CONTAINER_BYTES) { "Save hasil edit terlalu besar." }
 

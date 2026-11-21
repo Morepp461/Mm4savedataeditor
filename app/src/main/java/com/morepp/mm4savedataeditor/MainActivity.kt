@@ -7,6 +7,7 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -14,6 +15,18 @@ import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.togetherWith
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.keyframes
+import androidx.compose.foundation.Image
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -43,6 +56,7 @@ import com.google.gson.JsonObject
 import com.google.gson.JsonParser
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 
 private val Ink = Color(0xFF101A3A)
@@ -63,7 +77,9 @@ class MainActivity : ComponentActivity() {
 private data class EditTarget(
     val root: String,
     val path: List<String>,
-    val value: JsonElement
+    val value: JsonElement,
+    val minValue: String? = null,
+    val maxValue: String? = null
 )
 
 private data class EditOperation(
@@ -92,6 +108,13 @@ private fun EditorApp() {
     var confirmDiscardOpen by remember { mutableStateOf(false) }
     var undoStack by remember { mutableStateOf(emptyList<EditOperation>()) }
     var redoStack by remember { mutableStateOf(emptyList<EditOperation>()) }
+    var showIntro by remember { mutableStateOf(true) }
+    var showTutorial by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) {
+        delay(2600)
+        showIntro = false
+        if (!context.getSharedPreferences("mm4_editor", android.content.Context.MODE_PRIVATE).getBoolean("tutorial_seen", false)) showTutorial = true
+    }
 
     val openFile = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri: Uri? ->
         if (uri != null) scope.launch {
@@ -146,7 +169,22 @@ private fun EditorApp() {
                         }
                         val output = context.contentResolver.openOutputStream(uri, "wt")
                             ?: error("Penyedia file tidak bisa membuka tujuan export untuk ditulis.")
-                        output.use { stream -> stream.write(bytes); stream.flush() }
+                        output.use { stream ->
+                            stream.write(bytes)
+                            stream.flush()
+                        }
+                        // SAF providers can create a destination entry even when a write
+                        // was interrupted. Re-open the exact URI and validate the persisted
+                        // bytes before reporting export success.
+                        val persisted = context.contentResolver.openInputStream(uri)
+                            ?: error("File hasil export tidak dapat dibaca kembali.")
+                        val persistedBytes = persisted.use { readSaveBytes(it) }
+                        check(persistedBytes.isNotEmpty()) { "Export menghasilkan file kosong (0 byte)." }
+                        val persistedDocument = Mm4SaveCodec.decode(persistedBytes, current.sourceName)
+                        val persistedMismatch = Mm4SaveCodec.firstDifference(persistedDocument, current)
+                        check(persistedMismatch == null) {
+                            "Verifikasi file setelah ditulis gagal pada $persistedMismatch. Jangan gunakan file ini."
+                        }
                     }
                     hasChanges = false
                 } catch (failure: Exception) {
@@ -258,10 +296,32 @@ private fun EditorApp() {
                         onSection = { selectedTab = it; selectedDriver = null },
                         selectedDriver = selectedDriver,
                         onDriver = { selectedDriver = it },
-                        onEdit = { root, path, value -> if (value.isJsonPrimitive) editTarget = EditTarget(root, path, value.deepCopy()) },
+                        onEdit = { root, path, value ->
+                            if (value.isJsonPrimitive) {
+                                val bounds = editorBounds(document, root, path)
+                                editTarget = EditTarget(root, path, value.deepCopy(), bounds.first, bounds.second)
+                            }
+                        },
                         onGodAction = { action ->
                             val latest = document ?: return@CareerWorkspace
                             val changed = applyGodModeAction(latest, action)
+                            if (changed != null) {
+                                document = changed
+                                hasChanges = true
+                                undoStack = emptyList()
+                                redoStack = emptyList()
+                            }
+                        },
+                        onApplyTeamColor = { colorPath, preset ->
+                            val latest = document ?: return@CareerWorkspace
+                            val changed = mutateDocument(latest, "Game Data") { root ->
+                                val target = resolvePath(root, colorPath)?.takeIf { it.isJsonObject }?.asJsonObject ?: return@mutateDocument false
+                                var applied = false
+                                preset.entrySet().forEach { (channel, channelValue) ->
+                                    if (target.has(channel)) { target.add(channel, channelValue.deepCopy()); applied = true }
+                                }
+                                applied
+                            }
                             if (changed != null) {
                                 document = changed
                                 hasChanges = true
@@ -333,6 +393,73 @@ private fun EditorApp() {
                     }
                 }
             )
+        }
+        if (showIntro) IntroSplash()
+        if (showTutorial) AlertDialog(
+            onDismissRequest = {
+                showTutorial = false
+                context.getSharedPreferences("mm4_editor", android.content.Context.MODE_PRIVATE).edit().putBoolean("tutorial_seen", true).apply()
+            },
+            title = { Text("Selamat datang di MM4 Save Data Editor") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(9.dp)) {
+                    Text("Panduan singkat sebelum mulai:")
+                    InfoLine("1. Buka save", "Pilih file career .msv dari penyimpanan")
+                    InfoLine("2. Edit data", "Gunakan Drivers, Staff, Teams, Cars, Finance, dan HQ")
+                    InfoLine("3. Undo / Redo", "Batalkan perubahan sebelum export")
+                    InfoLine("4. Export", "Simpan sebagai file baru, jangan timpa save asli")
+                    Text("Beberapa data lanjutan bergantung pada struktur career yang sedang dibuka.", color = Muted, fontSize = 11.sp)
+                }
+            },
+            confirmButton = {
+                Button(onClick = {
+                    showTutorial = false
+                    context.getSharedPreferences("mm4_editor", android.content.Context.MODE_PRIVATE).edit().putBoolean("tutorial_seen", true).apply()
+                }) { Text("MULAI") }
+            }
+        )
+
+    }
+}
+
+@Composable
+private fun IntroSplash() {
+    val transition = rememberInfiniteTransition(label = "intro-motion")
+    val pulse by transition.animateFloat(
+        initialValue = 0.94f,
+        targetValue = 1.04f,
+        animationSpec = infiniteRepeatable(tween(1100, easing = FastOutSlowInEasing), RepeatMode.Reverse),
+        label = "logo-pulse"
+    )
+    var showEndingMark by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) { delay(1900); showEndingMark = true }
+    Dialog(onDismissRequest = {}, properties = DialogProperties(usePlatformDefaultWidth = false)) {
+        Box(
+            Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(Color(0xFF0B1430), Color(0xFF182B54), Color(0xFF0B1430)))),
+            contentAlignment = Alignment.Center
+        ) {
+            Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                Image(
+                    painter = painterResource(id = R.drawable.mm4_app_logo),
+                    contentDescription = "MM4 Save Data Editor",
+                    modifier = Modifier.size(132.dp).graphicsLayer {
+                        scaleX = pulse
+                        scaleY = pulse
+                        rotationY = (1f - pulse) * 180f
+                    }
+                )
+                Text("MM4 SAVE DATA EDITOR", color = Color.White, fontSize = 19.sp, fontWeight = FontWeight.Black, letterSpacing = 1.8.sp)
+                Text("CAREER DATA WORKSHOP", color = Gold, fontSize = 10.sp, letterSpacing = 2.4.sp)
+                LinearProgressIndicator(
+                    Modifier.width(176.dp).padding(top = 8.dp),
+                    color = Red,
+                    trackColor = Color.White.copy(alpha = 0.14f)
+                )
+                AnimatedVisibility(visible = showEndingMark, enter = fadeIn(tween(500)) + slideInVertically(tween(500)) { it / 2 }) {
+                    Text("Created by : Morepp", color = Muted, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                }
+            }
+            Text("VERSION 1.5 • PERSONAL BUILD", Modifier.align(Alignment.BottomCenter).padding(bottom = 28.dp), color = Muted.copy(alpha = 0.7f), fontSize = 9.sp, letterSpacing = 1.2.sp)
         }
     }
 }
@@ -443,14 +570,15 @@ private fun CareerHeader(
 }
 
 
-private val Sections = listOf("Overview", "Drivers", "Staff", "Teams", "Cars", "Shop", "Finance", "HQ", "World", "Diagnostics", "Save Info", "Advanced", "God Mode")
+private val Sections = listOf("Overview", "Drivers", "Staff", "Teams", "Cars", "Finance", "HQ", "World", "Diagnostics", "Save Info", "Advanced", "God Mode")
 
 @Composable
 private fun CareerWorkspace(
     document: Mm4SaveCodec.Document, section: String, onSection: (String) -> Unit,
     selectedDriver: String?, onDriver: (String?) -> Unit,
     onEdit: (String, List<String>, JsonElement) -> Unit,
-    onGodAction: (String) -> Unit
+    onGodAction: (String) -> Unit,
+    onApplyTeamColor: (List<String>, JsonObject) -> Unit
 ) {
     Column(Modifier.fillMaxSize()) {
         LazyRow(Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 4.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -469,10 +597,9 @@ private fun CareerWorkspace(
             when (targetSection) {
                 "Overview" -> OverviewPage(document, onSection)
                 "Drivers" -> DriverPage(document, selectedDriver, onDriver, onEdit)
-                "Staff" -> EntityCatalogPage(document, "staff", onEdit)
-                "Teams" -> EntityCatalogPage(document, "team", onEdit)
-                "Cars" -> EntityCatalogPage(document, "car", onEdit)
-                "Shop" -> ComponentMarketplacePage(document, onEdit)
+                "Staff" -> EntityCatalogPage(document, "staff", onEdit, onApplyTeamColor)
+                "Teams" -> EntityCatalogPage(document, "team", onEdit, onApplyTeamColor)
+                "Cars" -> EntityCatalogPage(document, "car", onEdit, onApplyTeamColor)
                 "Finance" -> FinancePage(document, onEdit)
                 "HQ" -> HqPage(document, onEdit)
                 "World" -> WorldSettingsPage(document, onEdit)
@@ -600,12 +727,16 @@ private fun DriverPage(doc: Mm4SaveCodec.Document, selected: String?, onSelect: 
                         val value=details?.get(key)
                         if(value!=null && value.isJsonPrimitive) Row(Modifier.fillMaxWidth().clickable { onEdit("Game Data",profilePath+listOf("m_PersonDetails",key),value) }.padding(vertical=5.dp),verticalAlignment=Alignment.CenterVertically) {
                             Text(humanizeField(key),Modifier.weight(1f),color=Muted,fontSize=11.sp)
-                            Text(preview(value),color=Gold,fontWeight=FontWeight.SemiBold,fontSize=11.sp)
+                            Text(driverProfileDisplayValue(key,value),color=Gold,fontWeight=FontWeight.SemiBold,fontSize=11.sp)
                             Icon(Icons.Default.Edit,null,tint=Muted,modifier=Modifier.size(14.dp))
                         }
                     }
                     val nationality=details?.getAsJsonObject("nationality")?.get("mNationalityID")
-                    if(nationality!=null) InfoLine("Nationality", nationalityLabel(nationality))
+                    if(nationality!=null) Row(Modifier.fillMaxWidth().clickable { onEdit("Game Data",profilePath+listOf("m_PersonDetails","nationality","mNationalityID"),nationality) }.padding(vertical=5.dp),verticalAlignment=Alignment.CenterVertically) {
+                        Text("Nationality",Modifier.weight(1f),color=Muted,fontSize=11.sp)
+                        Text(nationalityLabel(nationality),color=Gold,fontWeight=FontWeight.SemiBold,fontSize=10.sp)
+                        Icon(Icons.Default.Edit,null,tint=Muted,modifier=Modifier.size(14.dp))
+                    }
                 }
             }
             item {
@@ -631,9 +762,9 @@ private fun DriverPage(doc: Mm4SaveCodec.Document, selected: String?, onSelect: 
                     Row(verticalAlignment=Alignment.CenterVertically) {
                         Column(Modifier.weight(1f)) {
                             Text(label,fontWeight=FontWeight.SemiBold,fontSize=12.sp)
-                            Text("Potential ${potential?.asString ?: "—"} / 20",color=Muted,fontSize=9.sp)
+                            Text("Potential ${displayIntegerStat(potential)} / 20",color=Muted,fontSize=9.sp)
                         }
-                        Text("${value?.asString ?: "—"} / 20",color=Gold,fontWeight=FontWeight.Bold)
+                        Text("${displayIntegerStat(value)} / 20",color=Gold,fontWeight=FontWeight.Bold)
                         IconButton(onClick={if(value!=null) onEdit("Game Data",profilePath+listOf("m_Stats","m_Stats","[$n]","m_Stat"),value)}) { Icon(Icons.Default.Edit,null,tint=Muted) }
                     }
                     Row(horizontalArrangement=Arrangement.spacedBy(8.dp)) {
@@ -713,7 +844,7 @@ private fun TeamPage(doc: Mm4SaveCodec.Document, onEdit: (String,List<String>,Js
 
 
 @Composable
-private fun EntityCatalogPage(doc: Mm4SaveCodec.Document, category: String, onEdit: (String,List<String>,JsonElement)->Unit) {
+private fun EntityCatalogPage(doc: Mm4SaveCodec.Document, category: String, onEdit: (String,List<String>,JsonElement)->Unit, onApplyTeamColor: (List<String>,JsonObject)->Unit) {
     data class CatalogRecord(val path:List<String>,val data:JsonObject,val name:String,val type:String,val group:String="")
     var selected by remember(category) { mutableStateOf<String?>(null) }
     var query by remember(category) { mutableStateOf("") }
@@ -752,21 +883,21 @@ private fun EntityCatalogPage(doc: Mm4SaveCodec.Document, category: String, onEd
                 all.mapNotNull { (path,obj) ->
                     val id=obj.get("\$id")?.asString ?: return@mapNotNull null
                     if(id in driverIds) return@mapNotNull null
-                    val stats=obj.getAsJsonObject("stats") ?: return@mapNotNull null
+                    val stats=safeObject(obj,"stats") ?: return@mapNotNull null
                     val role=when {
                         stats.has("m_Engineer") -> "Designer"
                         stats.has("m_Mechanic") -> "Mechanic"
                         stats.has("m_Strategist") -> "Strategist"
                         else -> return@mapNotNull null
                     }
-                    val person=obj.getAsJsonObject("m_PersonDetails")
+                    val person=safeObject(obj,"m_PersonDetails")
                     val personName=person?.get("name")?.takeIf { it.isJsonPrimitive }?.asString?.trim().orEmpty()
-                    val regen=obj.getAsJsonObject("m_PersonRegenDetails")
+                    val regen=safeObject(obj,"m_PersonRegenDetails")
                     val displayName=personName.ifBlank {
                         val seed=regen?.get("regenSeed")?.asString ?: id
                         "Prospek " + role + " • " + seed.takeLast(5)
                     }
-                    val teamRef=obj.getAsJsonObject("contract")?.getAsJsonObject("m_Team")?.get("\$ref")?.asString
+                    val teamRef=safeObject(obj,"contract")?.let { safeObject(it,"m_Team") }?.get("\$ref")?.asString
                     val group=teamRef?.let { teamNames[it] } ?: "Free agent / belum ditempatkan"
                     val isApplicant=path.any { it=="m_Applicants" }
                     CatalogRecord(path,obj,displayName,if(isApplicant) role + " • Kandidat" else role,group)
@@ -775,6 +906,9 @@ private fun EntityCatalogPage(doc: Mm4SaveCodec.Document, category: String, onEd
         }
     }
     val chosen=records.firstOrNull { it.path.joinToString("/") == selected }
+    val colorPath=if(category=="team") findObjectPath(records.firstOrNull { it.path.joinToString("/") == selected }?.data ?: JsonObject(),"m_TeamColors") ?: emptyList() else emptyList()
+    val colorObject=if(colorPath.isNotEmpty()) records.firstOrNull { it.path.joinToString("/") == selected }?.data?.let { root -> resolvePath(root,colorPath)?.takeIf { node -> node.isJsonObject }?.asJsonObject } else null
+    val colorPresets=remember(doc.data) { collectTeamColorPresets(doc.data) }
     if(chosen==null) {
         LazyColumn(contentPadding=PaddingValues(14.dp),verticalArrangement=Arrangement.spacedBy(9.dp)) {
             item {
@@ -810,7 +944,7 @@ private fun EntityCatalogPage(doc: Mm4SaveCodec.Document, category: String, onEd
                 isCatalogPrimitiveEditable(category, row.first)
         }
         val isCar=category=="car"
-        val stats=if(category=="staff") chosen.data.getAsJsonObject("stats")?.getAsJsonArray("m_Stats") else chosen.data.getAsJsonArray("m_Stats")
+        val stats=if(category=="staff") safeObject(chosen.data,"stats")?.let { safeArray(it,"m_Stats") } else safeArray(chosen.data,"m_Stats")
         val labels=when {
             isCar -> listOf("Top Speed","Acceleration","Braking","Low Speed Cornering","High Speed Cornering","Tyre Wear","Fuel Efficiency")
             category=="staff" && chosen.type.contains("Designer",true) -> listOf("Performance","Reliability","Leadership","Bonus","Success Rate")
@@ -819,6 +953,28 @@ private fun EntityCatalogPage(doc: Mm4SaveCodec.Document, category: String, onEd
             else -> emptyList()
         }
         LazyColumn(contentPadding=PaddingValues(14.dp),verticalArrangement=Arrangement.spacedBy(7.dp)) {
+            if(category=="team" && colorObject!=null && colorPresets.isNotEmpty()) item {
+                GlassCard(Modifier.fillMaxWidth()) {
+                    Text("TEAM COLORS",color=Gold,fontWeight=FontWeight.Bold,fontSize=11.sp)
+                    Text("Pilih warna dari kombinasi tim yang sudah tersimpan di career ini. Tidak perlu mengetik RGB atau kode warna.",color=Muted,fontSize=10.sp)
+                    colorObject.entrySet().filter { it.value.isJsonObject }.forEach { (colorName,_) ->
+                        Text(humanizeField(colorName),fontWeight=FontWeight.SemiBold,fontSize=11.sp)
+                        LazyRow(horizontalArrangement=Arrangement.spacedBy(8.dp)) {
+                            items(colorPresets) { preset ->
+                                Column(
+                                    Modifier.width(64.dp).clip(RoundedCornerShape(10.dp))
+                                        .clickable { onApplyTeamColor(chosen.path+colorPath+listOf(colorName),preset.channels) }
+                                        .padding(4.dp),
+                                    horizontalAlignment=Alignment.CenterHorizontally
+                                ) {
+                                    Box(Modifier.size(34.dp).clip(RoundedCornerShape(9.dp)).background(teamColorChipColor(preset.channels)).border(1.dp,Color.White.copy(alpha=.3f),RoundedCornerShape(9.dp)))
+                                    Text(preset.label,maxLines=1,overflow=TextOverflow.Ellipsis,fontSize=8.sp,color=Muted)
+                                }
+                            }
+                        }
+                    }
+                }
+            }
             item {
                 Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically) {
                     IconButton(onClick={selected=null}) { Icon(Icons.Default.ArrowBack,"Kembali") }
@@ -843,7 +999,7 @@ private fun EntityCatalogPage(doc: Mm4SaveCodec.Document, category: String, onEd
                     GlassCard(Modifier.fillMaxWidth().clickable { onEdit("Game Data",chosen.path+(if(category=="staff") listOf("stats","m_Stats","[$index]","m_Stat") else listOf("m_Stats","[$index]")),statValue) }) {
                         Row(verticalAlignment=Alignment.CenterVertically) {
                             Text(labels.getOrNull(index) ?: ("Attribute " + (index+1)),Modifier.weight(1f),fontWeight=FontWeight.SemiBold)
-                            Text(preview(statValue),color=Gold,fontWeight=FontWeight.Bold)
+                            Text(displayIntegerStat(statValue),color=Gold,fontWeight=FontWeight.Bold)
                             Icon(Icons.Default.Edit,null,tint=Muted,modifier=Modifier.size(15.dp))
                         }
                     }
@@ -896,9 +1052,71 @@ internal fun isStaffEditablePath(path: List<String>): Boolean {
     return compensationTerms.any { term -> root.contains(term, ignoreCase = true) }
 }
 
-private fun nationalityLabel(value: JsonElement): String { return if (value.isJsonPrimitive) "Kode negara ${value.asString} (pemetaan ID MM4 belum tersedia)" else "Nationality belum dikenali" }
 
-private fun collectObjectsWithId(root:JsonElement):List<Pair<List<String>,JsonObject>> {
+private data class TeamColorPreset(val label:String,val channels:JsonObject)
+
+private fun collectTeamColorPresets(root:JsonElement):List<TeamColorPreset> {
+    val found=mutableListOf<TeamColorPreset>()
+    fun visit(node:JsonElement) {
+        if(node.isJsonObject) {
+            node.asJsonObject.entrySet().forEach { (key,value) ->
+                if(key=="m_TeamColors" && value.isJsonObject) {
+                    value.asJsonObject.entrySet().forEach { (name,color) ->
+                        if(color.isJsonObject) {
+                            val channels=color.asJsonObject
+                            if(channels.has("r") && channels.has("g") && channels.has("b")) found.add(TeamColorPreset(humanizeField(name),channels.deepCopy()))
+                        }
+                    }
+                }
+                visit(value)
+            }
+        } else if(node.isJsonArray) node.asJsonArray.forEach { visit(it) }
+    }
+    visit(root)
+    return found.distinctBy { preset -> listOf("r","g","b","a").joinToString(":") { preset.channels.get(it)?.toString() ?: "" } }
+}
+
+private fun findObjectPath(root:JsonElement,targetKey:String):List<String>? {
+    fun visit(node:JsonElement,path:List<String>):List<String>? {
+        if(node.isJsonObject) {
+            node.asJsonObject.entrySet().forEach { (key,value) ->
+                if(key==targetKey && value.isJsonObject) return path+key
+                visit(value,path+key)?.let { return it }
+            }
+        } else if(node.isJsonArray) node.asJsonArray.forEachIndexed { index,value -> visit(value,path+"[$index]")?.let { return it } }
+        return null
+    }
+    return visit(root,emptyList())
+}
+
+private fun teamColorChipColor(channels:JsonObject):Color {
+    fun channel(key:String):Float {
+        val raw=channels.get(key)?.takeIf { it.isJsonPrimitive }?.asFloat ?: 0f
+        return if(raw<=1f) raw.coerceIn(0f,1f) else (raw/255f).coerceIn(0f,1f)
+    }
+    return Color(channel("r"),channel("g"),channel("b"),1f)
+}
+
+private fun nationalityLabel(value: JsonElement): String = nationalityNameFromCareerId(value.asString)
+
+private fun nationalityNameFromCareerId(id:String):String = when(id) {
+    else -> "ID $id • belum ada di katalog save"
+}
+
+private fun safeObject(parent:JsonObject,key:String):JsonObject? = parent.get(key)?.takeIf { it.isJsonObject }?.asJsonObject
+private fun safeArray(parent:JsonObject,key:String):JsonArray? = parent.get(key)?.takeIf { it.isJsonArray }?.asJsonArray
+
+internal fun driverProfileDisplayValue(key:String,value:JsonElement):String = when(key) {
+    "tweetHandle" -> value.asString.takeUnless { it.startsWith("MMM_TweetHandles_",true) }.orEmpty().ifBlank { "Belum diatur" }
+    "dateOfBirth" -> runCatching { java.time.LocalDate.parse(value.asString.take(10)).format(java.time.format.DateTimeFormatter.ofPattern("dd MMM yyyy",java.util.Locale("id","ID"))) }.getOrDefault("Tanggal tidak valid")
+    else -> preview(value)
+}
+
+internal fun displayIntegerStat(value:JsonElement?):String = value?.let { v ->
+    if(v.isJsonPrimitive && v.asJsonPrimitive.isNumber) runCatching { java.math.BigDecimal(v.asString).setScale(0,java.math.RoundingMode.HALF_UP).toPlainString() }.getOrDefault(preview(v)) else preview(v)
+} ?: "—"
+
+internal fun collectObjectsWithId(root:JsonElement):List<Pair<List<String>,JsonObject>> {
     val found=mutableListOf<Pair<List<String>,JsonObject>>()
     fun visit(node:JsonElement,path:List<String>) {
         when {
@@ -1308,7 +1526,7 @@ private fun AdvancedPage(doc: Mm4SaveCodec.Document, onEdit: (String,List<String
         item {
             GlassCard(Modifier.fillMaxWidth()) {
                 Text("PENGATURAN LANJUTAN",color=Gold,fontWeight=FontWeight.Bold,fontSize=11.sp)
-                Text("Semua data lanjutan dikelompokkan berdasarkan bagian game. Cari dengan istilah sederhana, buka kelompok, lalu pilih nilai yang ingin diubah. Tidak perlu menulis JSON.",color=Muted,fontSize=11.sp)
+                Text("Bagian ini berisi field teknis yang belum punya editor khusus. Nama dan lokasi field ditampilkan agar jelas sumber datanya. Ubah hanya nilai yang kamu pahami; data mentah dan referensi internal tidak ditampilkan sebagai pengaturan biasa.",color=Muted,fontSize=11.sp)
                 Text("${fields.size} editable fields",fontSize=20.sp,fontWeight=FontWeight.Black)
             }
         }
@@ -1360,14 +1578,196 @@ private fun worldGroupLabel(key:String):String = when(key) {
     else -> humanLabel(key)
 }
 
+private data class EntityOption(val id:String,val name:String,val detail:String="")
+
+private fun teamOptions(data:JsonObject):List<EntityOption> {
+    val all=collectObjectsWithId(data).associateBy { it.second.get("\$id")?.asString }
+    return data.getAsJsonObject("teamManager")?.getAsJsonArray("m_Teams")?.mapNotNull { ref ->
+        val id=ref.takeIf { it.isJsonObject }?.asJsonObject?.get("\$ref")?.asString ?: return@mapNotNull null
+        val team=all[id]?.second ?: return@mapNotNull null
+        EntityOption(id,team.get("name")?.takeIf { it.isJsonPrimitive }?.asString?.ifBlank { null } ?: "Team $id")
+    }?.distinctBy { it.id }.orEmpty()
+}
+
+private fun driverOptions(data:JsonObject):List<EntityOption> {
+    val all=collectObjectsWithId(data).associateBy { it.second.get("\$id")?.asString }
+    val teams=teamOptions(data).associate { it.id to it.name }
+    return data.getAsJsonObject("driverManager")?.getAsJsonArray("m_Drivers")?.mapNotNull { ref ->
+        val id=ref.takeIf { it.isJsonObject }?.asJsonObject?.get("\$ref")?.asString ?: return@mapNotNull null
+        val driver=all[id]?.second ?: return@mapNotNull null
+        val details=driver.getAsJsonObject("m_PersonDetails")
+        val name=details?.get("name")?.takeIf { it.isJsonPrimitive }?.asString?.ifBlank { null } ?: "Driver $id"
+        val teamId=driver.getAsJsonObject("contract")?.getAsJsonObject("m_Team")?.get("\$ref")?.asString
+        EntityOption(id,name,teamId?.let { teams[it] } ?: "Free Agent")
+    }?.distinctBy { it.id }.orEmpty()
+}
+
+internal fun moveDriverToTeam(data:JsonObject,driverId:String,targetTeamId:String):Boolean {
+    val teams=teamOptions(data)
+    if(teams.none { it.id==targetTeamId }) return false
+    val driver=collectObjectsWithId(data).firstOrNull { it.second.get("\$id")?.asString==driverId }?.second ?: return false
+    val contract=driver.get("contract")?.takeIf { it.isJsonObject }?.asJsonObject ?: return false
+    val teamRef=contract.get("m_Team")?.takeIf { it.isJsonObject }?.asJsonObject ?: return false
+    if(teamRef.get("\$ref")?.asString==targetTeamId) return false
+    val oldTeamId=teamRef.get("\$ref")?.asString
+    teamRef.addProperty("\$ref",targetTeamId)
+    val driverRef=JsonObject().apply { addProperty("\$ref",driverId) }
+    val allTeams=collectObjectsWithId(data).map { it.second }
+    allTeams.forEach { team ->
+        val roster=team.get("m_Drivers")?.takeIf { it.isJsonArray }?.asJsonArray ?: return@forEach
+        for(i in roster.size()-1 downTo 0) {
+            if(roster[i].isJsonObject && roster[i].asJsonObject.get("\$ref")?.asString==driverId) roster.remove(i)
+        }
+    }
+    val target=collectObjectsWithId(data).firstOrNull { it.second.get("\$id")?.asString==targetTeamId }?.second
+    val targetRoster=target?.get("m_Drivers")?.takeIf { it.isJsonArray }?.asJsonArray
+    if(targetRoster!=null && targetRoster.none { it.isJsonObject && it.asJsonObject.get("\$ref")?.asString==driverId }) targetRoster.add(driverRef)
+    // The contract reference is authoritative; roster arrays are synchronized only when present.
+    return oldTeamId!=targetTeamId
+}
+
+internal fun swapTeamsBetweenDivisions(data:JsonObject,teamA:String,teamB:String):Boolean {
+    if(teamA==teamB) return false
+    val valid=teamOptions(data).map { it.id }.toSet()
+    if(teamA !in valid || teamB !in valid) return false
+    data.get("championshipManager")?.takeIf { it.isJsonObject } ?: return false
+    data class Location(val array:JsonArray,val index:Int)
+    val locations=mutableMapOf<String,MutableList<Location>>()
+    fun visit(node:JsonElement,path:List<String>) {
+        when {
+            node.isJsonObject -> node.asJsonObject.entrySet().forEach { (key,value) -> visit(value,path+key) }
+            node.isJsonArray -> {
+                if(path.any { it.contains("team",true) }) {
+                    node.asJsonArray.forEachIndexed { index,value ->
+                        val id=value.takeIf { it.isJsonObject }?.asJsonObject?.get("\$ref")?.asString
+                        if(id!=null && id in valid) locations.getOrPut(id) { mutableListOf() }.add(Location(node.asJsonArray,index))
+                    }
+                }
+                node.asJsonArray.forEachIndexed { index,value -> visit(value,path+"[$index]") }
+            }
+        }
+    }
+    visit(data.getAsJsonObject("championshipManager"),listOf("championshipManager"))
+    val a=locations[teamA]?.firstOrNull() ?: return false
+    val b=locations[teamB]?.firstOrNull() ?: return false
+    val aRef=a.array[a.index].asJsonObject
+    val bRef=b.array[b.index].asJsonObject
+    aRef.addProperty("\$ref",teamB)
+    bRef.addProperty("\$ref",teamA)
+    return true
+}
+
+
+
+private data class OfficialF1Team(val name:String,val shortName:String,val drivers:List<Pair<String,String>>)
+
+private val OfficialF1Lineup2026=listOf(
+    OfficialF1Team("McLaren Mastercard F1 Team","McLaren",listOf("Oscar" to "Piastri","Lando" to "Norris")),
+    OfficialF1Team("Scuderia Ferrari HP","Ferrari",listOf("Charles" to "Leclerc","Lewis" to "Hamilton")),
+    OfficialF1Team("Oracle Red Bull Racing","Red Bull",listOf("Max" to "Verstappen","Isack" to "Hadjar")),
+    OfficialF1Team("Mercedes-AMG Petronas Formula One Team","Mercedes",listOf("George" to "Russell","Kimi" to "Antonelli")),
+    OfficialF1Team("Aston Martin Aramco Formula One Team","Aston Martin",listOf("Lance" to "Stroll","Fernando" to "Alonso")),
+    OfficialF1Team("BWT Alpine Formula One Team","Alpine",listOf("Pierre" to "Gasly","Franco" to "Colapinto")),
+    OfficialF1Team("TGR Haas F1 Team","Haas",listOf("Esteban" to "Ocon","Oliver" to "Bearman")),
+    OfficialF1Team("Visa Cash App Racing Bulls Formula One Team","Racing Bulls",listOf("Arvid" to "Lindblad","Liam" to "Lawson")),
+    OfficialF1Team("Atlassian Williams F1 Racing","Williams",listOf("Alexander" to "Albon","Carlos" to "Sainz")),
+    OfficialF1Team("Audi Revolut F1 Team","Audi",listOf("Nico" to "Hülkenberg","Gabriel" to "Bortoleto")),
+    OfficialF1Team("Cadillac Formula 1 Team","Cadillac",listOf("Sergio" to "Pérez","Valtteri" to "Bottas"))
+)
+
+private fun divisionTeamIds(data:JsonObject,divisionNames:Set<String>):List<String> {
+    val candidates=mutableListOf<List<String>>()
+    fun visit(node:JsonElement,inheritedName:String?) {
+        if(node.isJsonObject) {
+            val obj=node.asJsonObject
+            val localName=listOf("name","m_Name","displayName","m_DisplayName","seriesName","m_SeriesName")
+                .firstNotNullOfOrNull { key -> obj.get(key)?.takeIf { it.isJsonPrimitive && it.asJsonPrimitive.isString }?.asString }
+                ?: inheritedName
+            obj.entrySet().forEach { (key,value) ->
+                if(key.contains("team",true) && value.isJsonArray && localName!=null && localName in divisionNames) {
+                    val refs=value.asJsonArray.mapNotNull { item ->
+                        item.takeIf { it.isJsonObject }?.asJsonObject?.get("\$ref")?.asString
+                    }
+                    if(refs.isNotEmpty()) candidates.add(refs)
+                }
+                visit(value,localName)
+            }
+        } else if(node.isJsonArray) node.asJsonArray.forEach { visit(it,inheritedName) }
+    }
+    data.get("championshipManager")?.let { visit(it,null) }
+    return candidates.firstOrNull().orEmpty()
+}
+
+internal fun applyOfficialF1Preset2026(data:JsonObject):Boolean {
+    val teamIds=divisionTeamIds(data,setOf("F1","World Motorsport"))
+    if(teamIds.size!=OfficialF1Lineup2026.size || teamIds.distinct().size!=teamIds.size) return false
+    val all=collectObjectsWithId(data).associateBy { it.second.get("\$id")?.asString }
+    val driverRefs=data.getAsJsonObject("driverManager")?.getAsJsonArray("m_Drivers") ?: return false
+    val drivers=driverRefs.mapNotNull { it.takeIf { v -> v.isJsonObject }?.asJsonObject?.get("\$ref")?.asString }
+        .mapNotNull { id -> all[id]?.second?.let { id to it } }
+    val teamObjects=teamIds.map { id -> all[id]?.second ?: return false }
+    val driverGroups=teamIds.map { teamId ->
+        drivers.filter { (_,driver) ->
+            safeObject(driver,"contract")?.let { safeObject(it,"m_Team") }?.get("\$ref")?.asString==teamId
+        }
+    }
+    if(driverGroups.any { it.size!=2 }) return false
+    teamObjects.forEachIndexed { index,team ->
+        val preset=OfficialF1Lineup2026[index]
+        if(!team.has("name")) return false
+        team.addProperty("name",preset.name)
+        if(team.has("shortName")) team.addProperty("shortName",preset.shortName)
+        driverGroups[index].forEachIndexed { driverIndex,(_,driver) ->
+            val details=safeObject(driver,"m_PersonDetails") ?: return false
+            val (first,last)=preset.drivers[driverIndex]
+            val full=first+" "+last
+            if(!details.has("name")) return false
+            details.addProperty("name",full)
+            if(details.has("firstName")) details.addProperty("firstName",first)
+            if(details.has("lastName")) details.addProperty("lastName",last)
+            if(details.has("shortName")) details.addProperty("shortName",first.substring(0,1)+". "+last)
+            if(details.has("threeLetterName")) details.addProperty("threeLetterName",last.filter { it.isLetter() }.take(3).uppercase())
+        }
+    }
+    return true
+}
+
+internal fun renameCareerDivisions(data:JsonObject):Int {
+    val names=mapOf(
+        "World Motorsport" to "F1",
+        "Asia Pacific Super Cup" to "F2",
+        "European Racing" to "F3",
+        "Open Wheel Sprint" to "F4"
+    )
+    var changed=0
+    fun visit(node:JsonElement) {
+        when {
+            node.isJsonObject -> {
+                val obj=node.asJsonObject
+                listOf("name","m_Name","displayName","m_DisplayName","seriesName","m_SeriesName").forEach { key ->
+                    val value=obj.get(key)
+                    if(value!=null && value.isJsonPrimitive && value.asJsonPrimitive.isString) {
+                        val replacement=names[value.asString]
+                        if(replacement!=null) { obj.addProperty(key,replacement); changed++ }
+                    }
+                }
+                obj.entrySet().forEach { (_,value) -> visit(value) }
+            }
+            node.isJsonArray -> node.asJsonArray.forEach { visit(it) }
+        }
+    }
+    visit(data.get("championshipManager") ?: return 0)
+    return changed
+}
+
 private fun applyGodModeAction(current:Mm4SaveCodec.Document,action:String):Mm4SaveCodec.Document? {
     val data=current.data.deepCopy().asJsonObject
-    when(action) {
-        "max_balance" -> {
+    when {
+        action=="max_balance" -> {
             val finance=data.getAsJsonObject("financeManager") ?: return null
             finance.addProperty("m_Balance",2_000_000_000L)
         }
-        "unlock_hq" -> {
+        action=="unlock_hq" -> {
             val hq=data.getAsJsonObject("headquarters") ?: return null
             val upgrades=hq.getAsJsonArray("m_Upgrades") ?: return null
             upgrades.forEach { row ->
@@ -1376,17 +1776,31 @@ private fun applyGodModeAction(current:Mm4SaveCodec.Document,action:String):Mm4S
                 if(value.has("weeksToUnlock")) value.addProperty("weeksToUnlock",0)
             }
         }
-        "max_research" -> {
+        action=="max_research" -> {
             val research=data.getAsJsonObject("researchManager") ?: return null
             val cap=research.get("m_ResearchCap")?.asInt ?: 100000
             research.addProperty("m_SeasonResearchPointsMM4",cap)
             research.addProperty("m_IsDebugUnlocked",true)
         }
-        "debug_unlock" -> {
+        action=="debug_unlock" -> {
             val research=data.getAsJsonObject("researchManager") ?: return null
             research.addProperty("m_IsDebugUnlocked",true)
         }
-        "unlock_suppliers" -> {
+        action=="rename_divisions" -> {
+            if(renameCareerDivisions(data)==0) return null
+        }
+        action=="official_f1_2026" -> {
+            if(!applyOfficialF1Preset2026(data)) return null
+        }
+        action.startsWith("swap_teams|") -> {
+            val parts=action.split("|")
+            if(parts.size!=3 || !swapTeamsBetweenDivisions(data,parts[1],parts[2])) return null
+        }
+        action.startsWith("move_driver|") -> {
+            val parts=action.split("|")
+            if(parts.size!=3 || !moveDriverToTeam(data,parts[1],parts[2])) return null
+        }
+        action=="unlock_suppliers" -> {
             val supplier=data.getAsJsonObject("supplierNetworkManager") ?: return null
             val nodes=supplier.getAsJsonArray("m_NodeDictionary") ?: return null
             var changed=0
@@ -1415,11 +1829,52 @@ private fun GodModePage(doc:Mm4SaveCodec.Document,onAction:(String)->Unit) {
     val hq=doc.data.getAsJsonObject("headquarters")?.getAsJsonArray("m_Upgrades")
     val unlocked=hq?.count { it.asJsonObject.getAsJsonObject("Value")?.get("State")?.asInt==1 } ?: 0
     val research=doc.data.getAsJsonObject("researchManager")
+    val teams=remember(doc.data) { teamOptions(doc.data) }
+    val drivers=remember(doc.data) { driverOptions(doc.data) }
+    var teamA by remember { mutableStateOf<String?>(null) }
+    var teamB by remember { mutableStateOf<String?>(null) }
+    var driverId by remember { mutableStateOf<String?>(null) }
+    var targetTeam by remember { mutableStateOf<String?>(null) }
+    var picker by remember { mutableStateOf<String?>(null) }
+    val pickerOptions=when(picker) { "teamA","teamB","targetTeam" -> teams; "driver" -> drivers; else -> emptyList() }
     LazyColumn(contentPadding=PaddingValues(14.dp),verticalArrangement=Arrangement.spacedBy(10.dp)) {
         item {
             GlassCard(Modifier.fillMaxWidth()) {
                 Text("GOD MODE",color=Gold,fontWeight=FontWeight.Black,fontSize=13.sp)
                 Text("Kontrol khusus untuk mengubah karier secara ekstrem. Setiap tombol mengubah data save dan bisa dibatalkan dengan membuka file asli lagi.",color=Muted,fontSize=11.sp)
+            }
+        }
+        item {
+            GlassCard(Modifier.fillMaxWidth()) {
+                Text("OFFICIAL F1 TEAMS AND DRIVER",color=Gold,fontWeight=FontWeight.Bold)
+                Text("Mengganti 11 nama tim dan 22 pembalap pada divisi F1 menggunakan susunan resmi 2026. Urutan tim mengikuti urutan yang tersimpan pada championship.",color=Muted,fontSize=10.sp)
+                Text("Syarat: divisi F1/World Motorsport berisi tepat 11 tim dan setiap tim memiliki tepat 2 pembalap dengan kontrak yang terbaca.",color=Gold,fontSize=10.sp)
+                Button(onClick={onAction("official_f1_2026")},modifier=Modifier.fillMaxWidth(),colors=ButtonDefaults.buttonColors(containerColor=Red)) { Text("TERAPKAN LINEUP F1 2026") }
+            }
+        }
+        item {
+            GlassCard(Modifier.fillMaxWidth()) {
+                Text("NAMA DIVISI RESMI",color=Gold,fontWeight=FontWeight.Bold)
+                Text("Ubah nama divisi bawaan menjadi F1, F2, F3, dan F4. Hanya nama yang cocok persis yang akan diganti.",color=Muted,fontSize=10.sp)
+                Button(onClick={onAction("rename_divisions")},modifier=Modifier.fillMaxWidth(),colors=ButtonDefaults.buttonColors(containerColor=Blue)) { Text("UBAH NAMA DIVISI F1–F4") }
+            }
+        }
+        item {
+            GlassCard(Modifier.fillMaxWidth()) {
+                Text("TEAM SWAP • PINDAH DIVISI",color=Gold,fontWeight=FontWeight.Bold)
+                Text("Pilih dua tim untuk menukar slot divisi mereka. Fitur hanya aktif jika save menyimpan daftar tim di championship manager.",color=Muted,fontSize=10.sp)
+                Button(onClick={picker="teamA"},modifier=Modifier.fillMaxWidth()) { Text(teams.firstOrNull { it.id==teamA }?.name ?: "PILIH TIM PERTAMA") }
+                Button(onClick={picker="teamB"},modifier=Modifier.fillMaxWidth()) { Text(teams.firstOrNull { it.id==teamB }?.name ?: "PILIH TIM KEDUA") }
+                Button(onClick={if(teamA!=null && teamB!=null) onAction("swap_teams|$teamA|$teamB")},enabled=teamA!=null && teamB!=null && teamA!=teamB,modifier=Modifier.fillMaxWidth(),colors=ButtonDefaults.buttonColors(containerColor=Blue)) { Text("TUKAR DIVISI TIM") }
+            }
+        }
+        item {
+            GlassCard(Modifier.fillMaxWidth()) {
+                Text("MOVE DRIVER • PINDAH TIM",color=Gold,fontWeight=FontWeight.Bold)
+                Text("Memindahkan pembalap dengan memperbarui referensi tim pada kontrak. Roster tim ikut disinkronkan jika struktur save menyediakan daftar m_Drivers.",color=Muted,fontSize=10.sp)
+                Button(onClick={picker="driver"},modifier=Modifier.fillMaxWidth()) { Text(drivers.firstOrNull { it.id==driverId }?.name ?: "PILIH PEMBALAP") }
+                Button(onClick={picker="targetTeam"},modifier=Modifier.fillMaxWidth()) { Text(teams.firstOrNull { it.id==targetTeam }?.name ?: "PILIH TIM TUJUAN") }
+                Button(onClick={if(driverId!=null && targetTeam!=null) onAction("move_driver|$driverId|$targetTeam")},enabled=driverId!=null && targetTeam!=null,modifier=Modifier.fillMaxWidth(),colors=ButtonDefaults.buttonColors(containerColor=Blue)) { Text("PINDAHKAN PEMBALAP") }
             }
         }
         item {
@@ -1461,12 +1916,43 @@ private fun GodModePage(doc:Mm4SaveCodec.Document,onAction:(String)->Unit) {
             Text("Pemindahan tim antar divisi dan transfer pembalap belum diaktifkan pada build ini. Keduanya harus menjaga referensi roster, kontrak, klasemen, dan kejuaraan secara serentak. Tidak akan dibuat tombol yang berisiko merusak save.",color=Muted,fontSize=10.sp)
         }
     }
+    if(picker!=null) AlertDialog(
+        onDismissRequest={picker=null},
+        title={Text(when(picker) { "teamA"->"Pilih tim pertama"; "teamB"->"Pilih tim kedua"; "driver"->"Pilih pembalap"; else->"Pilih tim tujuan" })},
+        text={
+            LazyColumn(Modifier.heightIn(max=420.dp)) {
+                items(pickerOptions,key={it.id}) { option ->
+                    TextButton(onClick={
+                        when(picker) { "teamA"->teamA=option.id; "teamB"->teamB=option.id; "driver"->driverId=option.id; "targetTeam"->targetTeam=option.id }
+                        picker=null
+                    },modifier=Modifier.fillMaxWidth()) {
+                        Column(Modifier.fillMaxWidth()) {
+                            Text(option.name,color=Color.White,fontWeight=FontWeight.SemiBold)
+                            if(option.detail.isNotBlank()) Text(option.detail,color=Muted,fontSize=10.sp)
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton={TextButton(onClick={picker=null}) { Text("Tutup") }}
+    )
 }
 @Composable
 private fun GlassCard(modifier: Modifier = Modifier, content: @Composable ColumnScope.() -> Unit) {
     val shape = RoundedCornerShape(18.dp)
+    var entered by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) { entered = true }
+    val entrance by animateFloatAsState(
+        targetValue = if (entered) 1f else 0.965f,
+        animationSpec = tween(320, easing = FastOutSlowInEasing),
+        label = "glass-card-entrance"
+    )
     Column(
-        modifier.animateContentSize(animationSpec = tween(240)).clip(shape)
+        modifier.graphicsLayer {
+            scaleX = entrance
+            scaleY = entrance
+            alpha = entrance
+        }.animateContentSize(animationSpec = tween(260)).clip(shape)
             .border(1.dp, Color.White.copy(alpha = 0.16f), shape)
             .background(Brush.linearGradient(listOf(Color(0xC936568A), Color(0xB91B2D58), Color(0xA51A2445))))
             .padding(1.dp)
@@ -1752,18 +2238,38 @@ private fun WatermarkFooter() {
     }
 }
 
+internal fun editorBounds(document:Mm4SaveCodec.Document?,root:String,path:List<String>):Pair<String?,String?> {
+    if(root!="Game Data" || path.isEmpty()) return null to null
+    return when {
+        path.last() in setOf("m_Stat","m_Potential") -> "0" to "20"
+        path.firstOrNull()=="headquarters" && path.lastOrNull()=="State" -> "0" to "2"
+        path.firstOrNull()=="headquarters" && path.lastOrNull()=="pathType" -> "0" to "4"
+        path.size==4 && path[0]=="headquarters" && path[1]=="m_CurrentTierInformation" && path[3]=="Value" -> {
+            val index=path[2].removePrefix("[").removeSuffix("]").toIntOrNull()
+            val row=index?.let { document?.data?.getAsJsonObject("headquarters")?.getAsJsonArray("m_CurrentTierInformation")?.get(it) }
+            val key=row?.takeIf { it.isJsonObject }?.asJsonObject?.get("Key")?.asInt
+            val nodes=document?.data?.getAsJsonObject("headquarters")?.getAsJsonArray("m_Upgrades")
+            val max=if(key!=null) nodes?.count { node ->
+                node.takeIf { it.isJsonObject }?.asJsonObject?.getAsJsonObject("Value")?.get("pathType")?.asInt==key
+            } else null
+            if(max!=null && max>0) "0" to max.toString() else null to null
+        }
+        else -> null to null
+    }
+}
+
 @Composable
 private fun EditValueDialog(target: EditTarget, onClose: () -> Unit, onSave: (JsonElement) -> Unit) {
     val primitive = target.value.asJsonPrimitive
     val isBoolean = primitive.isBoolean
     val isNumber = primitive.isNumber
     var value by remember(target) { mutableStateOf(if (primitive.isString) primitive.asString else primitive.toString()) }
-    var choicesOpen by remember(target) { mutableStateOf(false) }
     val currentNumber = if (isNumber) runCatching { primitive.asDouble }.getOrDefault(0.0) else 0.0
     val isAttribute = target.path.lastOrNull() in setOf("m_Stat", "m_Potential")
     val attributeValue = currentNumber.toInt().coerceIn(0, 20)
     val numberStep = when { kotlin.math.abs(currentNumber) >= 1000000 -> 100000.0; kotlin.math.abs(currentNumber) >= 10000 -> 1000.0; kotlin.math.abs(currentNumber) >= 100 -> 10.0; else -> 1.0 }
     val meaning = when { attributeValue <= 4 -> "Sangat rendah"; attributeValue <= 8 -> "Rendah"; attributeValue <= 12 -> "Menengah"; attributeValue <= 16 -> "Tinggi"; else -> "Elite" }
+    var validationMessage by remember(target) { mutableStateOf<String?>(null) }
     AlertDialog(
         onDismissRequest = onClose,
         title = { Text(humanizeField(target.path.lastOrNull() ?: "Edit value")) },
@@ -1777,17 +2283,26 @@ private fun EditValueDialog(target: EditTarget, onClose: () -> Unit, onSave: (Js
                         Text("Aktif", Modifier.padding(start = 8.dp))
                     }
                     isNumber && isAttribute -> {
-                        OutlinedButton(onClick = { choicesOpen = true }, modifier = Modifier.fillMaxWidth()) {
-                            Text(attributeValue.toString() + " / 20 • " + meaning)
-                            Icon(Icons.Default.ArrowDropDown, null)
+                        Text(attributeValue.toString() + " / 20 • " + meaning, color = Gold, fontWeight = FontWeight.Bold)
+                        Slider(
+                            value = attributeValue.toFloat(),
+                            onValueChange = { value = it.toInt().coerceIn(0,20).toString() },
+                            valueRange = 0f..20f,
+                            steps = 19
+                        )
+                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                            Text("0 • Minimum", color = Muted, fontSize = 9.sp)
+                            Text("20 • Maksimum", color = Muted, fontSize = 9.sp)
                         }
-                        DropdownMenu(expanded = choicesOpen, onDismissRequest = { choicesOpen = false }) {
-                            (0..20).forEach { choice ->
-                                val label = when { choice <= 4 -> "Sangat rendah"; choice <= 8 -> "Rendah"; choice <= 12 -> "Menengah"; choice <= 16 -> "Tinggi"; else -> "Elite" }
-                                DropdownMenuItem(text = { Text(choice.toString() + " / 20 • " + label) }, onClick = { value = choice.toString(); choicesOpen = false })
-                            }
-                        }
-                        Text("Skala atribut 0–20. Keterangan ini panduan umum, bukan label resmi game.", color = Muted, fontSize = 10.sp)
+                        Text("Skala atribut 0–20. Pilih nilai dengan menggeser slider.", color = Muted, fontSize = 10.sp)
+                    }
+                    isNumber && target.minValue != null && target.maxValue != null -> {
+                        val min = target.minValue.toFloat()
+                        val max = target.maxValue.toFloat()
+                        val selected = currentNumber.toFloat().coerceIn(min,max)
+                        Text(value + " • batas " + target.minValue + "–" + target.maxValue, fontSize = 18.sp, fontWeight = FontWeight.Bold, color = Gold)
+                        Slider(value=selected,onValueChange={value=it.toInt().coerceIn(min.toInt(),max.toInt()).toString()},valueRange=min..max,steps=(max-min-1f).toInt().coerceAtLeast(0))
+                        Text("Nilai dibatasi sesuai rentang yang dikenali dari struktur save.",color=Muted,fontSize=10.sp)
                     }
                     isNumber -> {
                         Text(value, fontSize = 24.sp, fontWeight = FontWeight.Bold, color = Gold)
@@ -1798,15 +2313,32 @@ private fun EditValueDialog(target: EditTarget, onClose: () -> Unit, onSave: (Js
                         }
                         Text("Gunakan tombol untuk memilih nilai, tanpa mengetik angka manual.", color = Muted, fontSize = 10.sp)
                     }
-                    else -> OutlinedTextField(value = value, onValueChange = { value = it }, modifier = Modifier.fillMaxWidth(), label = { Text("Text") }, singleLine = true)
+                    else -> OutlinedTextField(value = value, onValueChange = { value = it }, modifier = Modifier.fillMaxWidth(), label = { Text(if(target.path.lastOrNull()=="dateOfBirth") "Tanggal lahir (YYYY-MM-DD)" else "Text") }, singleLine = true)
                 }
+                validationMessage?.let { Text(it,color=Red,fontSize=10.sp) }
             }
         },
         confirmButton = {
             Button(onClick = {
                 val result = when {
                     isBoolean -> com.google.gson.JsonPrimitive(value.toBoolean())
-                    isNumber -> com.google.gson.JsonPrimitive(java.math.BigDecimal(value))
+                    isNumber -> {
+                        val number=java.math.BigDecimal(value)
+                        val min=target.minValue?.let { java.math.BigDecimal(it) }
+                        val max=target.maxValue?.let { java.math.BigDecimal(it) }
+                        if((min!=null && number<min) || (max!=null && number>max)) {
+                            validationMessage="Nilai harus berada di antara " + (target.minValue ?: "—") + " dan " + (target.maxValue ?: "—")
+                            return@Button
+                        }
+                        com.google.gson.JsonPrimitive(number)
+                    }
+                    target.path.lastOrNull()=="dateOfBirth" -> {
+                        val date=runCatching { java.time.LocalDate.parse(value.take(10)).toString() }.getOrElse {
+                            validationMessage="Masukkan tanggal dengan format YYYY-MM-DD."
+                            return@Button
+                        }
+                        com.google.gson.JsonPrimitive(date+"T00:00:00.0000000")
+                    }
                     else -> com.google.gson.JsonPrimitive(value)
                 }
                 onSave(result)
