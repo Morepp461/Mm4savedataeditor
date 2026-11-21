@@ -111,6 +111,16 @@ object Mm4SaveCodec {
             canonical(left.data) == canonical(right.data)
     }
 
+    fun firstDifference(left: Document, right: Document): String? {
+        val infoLeft = canonical(left.info)
+        val infoRight = canonical(right.info)
+        if (infoLeft != infoRight) return "Save Info (data differs)"
+        val dataLeft = canonical(left.data)
+        val dataRight = canonical(right.data)
+        if (dataLeft != dataRight) return "Game Data (data differs)"
+        return null
+    }
+
     private fun canonical(value: com.google.gson.JsonElement): String = when {
         value.isJsonObject -> value.asJsonObject.entrySet()
             .sortedBy { it.key }
