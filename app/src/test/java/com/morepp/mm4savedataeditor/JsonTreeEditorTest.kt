@@ -231,77 +231,83 @@ class JsonTreeEditorTest {
 
 
     @Test
-    fun f1F4TemplatePreservesEmbeddedTeamAndDriverData() {
-        val championshipRefs=JsonArray()
-        val entityRows=JsonArray()
-        val teamManagerRefs=JsonArray()
-        val driverManagerRefs=JsonArray()
-        repeat(4) { division ->
-            val championshipId="champ-$division"
-            championshipRefs.add(JsonObject().apply { addProperty("\$ref",championshipId) })
-            val numericTeamIds=JsonArray()
-            val standingsTeams=JsonArray()
-            repeat(10) { teamIndex ->
-                val numericTeamId=division*10+teamIndex+1
-                val teamEntityId="team-$numericTeamId"
-                numericTeamIds.add(numericTeamId)
-                teamManagerRefs.add(JsonObject().apply { addProperty("\$ref",teamEntityId) })
-                val driverRows=JsonArray()
-                repeat(2) { driverIndex ->
-                    val driverEntityId="driver-$numericTeamId-$driverIndex"
-                    driverRows.add(JsonObject().apply {
-                        add("driver",JsonObject().apply { addProperty("\$ref",driverEntityId) })
-                    })
-                    driverManagerRefs.add(JsonObject().apply { addProperty("\$ref",driverEntityId) })
-                    entityRows.add(JsonObject().apply {
-                        addProperty("\$id",driverEntityId)
-                        add("contract",JsonObject().apply {
-                            add("m_Team",JsonObject().apply { addProperty("\$ref",teamEntityId) })
+    fun f1F4TemplateCopiesAllTeamAndDriverProfileDataButKeepsCareerContracts() {
+        fun fixture():JsonObject {
+            val championshipRefs=JsonArray()
+            val entityRows=JsonArray()
+            repeat(4) { division ->
+                val championshipId="champ-$division"
+                championshipRefs.add(JsonObject().apply { addProperty("\$ref",championshipId) })
+                val numericTeamIds=JsonArray()
+                repeat(10) { teamIndex ->
+                    val numericTeamId=division*10+teamIndex+1
+                    val teamEntityId="team-$numericTeamId"
+                    numericTeamIds.add(numericTeamId)
+                    val driverRows=JsonArray()
+                    repeat(2) { driverIndex ->
+                        val driverEntityId="driver-$numericTeamId-$driverIndex"
+                        driverRows.add(JsonObject().apply {
+                            add("driver",JsonObject().apply { addProperty("\$ref",driverEntityId) })
                         })
-                        add("m_PersonDetails",JsonObject().apply { addProperty("name","Template Driver $numericTeamId-$driverIndex") })
+                        entityRows.add(JsonObject().apply {
+                            addProperty("\$id",driverEntityId)
+                            add("contract",JsonObject().apply {
+                                add("m_Team",JsonObject().apply { addProperty("\$ref",teamEntityId) })
+                            })
+                            add("m_PersonDetails",JsonObject().apply { addProperty("name","Original Driver $numericTeamId-$driverIndex") })
+                            add("m_Stats",JsonObject().apply { add("m_Stats",JsonArray().apply { add(JsonObject().apply { addProperty("m_Stat",1) }) }) })
+                        })
+                    }
+                    entityRows.add(JsonObject().apply {
+                        addProperty("\$id",teamEntityId)
+                        addProperty("m_TeamID",numericTeamId)
+                        addProperty("name","Original Team $numericTeamId")
+                        addProperty("shortName","Original")
+                        add("m_TeamDriverData",JsonObject().apply { add("m_Data",driverRows) })
                     })
                 }
                 entityRows.add(JsonObject().apply {
-                    addProperty("\$id",teamEntityId)
-                    addProperty("m_TeamID",numericTeamId)
-                    addProperty("name","Template Team $numericTeamId")
-                    addProperty("shortName","Template")
-                    add("m_TeamDriverData",JsonObject().apply { add("m_Data",driverRows) })
-                    add("m_Championship",JsonObject().apply { addProperty("\$ref",championshipId) })
-                })
-                standingsTeams.add(JsonObject().apply {
-                    add("m_Entity",JsonObject().apply { addProperty("\$ref",teamEntityId) })
-                    add("m_Championship",JsonObject().apply { addProperty("\$ref",championshipId) })
+                    addProperty("\$id",championshipId)
+                    addProperty("m_ID",division)
+                    add("m_TeamIDs",numericTeamIds)
                 })
             }
-            entityRows.add(JsonObject().apply {
-                addProperty("\$id",championshipId)
-                addProperty("m_ID",division)
-                add("m_TeamIDs",numericTeamIds)
-                add("standings",JsonObject().apply { add("m_Teams",standingsTeams) })
-            })
-        }
-        val data=JsonObject().apply {
-            add("championshipManager",JsonObject().apply { add("championships",championshipRefs) })
-            add("teamManager",JsonObject().apply { add("m_Teams",teamManagerRefs) })
-            add("driverManager",JsonObject().apply { add("m_Drivers",driverManagerRefs) })
-            add("entities",entityRows)
+            return JsonObject().apply {
+                add("championshipManager",JsonObject().apply { add("championships",championshipRefs) })
+                add("entities",entityRows)
+            }
         }
 
-        assertTrue(applyOfficialF1Preset2026(data))
-        val byId=collectObjectsWithId(data).associate { it.second.get("\$id").asString to it.second }
-        assertEquals("Mercedes-AMG Petronas",byId["team-1"]!!.get("name").asString)
-        assertEquals("Mercedes",byId["team-1"]!!.get("shortName").asString)
-        assertEquals("ART Grand Prix",byId["team-11"]!!.get("name").asString)
-        assertEquals("ART GP F3",byId["team-21"]!!.get("name").asString)
-        assertEquals("Jenzer Motorsport",byId["team-31"]!!.get("name").asString)
+        val target=fixture()
+        val template=fixture()
+        val sourceById=collectObjectsWithId(template).associate { it.second.get("\$id").asString to it.second }
+        for(division in 0..3) {
+            for(teamIndex in 0 until 10) {
+                val teamId=division*10+teamIndex+1
+                val sourceTeam=sourceById["team-$teamId"]!!
+                sourceTeam.addProperty("name","Template Team $teamId")
+                sourceTeam.addProperty("shortName","T$teamId")
+                repeat(2) { driverIndex ->
+                    val sourceDriver=sourceById["driver-$teamId-$driverIndex"]!!
+                    sourceDriver.getAsJsonObject("m_PersonDetails").addProperty("name","Template Driver $teamId-$driverIndex")
+                    sourceDriver.getAsJsonObject("m_Stats").getAsJsonArray("m_Stats")[0].asJsonObject.addProperty("m_Stat",99)
+                }
+            }
+        }
+
+        assertTrue(applyOfficialF1Preset2026(target,template))
+        val byId=collectObjectsWithId(target).associate { it.second.get("\$id").asString to it.second }
+        assertEquals("Template Team 1",byId["team-1"]!!.get("name").asString)
+        assertEquals("T11",byId["team-11"]!!.get("shortName").asString)
+        assertEquals("Template Team 21",byId["team-21"]!!.get("name").asString)
+        assertEquals("Template Team 31",byId["team-31"]!!.get("name").asString)
         assertEquals("Template Driver 1-0",byId["driver-1-0"]!!.getAsJsonObject("m_PersonDetails").get("name").asString)
-        assertEquals("champ-0",byId["team-1"]!!.getAsJsonObject("m_Championship").get("\$ref").asString)
+        assertEquals(99,byId["driver-1-0"]!!.getAsJsonObject("m_Stats").getAsJsonArray("m_Stats")[0].asJsonObject.get("m_Stat").asInt)
+        assertEquals("team-1",byId["driver-1-0"]!!.getAsJsonObject("contract").getAsJsonObject("m_Team").get("\$ref").asString)
         assertEquals(40,(0..3).sumOf { division ->
             byId["champ-$division"]!!.getAsJsonArray("m_TeamIDs").size()
         })
     }
-
 
     @Test
     fun supplierUnlockResolvesReferencesAndSkipsMalformedEntries() {
