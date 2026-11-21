@@ -14,6 +14,17 @@ import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.togetherWith
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.keyframes
+import androidx.compose.foundation.Image
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -43,6 +54,7 @@ import com.google.gson.JsonObject
 import com.google.gson.JsonParser
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 
 private val Ink = Color(0xFF101A3A)
@@ -92,6 +104,13 @@ private fun EditorApp() {
     var confirmDiscardOpen by remember { mutableStateOf(false) }
     var undoStack by remember { mutableStateOf(emptyList<EditOperation>()) }
     var redoStack by remember { mutableStateOf(emptyList<EditOperation>()) }
+    var showIntro by remember { mutableStateOf(true) }
+    var showTutorial by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) {
+        delay(2600)
+        showIntro = false
+        if (!context.getSharedPreferences("mm4_editor", android.content.Context.MODE_PRIVATE).getBoolean("tutorial_seen", false)) showTutorial = true
+    }
 
     val openFile = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri: Uri? ->
         if (uri != null) scope.launch {
@@ -334,10 +353,35 @@ private fun EditorApp() {
                 }
             )
         }
+        if (showIntro) IntroSplash()
+        if (showTutorial) AlertDialog(
+            onDismissRequest = {
+                showTutorial = false
+                context.getSharedPreferences("mm4_editor", android.content.Context.MODE_PRIVATE).edit().putBoolean("tutorial_seen", true).apply()
+            },
+            title = { Text("Selamat datang di MM4 Save Data Editor") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(9.dp)) {
+                    Text("Panduan singkat sebelum mulai:")
+                    InfoLine("1. Buka save", "Pilih file career .msv dari penyimpanan")
+                    InfoLine("2. Edit data", "Gunakan Drivers, Staff, Teams, Cars, Finance, dan HQ")
+                    InfoLine("3. Undo / Redo", "Batalkan perubahan sebelum export")
+                    InfoLine("4. Export", "Simpan sebagai file baru, jangan timpa save asli")
+                    Text("Beberapa data lanjutan bergantung pada struktur career yang sedang dibuka.", color = Muted, fontSize = 11.sp)
+                }
+            },
+            confirmButton = {
+                Button(onClick = {
+                    showTutorial = false
+                    context.getSharedPreferences("mm4_editor", android.content.Context.MODE_PRIVATE).edit().putBoolean("tutorial_seen", true).apply()
+                }) { Text("MULAI") }
+            }
+        )
+
     }
 }
 
-@Composable
+${splash}@Composable
 private fun WelcomePanel(busy: Boolean, onOpen: () -> Unit) {
     Box(
         Modifier.fillMaxSize().padding(20.dp),
