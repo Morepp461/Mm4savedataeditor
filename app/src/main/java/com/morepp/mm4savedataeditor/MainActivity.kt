@@ -1998,7 +1998,6 @@ private fun EditValueDialog(target: EditTarget, onClose: () -> Unit, onSave: (Js
     val isBoolean = primitive.isBoolean
     val isNumber = primitive.isNumber
     var value by remember(target) { mutableStateOf(if (primitive.isString) primitive.asString else primitive.toString()) }
-    var choicesOpen by remember(target) { mutableStateOf(false) }
     val currentNumber = if (isNumber) runCatching { primitive.asDouble }.getOrDefault(0.0) else 0.0
     val isAttribute = target.path.lastOrNull() in setOf("m_Stat", "m_Potential")
     val attributeValue = currentNumber.toInt().coerceIn(0, 20)
@@ -2017,17 +2016,18 @@ private fun EditValueDialog(target: EditTarget, onClose: () -> Unit, onSave: (Js
                         Text("Aktif", Modifier.padding(start = 8.dp))
                     }
                     isNumber && isAttribute -> {
-                        OutlinedButton(onClick = { choicesOpen = true }, modifier = Modifier.fillMaxWidth()) {
-                            Text(attributeValue.toString() + " / 20 • " + meaning)
-                            Icon(Icons.Default.ArrowDropDown, null)
+                        Text(attributeValue.toString() + " / 20 • " + meaning, color = Gold, fontWeight = FontWeight.Bold)
+                        Slider(
+                            value = attributeValue.toFloat(),
+                            onValueChange = { value = it.toInt().coerceIn(0,20).toString() },
+                            valueRange = 0f..20f,
+                            steps = 19
+                        )
+                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                            Text("0 • Minimum", color = Muted, fontSize = 9.sp)
+                            Text("20 • Maksimum", color = Muted, fontSize = 9.sp)
                         }
-                        DropdownMenu(expanded = choicesOpen, onDismissRequest = { choicesOpen = false }) {
-                            (0..20).forEach { choice ->
-                                val label = when { choice <= 4 -> "Sangat rendah"; choice <= 8 -> "Rendah"; choice <= 12 -> "Menengah"; choice <= 16 -> "Tinggi"; else -> "Elite" }
-                                DropdownMenuItem(text = { Text(choice.toString() + " / 20 • " + label) }, onClick = { value = choice.toString(); choicesOpen = false })
-                            }
-                        }
-                        Text("Skala atribut 0–20. Keterangan ini panduan umum, bukan label resmi game.", color = Muted, fontSize = 10.sp)
+                        Text("Skala atribut 0–20. Pilih nilai dengan menggeser slider.", color = Muted, fontSize = 10.sp)
                     }
                     isNumber -> {
                         Text(value, fontSize = 24.sp, fontWeight = FontWeight.Bold, color = Gold)
