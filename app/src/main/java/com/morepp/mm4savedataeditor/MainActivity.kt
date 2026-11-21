@@ -62,7 +62,8 @@ private fun EditorApp() {
     val context = androidx.compose.ui.platform.LocalContext.current
     val scope = rememberCoroutineScope()
     var document by remember { mutableStateOf<Mm4SaveCodec.Document?>(null) }
-    var selectedTab by remember { mutableStateOf("Save Info") }
+    var selectedTab by remember { mutableStateOf("Overview") }
+    var selectedDriver by remember { mutableStateOf<String?>(null) }
     var search by remember { mutableStateOf("") }
     var sourceName by remember { mutableStateOf("Belum ada save data") }
     var sourceUri by remember { mutableStateOf<String?>(null) }
@@ -87,7 +88,7 @@ private fun EditorApp() {
                 document = loaded
                 sourceName = uri.lastPathSegment ?: "MM4 career"
                 sourceUri = uri.toString()
-                selectedTab = "Save Info"
+                selectedTab = "Overview"
                 selectedModule = null
                 search = ""
                 hasChanges = false
@@ -195,65 +196,13 @@ private fun EditorApp() {
                         hasChanges = hasChanges,
                         onExport = { exportFile.launch("MM4_Edited_Save.msv") }
                     )
-                    Row(
-                        Modifier.padding(horizontal = 14.dp),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        listOf("Save Info", "Game Data").forEach { tab ->
-                            FilterChip(
-                                selected = selectedTab == tab,
-                                onClick = { selectedTab = tab; selectedModule = null; search = "" },
-                                label = { Text(tab) }
-                            )
-                        }
-                    }
-                    OutlinedTextField(
-                        value = search,
-                        onValueChange = { search = it },
-                        modifier = Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 8.dp),
-                        placeholder = { Text("Cari field, ID, entitas, atau nilai…") },
-                        leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
-                        trailingIcon = {
-                            if (search.isNotEmpty()) {
-                                IconButton(onClick = { search = "" }) {
-                                    Icon(Icons.Default.Close, contentDescription = "Hapus pencarian")
-                                }
-                            }
-                        },
-                        singleLine = true,
-                        shape = RoundedCornerShape(14.dp)
-                    )
-                    val root = if (selectedTab == "Save Info") current.info else current.data
-                    if (selectedTab == "Game Data") {
-                        val moduleNames = current.data.keySet().sorted()
-                        LazyRow(
-                            Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 2.dp),
-                            horizontalArrangement = Arrangement.spacedBy(6.dp)
-                        ) {
-                            item {
-                                FilterChip(
-                                    selected = selectedModule == null,
-                                    onClick = { selectedModule = null },
-                                    label = { Text("All") }
-                                )
-                            }
-                            items(moduleNames) { module ->
-                                FilterChip(
-                                    selected = selectedModule == module,
-                                    onClick = { selectedModule = module },
-                                    label = { Text(module) }
-                                )
-                            }
-                        }
-                    }
-                    JsonBrowser(
-                        root = root,
-                        rootName = selectedTab,
-                        query = search,
-                        moduleFilter = if (selectedTab == "Game Data") selectedModule else null,
-                        onEdit = { path, value ->
-                            editTarget = EditTarget(selectedTab, path, value.deepCopy())
-                        }
+                    CareerWorkspace(
+                        document = current,
+                        section = selectedTab,
+                        onSection = { selectedTab = it; selectedDriver = null },
+                        selectedDriver = selectedDriver,
+                        onDriver = { selectedDriver = it },
+                        onEdit = { root, path, value -> editTarget = EditTarget(root, path, value.deepCopy()) }
                     )
                 }
             }
@@ -442,6 +391,239 @@ private fun CareerHeader(
         }
     }
 }
+
+
+private val Sections = listOf("Overview", "Drivers", "Finance", "HQ", "Save Info", "Advanced")
+
+@Composable
+private fun CareerWorkspace(
+    document: Mm4SaveCodec.Document, section: String, onSection: (String) -> Unit,
+    selectedDriver: String?, onDriver: (String?) -> Unit,
+    onEdit: (String, List<String>, JsonElement) -> Unit
+) {
+    Column(Modifier.fillMaxSize()) {
+        LazyRow(Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 4.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            items(Sections) { s -> FilterChip(selected = section == s, onClick = { onSection(s) }, label = { Text(s, fontSize = 11.sp) }) }
+        }
+        when (section) {
+            "Overview" -> OverviewPage(document, onSection)
+            "Drivers" -> DriverPage(document, selectedDriver, onDriver, onEdit)
+            "Finance" -> FinancePage(document, onEdit)
+            "HQ" -> HqPage(document)
+            "Save Info" -> InfoPage(document, onEdit)
+            else -> AdvancedPage(document, onEdit)
+        }
+    }
+}
+
+@Composable
+private fun OverviewPage(doc: Mm4SaveCodec.Document, go: (String) -> Unit) {
+    val info = doc.info
+    val data = doc.data
+    val name = info.get("teamName")?.asString ?: "Career"
+    val balance = data.getAsJsonObject("financeManager")?.get("m_Balance")?.asLong ?: 0L
+    val driverCount = data.getAsJsonObject("driverManager")?.getAsJsonArray("m_Drivers")?.size() ?: 0
+    LazyColumn(contentPadding = PaddingValues(14.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        item {
+            GlassCard(Modifier.fillMaxWidth()) {
+                Text("CAREER CONTROL CENTER", color = Gold, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                Text(name, fontSize = 25.sp, fontWeight = FontWeight.Black)
+                Text("Career date: " + (info.get("gameDate")?.asString?.take(10) ?: "—"), color = Muted, fontSize = 12.sp)
+                Spacer(Modifier.height(12.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Button(onClick = { go("Drivers") }, colors = ButtonDefaults.buttonColors(containerColor = Red)) { Text("DRIVER LINEUP") }
+                    OutlinedButton(onClick = { go("Finance") }) { Text("FINANCE") }
+                }
+            }
+        }
+        item {
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                GlassCard(Modifier.weight(1f)) {
+                    Icon(Icons.Default.AccountBalance, null, tint = Gold)
+                    Text("TEAM BALANCE", color = Muted, fontSize = 9.sp)
+                    Text(formatMoney(balance), fontWeight = FontWeight.Bold, fontSize = 17.sp)
+                }
+                GlassCard(Modifier.weight(1f)) {
+                    Icon(Icons.Default.Groups, null, tint = Gold)
+                    Text("DRIVER DATABASE", color = Muted, fontSize = 9.sp)
+                    Text(driverCount.toString() + " records", fontWeight = FontWeight.Bold, fontSize = 17.sp)
+                }
+            }
+        }
+        item { QuickLink("Drivers", "Profil pembalap, kontrak, dan atribut", Icons.Default.Person) { go("Drivers") } }
+        item { QuickLink("Finance", "Saldo dan histori transaksi tim", Icons.Default.Payments) { go("Finance") } }
+        item { QuickLink("Headquarters", "Progres fasilitas dan upgrade", Icons.Default.Business) { go("HQ") } }
+        item { QuickLink("Save information", "Identitas karier dan pengaturan", Icons.Default.Info) { go("Save Info") } }
+    }
+}
+
+@Composable
+private fun DriverPage(doc: Mm4SaveCodec.Document, selected: String?, onSelect: (String?) -> Unit, onEdit: (String,List<String>,JsonElement)->Unit) {
+    val entities = doc.data.getAsJsonObject("entityManager")?.getAsJsonArray("m_Entities")
+    val drivers = entities?.mapIndexedNotNull { i, el ->
+        if (el.isJsonObject && el.asJsonObject.get("\$type")?.asString == "Driver")
+            Triple(i, el.asJsonObject, el.asJsonObject.get("\$id")?.asString ?: i.toString()) else null
+    }?.sortedBy { it.second.getAsJsonObject("m_PersonDetails")?.get("name")?.asString ?: "" }.orEmpty()
+    val chosen = drivers.firstOrNull { it.third == selected }
+    if (chosen == null) {
+        var search by remember { mutableStateOf("") }
+        Column(Modifier.fillMaxSize()) {
+            OutlinedTextField(search, { search = it }, Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 6.dp), placeholder = { Text("Cari nama pembalap") }, leadingIcon = { Icon(Icons.Default.Search, null) }, singleLine = true)
+            LazyColumn(contentPadding = PaddingValues(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                items(drivers.filter { it.second.getAsJsonObject("m_PersonDetails")?.get("name")?.asString?.contains(search,true) == true }) { (_, d, id) ->
+                    Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(15.dp)).background(Panel).clickable { onSelect(id) }.padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Default.Person, null, tint = Gold, modifier = Modifier.size(30.dp))
+                        Spacer(Modifier.width(12.dp))
+                        Column(Modifier.weight(1f)) {
+                            Text(d.getAsJsonObject("m_PersonDetails")?.get("name")?.asString ?: "Unknown", fontWeight = FontWeight.Bold)
+                            Text("Driver ID " + (d.get("m_DriverID")?.asString ?: "—"), color = Muted, fontSize = 10.sp)
+                        }
+                        Icon(Icons.Default.ChevronRight, null, tint = Muted)
+                    }
+                }
+            }
+        }
+    } else {
+        val (idx, d, _) = chosen
+        val details = d.getAsJsonObject("m_PersonDetails")
+        val contract = d.getAsJsonObject("contract")
+        val stats = d.getAsJsonObject("m_Stats")?.getAsJsonArray("m_Stats")
+        Column(Modifier.fillMaxSize()) {
+            Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                IconButton(onClick = { onSelect(null) }) { Icon(Icons.Default.ArrowBack, "Back") }
+                Column {
+                    Text(details?.get("name")?.asString ?: "Driver profile", fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                    Text("Driver profile", color = Muted, fontSize = 10.sp)
+                }
+            }
+            LazyColumn(contentPadding = PaddingValues(14.dp), verticalArrangement = Arrangement.spacedBy(9.dp)) {
+                item {
+                    GlassCard(Modifier.fillMaxWidth()) {
+                        Text("PERSONAL INFORMATION", color = Gold, fontWeight = FontWeight.Bold, fontSize = 10.sp)
+                        InfoLine("Date of birth", details?.get("dateOfBirth")?.asString?.take(10) ?: "—")
+                        InfoLine("Driver ID", d.get("m_DriverID")?.asString ?: "—")
+                        InfoLine("Nationality ID", details?.getAsJsonObject("nationality")?.get("mNationalityID")?.asString ?: "—")
+                    }
+                }
+                item {
+                    GlassCard(Modifier.fillMaxWidth()) {
+                        Text("CONTRACT", color = Gold, fontWeight = FontWeight.Bold, fontSize = 10.sp)
+                        InfoLine("Wage per race", contract?.get("m_PerRaceCost")?.asString ?: "—")
+                        InfoLine("Contract end year", contract?.get("m_EndYear")?.asString ?: "—")
+                        InfoLine("Races remaining", contract?.get("m_RacesLeft")?.asString ?: "—")
+                    }
+                }
+                item { Text("DRIVER ATTRIBUTES", color = Gold, fontWeight = FontWeight.Bold, fontSize = 11.sp) }
+                items(stats?.size() ?: 0) { n ->
+                    val s = stats!![n].asJsonObject
+                    val value = s.get("m_Stat")
+                    GlassCard(Modifier.fillMaxWidth().clickable { if (value != null) onEdit("Game Data", listOf("entityManager","m_Entities","[" + idx + "]","m_Stats","m_Stats","[" + n + "]","m_Stat"), value) }) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text("Attribute " + (n + 1), Modifier.weight(1f), fontWeight = FontWeight.SemiBold)
+                            Text(value?.asString ?: "—", color = Gold, fontWeight = FontWeight.Bold)
+                            Text("  /  Potential " + (s.get("m_Potential")?.asString ?: "—"), color = Muted, fontSize = 10.sp)
+                            Icon(Icons.Default.Edit, null, tint = Muted, modifier = Modifier.size(16.dp))
+                        }
+                    }
+                }
+                item { Text("Label atribut resmi belum terverifikasi dari file ini. Nilai dan urutan ditampilkan apa adanya, bukan diberi nama hasil tebakan.", color = Muted, fontSize = 10.sp) }
+            }
+        }
+    }
+}
+
+@Composable
+private fun FinancePage(doc: Mm4SaveCodec.Document, onEdit: (String,List<String>,JsonElement)->Unit) {
+    val finance = doc.data.getAsJsonObject("financeManager") ?: JsonObject()
+    val balance = finance.get("m_Balance")
+    val history = finance.getAsJsonArray("m_TransactionHistory")
+    LazyColumn(contentPadding = PaddingValues(14.dp), verticalArrangement = Arrangement.spacedBy(9.dp)) {
+        item {
+            GlassCard(Modifier.fillMaxWidth()) {
+                Text("CURRENT TEAM BALANCE", color = Gold, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                Text(formatMoney(balance?.asLong ?: 0L), fontSize = 27.sp, fontWeight = FontWeight.Black)
+                Button(onClick = { if (balance != null) onEdit("Game Data", listOf("financeManager","m_Balance"), balance) }, colors = ButtonDefaults.buttonColors(containerColor = Red)) { Text("EDIT BALANCE") }
+            }
+        }
+        item { Text("TRANSACTION HISTORY", color = Gold, fontWeight = FontWeight.Bold, fontSize = 11.sp) }
+        items(history?.size() ?: 0) { i -> GlassCard(Modifier.fillMaxWidth()) { InfoLine("Transaction " + (i + 1), formatMoney(history!![i].asLong)) } }
+    }
+}
+
+@Composable
+private fun HqPage(doc: Mm4SaveCodec.Document) {
+    val hq = doc.data.getAsJsonObject("headquarters") ?: JsonObject()
+    val upgrades = hq.getAsJsonArray("m_Upgrades")
+    val completed = hq.getAsJsonArray("m_CompletedUpgrades")
+    LazyColumn(contentPadding = PaddingValues(14.dp), verticalArrangement = Arrangement.spacedBy(9.dp)) {
+        item { GlassCard(Modifier.fillMaxWidth()) {
+            Text("HEADQUARTERS DEVELOPMENT", color = Gold, fontWeight = FontWeight.Bold, fontSize = 11.sp)
+            Text((completed?.size() ?: 0).toString() + " completed upgrades", fontSize = 22.sp, fontWeight = FontWeight.Black)
+            Text((upgrades?.size() ?: 0).toString() + " upgrade records in save", color = Muted, fontSize = 11.sp)
+        } }
+        items(upgrades?.size() ?: 0) { i ->
+            val item = upgrades!![i].asJsonObject
+            GlassCard(Modifier.fillMaxWidth()) { InfoLine("Facility record " + (item.get("Key")?.asString ?: i.toString()), item.get("Value")?.toString() ?: "—") }
+        }
+    }
+}
+
+@Composable
+private fun InfoPage(doc: Mm4SaveCodec.Document, onEdit: (String,List<String>,JsonElement)->Unit) {
+    val fields = listOf("teamName" to "Team name", "playerFirstName" to "Manager first name", "playerLastName" to "Manager last name", "gameDate" to "Career date", "playerAge" to "Manager age", "championshipTier" to "Championship tier", "championshipSeries" to "Championship series", "eventNumber" to "Event number", "hardMode" to "Hard mode", "timePlayed" to "Play time")
+    LazyColumn(contentPadding = PaddingValues(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        items(fields) { (key,label) ->
+            val v = doc.info.get(key)
+            if (v != null) GlassCard(Modifier.fillMaxWidth().clickable { onEdit("Save Info", listOf(key), v) }) {
+                InfoLine(label, if (v.isJsonPrimitive && v.asJsonPrimitive.isString) v.asString else v.toString())
+                Text("Tap to edit", color = Muted, fontSize = 9.sp)
+            }
+        }
+    }
+}
+
+@Composable
+private fun AdvancedPage(doc: Mm4SaveCodec.Document, onEdit: (String,List<String>,JsonElement)->Unit) {
+    val entries = doc.data.entrySet().sortedBy { it.key }
+    LazyColumn(contentPadding = PaddingValues(14.dp), verticalArrangement = Arrangement.spacedBy(7.dp)) {
+        item { Text("Advanced structures. Gunakan hanya jika memahami field game.", color = Muted, fontSize = 11.sp) }
+        items(entries) { e ->
+            GlassCard(Modifier.fillMaxWidth().clickable { onEdit("Game Data", listOf(e.key), e.value) }) {
+                Text(humanizeField(e.key), fontWeight = FontWeight.Bold)
+                Text(if (e.value.isJsonArray) "List • " + e.value.asJsonArray.size() + " items" else if (e.value.isJsonObject) "Data group • " + e.value.asJsonObject.size() + " fields" else "Value", color = Muted, fontSize = 10.sp)
+            }
+        }
+    }
+}
+
+@Composable
+private fun GlassCard(modifier: Modifier = Modifier, content: @Composable ColumnScope.() -> Unit) {
+    Column(modifier.clip(RoundedCornerShape(17.dp)).background(Brush.linearGradient(listOf(Color(0xDD2A3038), Color(0xCC191E25)))).padding(14.dp), content = content)
+}
+
+@Composable
+private fun QuickLink(title: String, desc: String, icon: androidx.compose.ui.graphics.vector.ImageVector, click: () -> Unit) {
+    Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(Panel).clickable(onClick = click).padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
+        Icon(icon, null, tint = Gold); Spacer(Modifier.width(12.dp))
+        Column(Modifier.weight(1f)) { Text(title, fontWeight = FontWeight.Bold); Text(desc, color = Muted, fontSize = 10.sp) }
+        Icon(Icons.Default.ChevronRight, null, tint = Muted)
+    }
+}
+
+@Composable
+private fun InfoLine(label: String, value: String) {
+    Row(Modifier.fillMaxWidth().padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+        Text(label, Modifier.weight(1f), color = Muted, fontSize = 11.sp)
+        Text(value, fontWeight = FontWeight.SemiBold, fontSize = 11.sp)
+    }
+}
+
+private fun formatMoney(value: Long): String {
+    val sign = if (value < 0) "-" else ""
+    return sign + "£" + java.text.NumberFormat.getIntegerInstance(java.util.Locale.UK).format(kotlin.math.abs(value))
+}
+
+private fun humanizeField(value: String): String = value.replace(Regex("([a-z])([A-Z])"), "$1 $2").replace("m_", "").replace('_', ' ').split(' ').filter { it.isNotBlank() }.joinToString(" ") { it.replaceFirstChar { ch -> ch.uppercase() } }
 
 @Composable
 private fun JsonBrowser(
