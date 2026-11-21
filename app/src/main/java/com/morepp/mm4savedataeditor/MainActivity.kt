@@ -246,7 +246,17 @@ private fun EditorApp() {
         }
 
         editTarget?.let { target ->
-            EditJsonDialog(
+            if (target.value.isJsonPrimitive) {
+                EditValueDialog(
+                    target = target,
+                    onClose = { editTarget = null },
+                    onSave = { value ->
+                        val current = document ?: return@EditValueDialog
+                        val updated = mutateDocument(current, target.root) { setPath(it, target.path, value) }
+                        if (updated != null) { document = updated; hasChanges = true; editTarget = null }
+                    }
+                )
+            } else EditJsonDialog(
                 target = target,
                 onClose = { editTarget = null },
                 onSave = { value ->
@@ -851,6 +861,54 @@ internal fun flatten(root: JsonElement): List<Pair<List<String>, JsonElement>> {
     }
     visit(root, emptyList())
     return result
+}
+
+
+@Composable
+private fun EditValueDialog(target: EditTarget, onClose: () -> Unit, onSave: (JsonElement) -> Unit) {
+    val primitive = target.value.asJsonPrimitive
+    val isBoolean = primitive.isBoolean
+    val isNumber = primitive.isNumber
+    var value by remember(target) { mutableStateOf(if (primitive.isString) primitive.asString else primitive.toString()) }
+    var invalid by remember(target) { mutableStateOf(false) }
+    AlertDialog(
+        onDismissRequest = onClose,
+        title = { Text(humanizeField(target.path.lastOrNull() ?: "Edit value")) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(target.path.joinToString("  /  "), color = Muted, fontSize = 10.sp)
+                if (isBoolean) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text("Off", Modifier.weight(1f))
+                        Switch(checked = value.toBoolean(), onCheckedChange = { value = it.toString() })
+                        Text("On", Modifier.padding(start = 8.dp))
+                    }
+                } else {
+                    OutlinedTextField(
+                        value = value, onValueChange = { value = it; invalid = false },
+                        modifier = Modifier.fillMaxWidth(),
+                        label = { Text(if (isNumber) "Number" else "Text") },
+                        singleLine = true,
+                        isError = invalid
+                    )
+                }
+                if (invalid) Text("Nilai tidak valid.", color = Red, fontSize = 11.sp)
+            }
+        },
+        confirmButton = {
+            Button(onClick = {
+                try {
+                    val result = when {
+                        isBoolean -> com.google.gson.JsonPrimitive(value.toBoolean())
+                        isNumber -> com.google.gson.JsonParser.parseString(value).also { require(it.isJsonPrimitive && it.asJsonPrimitive.isNumber) }
+                        else -> com.google.gson.JsonPrimitive(value)
+                    }
+                    onSave(result)
+                } catch (_: Throwable) { invalid = true }
+            }, colors = ButtonDefaults.buttonColors(containerColor = Red)) { Text("SAVE CHANGES") }
+        },
+        dismissButton = { TextButton(onClick = onClose) { Text("CANCEL") } }
+    )
 }
 
 @Composable
