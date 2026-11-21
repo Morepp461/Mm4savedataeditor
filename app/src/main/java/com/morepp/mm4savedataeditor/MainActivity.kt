@@ -6,6 +6,8 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.animateContentSize
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -121,11 +123,13 @@ private fun EditorApp() {
                     withContext(Dispatchers.IO) {
                         val bytes = Mm4SaveCodec.encode(current)
                         val verified = Mm4SaveCodec.decode(bytes, current.sourceName)
-                        check(Mm4SaveCodec.sameContent(verified, current)) {
-                            "Validasi round-trip gagal."
+                        val mismatch = Mm4SaveCodec.firstDifference(verified, current)
+                        check(mismatch == null) {
+                            "Validasi round-trip gagal pada $mismatch. File belum ditulis agar save tidak rusak."
                         }
-                        context.contentResolver.openOutputStream(uri, "wt")?.use { it.write(bytes) }
-                            ?: error("Tidak bisa menulis file tujuan.")
+                        val output = context.contentResolver.openOutputStream(uri, "wt")
+                            ?: error("Penyedia file tidak bisa membuka tujuan export untuk ditulis.")
+                        output.use { stream -> stream.write(bytes); stream.flush() }
                     }
                     hasChanges = false
                 } catch (failure: Throwable) {
@@ -544,7 +548,7 @@ private fun DriverPage(doc: Mm4SaveCodec.Document, selected: String?, onSelect: 
                         }
                     }
                     val nationality=details?.getAsJsonObject("nationality")?.get("mNationalityID")
-                    if(nationality!=null) InfoLine("Nationality ID",preview(nationality))
+                    if(nationality!=null) InfoLine("Nationality", nationalityLabel(nationality))
                 }
             }
             item {
@@ -991,7 +995,7 @@ private fun AdvancedPage(doc: Mm4SaveCodec.Document, onEdit: (String,List<String
 private fun GlassCard(modifier: Modifier = Modifier, content: @Composable ColumnScope.() -> Unit) {
     val shape = RoundedCornerShape(18.dp)
     Column(
-        modifier.clip(shape)
+        modifier.animateContentSize(animationSpec = tween(240)).clip(shape)
             .border(1.dp, Color.White.copy(alpha = 0.16f), shape)
             .background(Brush.linearGradient(listOf(Color(0xC936568A), Color(0xB91B2D58), Color(0xA51A2445))))
             .padding(1.dp)
