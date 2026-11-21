@@ -647,7 +647,7 @@ private fun DriverPage(doc: Mm4SaveCodec.Document, selected: String?, onSelect: 
     }
 }
 
-private fun ageFromDate(date:String?, careerDate:String? = null):String {
+internal fun ageFromDate(date:String?, careerDate:String? = null):String {
     if(date.isNullOrBlank()) return "—"
     return try {
         val birth=java.time.LocalDate.parse(date.take(10))
@@ -969,7 +969,7 @@ private fun FinancePage(doc: Mm4SaveCodec.Document, onEdit: (String,List<String>
     }
 }
 
-private fun financeHistoryLabel(value: JsonElement): String {
+internal fun financeHistoryLabel(value: JsonElement): String {
     if (value.isJsonPrimitive && value.asJsonPrimitive.isNumber) {
         return runCatching { formatMoney(value.asLong) }.getOrDefault(preview(value))
     }
@@ -1557,7 +1557,7 @@ internal fun flatten(root: JsonElement): List<Pair<List<String>, JsonElement>> {
 }
 
 
-private fun stepNumericValue(current: String, step: Double, direction: Int): String? = runCatching {
+internal fun stepNumericValue(current: String, step: Double, direction: Int): String? = runCatching {
     val currentValue = java.math.BigDecimal(current)
     val stepValue = java.math.BigDecimal.valueOf(step).multiply(java.math.BigDecimal.valueOf(direction.toLong()))
     currentValue.add(stepValue).stripTrailingZeros().toPlainString()
