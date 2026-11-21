@@ -1093,7 +1093,7 @@ internal fun displayIntegerStat(value:JsonElement?):String = value?.let { v ->
     if(v.isJsonPrimitive && v.asJsonPrimitive.isNumber) runCatching { java.math.BigDecimal(v.asString).setScale(0,java.math.RoundingMode.HALF_UP).toPlainString() }.getOrDefault(preview(v)) else preview(v)
 } ?: "—"
 
-private fun collectObjectsWithId(root:JsonElement):List<Pair<List<String>,JsonObject>> {
+internal fun collectObjectsWithId(root:JsonElement):List<Pair<List<String>,JsonObject>> {
     val found=mutableListOf<Pair<List<String>,JsonObject>>()
     fun visit(node:JsonElement,path:List<String>) {
         when {
