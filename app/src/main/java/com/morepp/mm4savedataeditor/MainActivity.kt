@@ -1092,7 +1092,7 @@ private fun safeObject(parent:JsonObject,key:String):JsonObject? = parent.get(ke
 private fun safeArray(parent:JsonObject,key:String):JsonArray? = parent.get(key)?.takeIf { it.isJsonArray }?.asJsonArray
 
 internal fun driverProfileDisplayValue(key:String,value:JsonElement):String = when(key) {
-    "tweetHandle" -> value.asString.takeUnless { it.startsWith("MMM_TweetHandles_",true) }.orEmpty().ifBlank { "Otomatis dari game" }
+    "tweetHandle" -> value.asString.takeUnless { it.startsWith("MMM_TweetHandles_",true) }.orEmpty().ifBlank { "Belum diatur" }
     "dateOfBirth" -> runCatching { java.time.LocalDate.parse(value.asString.take(10)).format(java.time.format.DateTimeFormatter.ofPattern("dd MMM yyyy",java.util.Locale("id","ID"))) }.getOrDefault("Tanggal tidak valid")
     else -> preview(value)
 }
