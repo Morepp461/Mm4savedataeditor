@@ -105,9 +105,28 @@ object Mm4SaveCodec {
     }
 
     fun sameContent(left: Document, right: Document): Boolean {
-        // Compare serialized JSON rather than Gson tree equality: numeric primitive wrappers can differ after decoding.
-        return gson.toJson(left.info) == gson.toJson(right.info) &&
-            gson.toJson(left.data) == gson.toJson(right.data)
+        // Compare canonical JSON. Object key order and Gson's numeric wrapper types
+        // must not make a valid encode/decode round-trip fail.
+        return canonical(left.info) == canonical(right.info) &&
+            canonical(left.data) == canonical(right.data)
+    }
+
+    private fun canonical(value: com.google.gson.JsonElement): String = when {
+        value.isJsonObject -> value.asJsonObject.entrySet()
+            .sortedBy { it.key }
+            .joinToString(prefix = "{", postfix = "}") { (key, child) ->
+                gson.toJson(key) + ":" + canonical(child)
+            }
+        value.isJsonArray -> value.asJsonArray.joinToString(prefix = "[", postfix = "]") { canonical(it) }
+        value.isJsonNull -> "null"
+        value.asJsonPrimitive.isString -> gson.toJson(value.asString)
+        value.asJsonPrimitive.isBoolean -> value.asBoolean.toString()
+        value.asJsonPrimitive.isNumber -> try {
+            java.math.BigDecimal(value.asString).stripTrailingZeros().toPlainString()
+        } catch (_: NumberFormatException) {
+            value.asString
+        }
+        else -> value.toString()
     }
 
     private fun inflate(source: ByteArray, expectedSize: Int): ByteArray {
