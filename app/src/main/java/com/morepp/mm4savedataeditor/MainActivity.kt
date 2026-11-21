@@ -443,7 +443,7 @@ private fun CareerHeader(
 }
 
 
-private val Sections = listOf("Overview", "Drivers", "Staff", "Teams", "Cars", "Finance", "HQ", "World", "Diagnostics", "Save Info", "Advanced", "God Mode")
+private val Sections = listOf("Overview", "Drivers", "Staff", "Teams", "Cars", "Shop", "Finance", "HQ", "World", "Diagnostics", "Save Info", "Advanced", "God Mode")
 
 @Composable
 private fun CareerWorkspace(
@@ -472,6 +472,7 @@ private fun CareerWorkspace(
                 "Staff" -> EntityCatalogPage(document, "staff", onEdit)
                 "Teams" -> EntityCatalogPage(document, "team", onEdit)
                 "Cars" -> EntityCatalogPage(document, "car", onEdit)
+                "Shop" -> ComponentMarketplacePage(document, onEdit)
                 "Finance" -> FinancePage(document, onEdit)
                 "HQ" -> HqPage(document, onEdit)
                 "World" -> WorldSettingsPage(document, onEdit)
@@ -1043,69 +1044,229 @@ private fun SaveDiagnosticsPage(doc: Mm4SaveCodec.Document) {
     }
 }
 
+private data class HqFacilityInfo(val name: String, val group: Int, val effect: String)
+private val HqFacilityCatalog = listOf(
+ HqFacilityInfo("Fabrication Pipeline",0,"+2 Part Build Limit"),
+ HqFacilityInfo("Factory",0,"+2 Mechanical Bonus to Both Cars"),
+ HqFacilityInfo("Telemetry Department",0,"New Setup Card available in Qualifying"),
+ HqFacilityInfo("Simulator",0,"+2 Part Build Limit"),
+ HqFacilityInfo("Staff Gym",1,"+0.25 Driver Improvement Points Per Race"),
+ HqFacilityInfo("Publicity",1,"Drivers receive +1 Sponsor Appeal"),
+ HqFacilityInfo("Education",1,"+0.25 Driver Improvement Points Per Race"),
+ HqFacilityInfo("Sporting Psychology Center",1,"Can Give Focus to 2 Young Drivers"),
+ HqFacilityInfo("Forecasting Center",2,"Forecasting Center Unlocked"),
+ HqFacilityInfo("Outsourced Logistics",2,"Can Target 1 Additional Node in the Supplier Network"),
+ HqFacilityInfo("Promotions",2,"+10% chance of a Discounted Item appearing in each store"),
+ HqFacilityInfo("Satellite Array",2,"Can Target 1 Additional Node in the Supplier Network"),
+ HqFacilityInfo("Public Relations Team",3,"+1 Sponsor Appeal"),
+ HqFacilityInfo("Income",3,"+$200,000 Income Per Race"),
+ HqFacilityInfo("Hospitality Tents",3,"Unlock 6th Sponsor Slot"),
+ HqFacilityInfo("Companion App Development",4,"+5 Influence Per Race; +$200,000 per Race"),
+ HqFacilityInfo("Social Media Centre",4,"+25 Influence"),
+ HqFacilityInfo("Part Development Contracts",4,"+5 Influence Per Race"),
+ HqFacilityInfo("Rapport",4,"Negotiations are 5% Easier")
+)
+private val HqGroupNames = listOf("Garage","Academy","Logistics","Event Space","Communications")
+
 @Composable
-private fun HqPage(doc:Mm4SaveCodec.Document,onEdit:(String,List<String>,JsonElement)->Unit) {
-    val hq=doc.data.getAsJsonObject("headquarters") ?: JsonObject()
-    val upgrades=hq.getAsJsonArray("m_Upgrades")
-    val completed=hq.getAsJsonArray("m_CompletedUpgrades")
-    data class Facility(val listIndex:Int,val gameKey:String,val value:JsonObject)
-    val facilities=upgrades?.mapIndexedNotNull { index, element ->
-        if (!element.isJsonObject) return@mapIndexedNotNull null
-        val row=element.asJsonObject
-        val key=row.get("Key")?.asString ?: index.toString()
-        val value=row.getAsJsonObject("Value") ?: return@mapIndexedNotNull null
-        Facility(index,key,value)
-    }.orEmpty()
-    val tierRows=hq.getAsJsonArray("m_CurrentTierInformation")
-    LazyColumn(contentPadding=PaddingValues(14.dp),verticalArrangement=Arrangement.spacedBy(10.dp)) {
-        item {
-            GlassCard(Modifier.fillMaxWidth()) {
-                Text("HEADQUARTERS",color=Gold,fontWeight=FontWeight.Bold,fontSize=11.sp)
-                Text("${completed?.size() ?: 0} completed upgrades",fontSize=23.sp,fontWeight=FontWeight.Black)
-                Text("${facilities.size} facility upgrade records",color=Muted,fontSize=11.sp)
-                Text("Status fasilitas, waktu pembukaan, dan jalur upgrade dapat diubah dari kontrol di bawah.",color=Muted,fontSize=10.sp)
-            }
-        }
-        item {
-            GlassCard(Modifier.fillMaxWidth()) {
-                Text("FACILITY LEVELS",color=Gold,fontWeight=FontWeight.Bold,fontSize=11.sp)
-                tierRows?.forEachIndexed { i, row ->
-                    if(row.isJsonObject) {
-                        val key=row.asJsonObject.get("Key")?.asString ?: i.toString()
-                        val value=row.asJsonObject.get("Value")
-                        Row(Modifier.fillMaxWidth().padding(vertical=4.dp),verticalAlignment=Alignment.CenterVertically) {
-                            Text(facilityGroupLabel(key.toIntOrNull() ?: i),Modifier.weight(1f),color=Muted,fontSize=11.sp)
-                            Text(value?.asString ?: "—",color=Gold,fontWeight=FontWeight.Bold)
-                        }
-                    }
-                }
-            }
-        }
-        items(facilities,key={it.listIndex}) { facility ->
-            val state=facility.value.get("State")
-            val weeks=facility.value.get("weeksToUnlock")
-            val pathType=facility.value.get("pathType")
-            val stateNumber=state?.asInt ?: -1
-            val status=when(stateNumber) { 0 -> "Locked"; 1 -> "Unlocked"; 2 -> "Upgrade in progress"; else -> "Unknown status" }
-            GlassCard(Modifier.fillMaxWidth()) {
-                Row(verticalAlignment=Alignment.CenterVertically) {
-                    Column(Modifier.weight(1f)) {
-                        Text("${facilityGroupLabel(facility.value.get("pathType")?.asInt ?: 0)} • Upgrade ${facility.gameKey}",fontWeight=FontWeight.Bold,fontSize=14.sp)
-                        Text(status,color=when(stateNumber){1->Color(0xFF82D7A2);0->Red;else->Gold},fontSize=11.sp)
-                    }
-                    TextButton(onClick={onEdit("Game Data",listOf("headquarters","m_Upgrades","[${facility.listIndex}]","Value","State"),state ?: com.google.gson.JsonPrimitive(0))}) { Text("CHANGE STATUS") }
-                }
-                if(weeks!=null) InfoLine("Weeks until unlock",weeks.asString)
-                if(pathType!=null) InfoLine("Upgrade path",pathType.asString)
-                Row(horizontalArrangement=Arrangement.spacedBy(7.dp)) {
-                    if(weeks!=null) OutlinedButton(onClick={onEdit("Game Data",listOf("headquarters","m_Upgrades","[${facility.listIndex}]","Value","weeksToUnlock"),weeks)}) { Text("EDIT TIMER",fontSize=10.sp) }
-                    if(pathType!=null) OutlinedButton(onClick={onEdit("Game Data",listOf("headquarters","m_Upgrades","[${facility.listIndex}]","Value","pathType"),pathType)}) { Text("EDIT PATH",fontSize=10.sp) }
-                }
-            }
-        }
+private fun HqPage(doc: Mm4SaveCodec.Document, onEdit: (String,List<String>,JsonElement)->Unit) {
+ val hq=doc.data.getAsJsonObject("headquarters") ?: JsonObject()
+ val upgrades=hq.getAsJsonArray("m_Upgrades")
+ val completed=hq.getAsJsonArray("m_CompletedUpgrades")
+ val tierRows=hq.getAsJsonArray("m_CurrentTierInformation")
+ val grouped=upgrades?.mapIndexedNotNull { index,element ->
+  if(!element.isJsonObject) return@mapIndexedNotNull null
+  val row=element.asJsonObject
+  val key=row.get("Key")?.asString ?: index.toString()
+  val value=row.getAsJsonObject("Value") ?: return@mapIndexedNotNull null
+  Triple(index,key,value)
+ }?.groupBy { it.third.get("pathType")?.asInt ?: -1 }.orEmpty()
+ LazyColumn(contentPadding=PaddingValues(14.dp),verticalArrangement=Arrangement.spacedBy(10.dp)) {
+  item {
+   GlassCard(Modifier.fillMaxWidth()) {
+    Text("HEADQUARTERS",color=Gold,fontWeight=FontWeight.Bold,fontSize=11.sp)
+    Text(HqFacilityCatalog.size.toString()+" named facilities",fontSize=23.sp,fontWeight=FontWeight.Black)
+    Text((completed?.size() ?: 0).toString()+" completed upgrades • "+(upgrades?.size() ?: 0).toString()+" upgrade nodes",color=Muted,fontSize=10.sp)
+    Text("Nama dan efek fasilitas diambil dari video gameplay kamu. Upgrade node ditampilkan terpisah agar ID game tidak dipasangkan ke fasilitas secara asal.",color=Muted,fontSize=10.sp)
+   }
+  }
+  item {
+   GlassCard(Modifier.fillMaxWidth()) {
+    Text("HQ CATEGORY LEVELS",color=Gold,fontWeight=FontWeight.Bold,fontSize=11.sp)
+    tierRows?.forEachIndexed { index,row ->
+     if(row.isJsonObject) {
+      val key=row.asJsonObject.get("Key")?.asInt ?: index
+      val value=row.asJsonObject.get("Value")
+      val group=HqGroupNames.getOrNull(key) ?: "HQ Category #"+key
+      Row(Modifier.fillMaxWidth().padding(vertical=4.dp),verticalAlignment=Alignment.CenterVertically) {
+       Text(group,Modifier.weight(1f),color=Color.White,fontSize=12.sp)
+       Text(value?.asString ?: "—",color=Gold,fontWeight=FontWeight.Bold)
+       if(value!=null) IconButton(onClick={onEdit("Game Data",listOf("headquarters","m_CurrentTierInformation","["+index+"]","Value"),value)}) {
+        Icon(Icons.Default.Edit,contentDescription="Edit "+group+" level",tint=Muted)
+       }
+      }
+     }
     }
+   }
+  }
+  HqGroupNames.forEachIndexed { groupIndex,groupName ->
+   val facilities=HqFacilityCatalog.filter { it.group==groupIndex }
+   item {
+    GlassCard(Modifier.fillMaxWidth()) {
+     Text(groupName.uppercase(),color=Gold,fontWeight=FontWeight.Black,fontSize=12.sp)
+     Text(facilities.size.toString()+" facilities shown in your gameplay video",color=Muted,fontSize=10.sp)
+    }
+   }
+   items(facilities) { facility ->
+    GlassCard(Modifier.fillMaxWidth()) {
+     Text(facility.name,fontWeight=FontWeight.Bold,fontSize=14.sp)
+     Text(facility.effect,color=Color(0xFF9BE36A),fontSize=11.sp)
+    }
+   }
+  }
+  item {
+   GlassCard(Modifier.fillMaxWidth()) {
+    Text("RAW UPGRADE NODES",color=Gold,fontWeight=FontWeight.Bold,fontSize=11.sp)
+    Text("Edit State, weeksToUnlock, dan pathType menggunakan Key asli dari save.",color=Muted,fontSize=10.sp)
+   }
+  }
+  grouped.toSortedMap().forEach { (pathType,rows) ->
+   item {
+    GlassCard(Modifier.fillMaxWidth()) {
+     Text(HqGroupNames.getOrNull(pathType) ?: "Unmapped path type "+pathType,color=Gold,fontWeight=FontWeight.Bold)
+     Text(rows.size.toString()+" upgrade nodes",color=Muted,fontSize=10.sp)
+    }
+   }
+   items(rows,key={it.first}) { (listIndex,gameKey,value) ->
+    val state=value.get("State")
+    val weeks=value.get("weeksToUnlock")
+    val path=value.get("pathType")
+    val stateNumber=state?.asInt ?: -1
+    val status=when(stateNumber){0->"Locked";1->"Unlocked";2->"Upgrade in progress";else->"State "+stateNumber}
+    GlassCard(Modifier.fillMaxWidth()) {
+     Row(verticalAlignment=Alignment.CenterVertically) {
+      Column(Modifier.weight(1f)) {
+       Text("Upgrade node #"+gameKey,fontWeight=FontWeight.Bold,fontSize=13.sp)
+       Text(status,color=when(stateNumber){1->Color(0xFF82D7A2);0->Red;else->Gold},fontSize=11.sp)
+      }
+      if(state!=null) TextButton(onClick={onEdit("Game Data",listOf("headquarters","m_Upgrades","["+listIndex+"]","Value","State"),state)}){Text("STATE")}
+     }
+     if(weeks!=null) {
+      InfoLine("Weeks to unlock",weeks.asString)
+      TextButton(onClick={onEdit("Game Data",listOf("headquarters","m_Upgrades","["+listIndex+"]","Value","weeksToUnlock"),weeks)}){Text("EDIT TIMER")}
+     }
+     if(path!=null) {
+      InfoLine("Upgrade path",HqGroupNames.getOrNull(path.asInt) ?: path.asString)
+      TextButton(onClick={onEdit("Game Data",listOf("headquarters","m_Upgrades","["+listIndex+"]","Value","pathType"),path)}){Text("EDIT PATH")}
+     }
+    }
+   }
+  }
+ }
 }
 
+private val SupplierNames=listOf("Micronix Racing","Shimizu","Polymat Group","Tectra Fibres","Norex","Mersault","Kitano")
+private fun componentTypeName(type:Int)=when(type){1->"Suspension";3->"Exhaust";4->"ECU";5->"Gearbox";else->"Component type #"+type}
+private fun componentRarityName(rarity:Int)=when(rarity){0->"Common";1->"Uncommon";2->"Rare";3->"Epic";4->"Legendary";else->"Rarity #"+rarity}
+private fun componentStatName(stat:Int)=when(stat){
+ 0->"Top Speed";1->"Acceleration";2->"Braking";3->"Low Speed Cornering";4->"High Speed Cornering";5->"Tyre Wear";6->"Fuel Efficiency";else->"Stat #"+stat
+}
+
+@Composable
+private fun ComponentMarketplacePage(doc:Mm4SaveCodec.Document,onEdit:(String,List<String>,JsonElement)->Unit) {
+ val market=doc.data.getAsJsonObject("componentMarketplace") ?: JsonObject()
+ val openItems=market.getAsJsonArray("m_Components")?.mapIndexed { index,element->index to element }.orEmpty()
+ val supplierRows=market.getAsJsonArray("m_CompanyComponents")?.mapIndexed { index,element->index to element }.orEmpty()
+ LazyColumn(contentPadding=PaddingValues(14.dp),verticalArrangement=Arrangement.spacedBy(9.dp)) {
+  item {
+   GlassCard(Modifier.fillMaxWidth()) {
+    Text("COMPONENT MARKETPLACE",color=Gold,fontWeight=FontWeight.Black,fontSize=12.sp)
+    Text("Open Market & 7 supplier stores",fontSize=21.sp,fontWeight=FontWeight.Black)
+    Text("Edit harga, rarity, diskon, status stok, tipe komponen, serta bonus statistik. Nama supplier mengikuti tab di video.",color=Muted,fontSize=10.sp)
+   }
+  }
+  item {
+   GlassCard(Modifier.fillMaxWidth()) {
+    Text("MARKET SETTINGS",color=Gold,fontWeight=FontWeight.Bold,fontSize=11.sp)
+    listOf("OutOfStockChance","m_CompanyRacesToRestock").forEach { key ->
+     val value=market.get(key)
+     if(value!=null && value.isJsonPrimitive) {
+      Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically) {
+       Column(Modifier.weight(1f)) {
+        Text(humanizeField(key),fontSize=11.sp)
+        Text(preview(value),color=Gold,fontWeight=FontWeight.Bold,fontSize=11.sp)
+       }
+       IconButton(onClick={onEdit("Game Data",listOf("componentMarketplace",key),value)}){Icon(Icons.Default.Edit,contentDescription="Edit "+key,tint=Muted)}
+      }
+     }
+    }
+    market.getAsJsonArray("m_ComponentMarks")?.forEachIndexed { index,value ->
+     Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically) {
+      Text(SupplierNames.getOrNull(index) ?: "Supplier #"+index,Modifier.weight(1f),fontSize=10.sp)
+      Text(preview(value),color=Gold,fontSize=10.sp)
+      IconButton(onClick={onEdit("Game Data",listOf("componentMarketplace","m_ComponentMarks","["+index+"]"),value)}){Icon(Icons.Default.Edit,contentDescription="Edit supplier mark",tint=Muted)}
+     }
+    }
+   }
+  }
+  item { GlassCard(Modifier.fillMaxWidth()) { Text("OPEN MARKET",color=Gold,fontWeight=FontWeight.Black,fontSize=13.sp); Text(openItems.size.toString()+" components in this save",color=Muted,fontSize=10.sp) } }
+  items(openItems,key={"open-"+it.first}) { (index,element)->MarketplaceComponentCard(element,"m_Components",index,"Open Market",onEdit) }
+  supplierRows.forEach { (supplierIndex,supplierElement)->
+   val components=if(supplierElement.isJsonArray)supplierElement.asJsonArray.mapIndexed{index,item->index to item}else emptyList()
+   item { GlassCard(Modifier.fillMaxWidth()) { Text(SupplierNames.getOrNull(supplierIndex) ?: "Supplier #"+supplierIndex,color=Gold,fontWeight=FontWeight.Black,fontSize=13.sp); Text(components.size.toString()+" supplier components",color=Muted,fontSize=10.sp) } }
+   items(components,key={"supplier-"+supplierIndex+"-"+it.first}) { (componentIndex,component)->MarketplaceComponentCard(component,"m_CompanyComponents",componentIndex,SupplierNames.getOrNull(supplierIndex) ?: "Supplier #"+supplierIndex,onEdit,supplierIndex) }
+  }
+ }
+}
+
+@Composable
+private fun MarketplaceComponentCard(element:JsonElement,arrayKey:String,componentIndex:Int,sourceLabel:String,onEdit:(String,List<String>,JsonElement)->Unit,supplierIndex:Int?=null) {
+ if(!element.isJsonObject)return
+ val component=element.asJsonObject
+ val prefix=buildList {
+  add("componentMarketplace");add(arrayKey)
+  if(supplierIndex!=null)add("["+supplierIndex+"]")
+  add("["+componentIndex+"]")
+ }
+ fun edit(field:String,value:JsonElement?){if(value!=null)onEdit("Game Data",prefix+field,value)}
+ val type=component.get("m_Type")?.asInt ?: -1
+ val rarity=component.get("m_Rarity")?.asInt ?: -1
+ val stats=component.getAsJsonArray("m_Stats")
+ GlassCard(Modifier.fillMaxWidth()) {
+  Row(verticalAlignment=Alignment.CenterVertically) {
+   Column(Modifier.weight(1f)) {
+    Text(componentTypeName(type),fontWeight=FontWeight.Black,fontSize=14.sp)
+    Text(sourceLabel+" • "+componentRarityName(rarity),color=Muted,fontSize=10.sp)
+   }
+   TextButton(onClick={edit("m_Type",component.get("m_Type"))}){Text("TYPE")}
+  }
+  Row(horizontalArrangement=Arrangement.spacedBy(8.dp),verticalAlignment=Alignment.CenterVertically) {
+   listOf("m_Price" to "Price","m_Discount" to "Discount","m_State" to "Stock state","m_Rarity" to "Rarity").forEach { (key,label)->
+    val value=component.get(key)
+    if(value!=null) Column(Modifier.weight(1f).clickable{edit(key,value)}.padding(vertical=4.dp)) {
+     Text(label,color=Muted,fontSize=9.sp);Text(preview(value),color=Gold,fontWeight=FontWeight.Bold,fontSize=11.sp)
+    }
+   }
+  }
+  if(stats!=null) {
+   Divider(color=Color.White.copy(alpha=0.12f))
+   Text("PERFORMANCE STATS",color=Gold,fontWeight=FontWeight.Bold,fontSize=9.sp)
+   stats.forEachIndexed { statIndex,stat->
+    if(stat.isJsonObject) {
+     val statObject=stat.asJsonObject
+     val statId=statObject.get("Stat")?.asInt ?: -1
+     val statValue=statObject.get("Value")
+     Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically) {
+      Text(componentStatName(statId),Modifier.weight(1f),fontSize=11.sp)
+      Text(statValue?.asString ?: "—",color=Gold,fontWeight=FontWeight.Bold,fontSize=11.sp)
+      if(statValue!=null)TextButton(onClick={onEdit("Game Data",prefix+listOf("m_Stats","["+statIndex+"]","Value"),statValue)}){Text("EDIT")}
+      statObject.get("Stat")?.let{statField->IconButton(onClick={onEdit("Game Data",prefix+listOf("m_Stats","["+statIndex+"]","Stat"),statField)}){Icon(Icons.Default.Edit,contentDescription="Edit stat type",tint=Muted)}}
+     }
+    }
+   }
+  }
+ }
+}
 @Composable
 private fun InfoPage(doc: Mm4SaveCodec.Document, onEdit: (String,List<String>,JsonElement)->Unit) {
     val fields = listOf("teamName" to "Team name", "playerFirstName" to "Manager first name", "playerLastName" to "Manager last name", "gameDate" to "Career date", "playerAge" to "Manager age", "championshipTier" to "Championship tier", "championshipSeries" to "Championship series", "eventNumber" to "Event number", "hardMode" to "Hard mode", "timePlayed" to "Play time")
