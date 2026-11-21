@@ -712,7 +712,7 @@ private fun EntityCatalogPage(doc: Mm4SaveCodec.Document, category: String, onEd
                     if(id in driverIds) return@mapNotNull null
                     val stats=obj.getAsJsonObject("stats") ?: return@mapNotNull null
                     val role=when {
-                        stats.has("m_Engineer") -> "Engineer"
+                        stats.has("m_Engineer") -> "Designer"
                         stats.has("m_Mechanic") -> "Mechanic"
                         stats.has("m_Strategist") -> "Strategist"
                         else -> return@mapNotNull null
@@ -765,7 +765,7 @@ private fun EntityCatalogPage(doc: Mm4SaveCodec.Document, category: String, onEd
     } else {
         val fields=flatten(chosen.data).filter { row -> row.second.isJsonPrimitive && row.first.lastOrNull()!="\$version" && (category!="team" || (row.first.size==1 && row.first[0] in setOf("name","shortName","aggression","m_TeamID","m_Reputation","m_EngineerRacePerformanceModifier","m_MechanicsRacePerformanceModifier","m_UIStarValue","m_ColorID","m_LiveryID","m_LogoID","m_BadgeID","driversBodyStyle","m_Location"))) && (category!="car" || row.first.firstOrNull()!="m_Stats") }
         val isCar=category=="car"
-        val stats=chosen.data.getAsJsonArray("m_Stats")
+        val stats=if(category=="staff") chosen.data.getAsJsonObject("stats")?.getAsJsonArray("m_Stats") else chosen.data.getAsJsonArray("m_Stats")
         val labels=when {
             isCar -> listOf("Top Speed","Acceleration","Braking","Low Speed Cornering","High Speed Cornering","Tyre Wear","Fuel Efficiency")
             category=="staff" && chosen.type.contains("Designer",true) -> listOf("Performance","Reliability","Leadership","Bonus","Success Rate")
@@ -794,7 +794,7 @@ private fun EntityCatalogPage(doc: Mm4SaveCodec.Document, category: String, onEd
                 item { Text("CAR PERFORMANCE",color=Gold,fontWeight=FontWeight.Bold,fontSize=12.sp) }
                 items(stats.size()) { index ->
                     val value=stats[index]
-                    GlassCard(Modifier.fillMaxWidth().clickable { onEdit("Game Data",chosen.path+listOf("m_Stats","[$index]"),value) }) {
+                    GlassCard(Modifier.fillMaxWidth().clickable { onEdit("Game Data",chosen.path+(if(category=="staff") listOf("stats","m_Stats","[$index]","m_Stat") else listOf("m_Stats","[$index]")),if(category=="staff") value.asJsonObject.get("m_Stat") ?: value else value) }) {
                         Row(verticalAlignment=Alignment.CenterVertically) {
                             Text(labels.getOrNull(index) ?: "Car attribute ${index+1}",Modifier.weight(1f),fontWeight=FontWeight.SemiBold)
                             Text(preview(value),color=Gold,fontWeight=FontWeight.Bold)
@@ -804,7 +804,8 @@ private fun EntityCatalogPage(doc: Mm4SaveCodec.Document, category: String, onEd
                 }
             }
             items(fields,key={it.first.joinToString("/")}) { (path,value) ->
-                val label=if(path.any { it=="m_Stats" }) statAttributeLabel(category,chosen.type,path.last().removePrefix("[").removeSuffix("]").toIntOrNull() ?: 0) else humanizeField(path.last())
+                val statIndex=path.firstOrNull { it.startsWith("[") }?.removePrefix("[")?.removeSuffix("]")?.toIntOrNull() ?: 0
+                val label=if(path.any { it=="m_Stats" }) statAttributeLabel(category,chosen.type,statIndex) else humanizeField(path.last())
                 GlassCard(Modifier.fillMaxWidth().clickable { onEdit("Game Data",chosen.path+path,value) }) {
                     Row(verticalAlignment=Alignment.CenterVertically) {
                         Column(Modifier.weight(1f)) {
