@@ -1380,6 +1380,85 @@ private fun worldGroupLabel(key:String):String = when(key) {
     else -> humanLabel(key)
 }
 
+private data class EntityOption(val id:String,val name:String,val detail:String="")
+
+private fun teamOptions(data:JsonObject):List<EntityOption> {
+    val all=collectObjectsWithId(data).associateBy { it.second.get("\$id")?.asString }
+    return data.getAsJsonObject("teamManager")?.getAsJsonArray("m_Teams")?.mapNotNull { ref ->
+        val id=ref.takeIf { it.isJsonObject }?.asJsonObject?.get("\$ref")?.asString ?: return@mapNotNull null
+        val team=all[id]?.second ?: return@mapNotNull null
+        EntityOption(id,team.get("name")?.takeIf { it.isJsonPrimitive }?.asString?.ifBlank { null } ?: "Team $id")
+    }?.distinctBy { it.id }.orEmpty()
+}
+
+private fun driverOptions(data:JsonObject):List<EntityOption> {
+    val all=collectObjectsWithId(data).associateBy { it.second.get("\$id")?.asString }
+    val teams=teamOptions(data).associate { it.id to it.name }
+    return data.getAsJsonObject("driverManager")?.getAsJsonArray("m_Drivers")?.mapNotNull { ref ->
+        val id=ref.takeIf { it.isJsonObject }?.asJsonObject?.get("\$ref")?.asString ?: return@mapNotNull null
+        val driver=all[id]?.second ?: return@mapNotNull null
+        val details=driver.getAsJsonObject("m_PersonDetails")
+        val name=details?.get("name")?.takeIf { it.isJsonPrimitive }?.asString?.ifBlank { null } ?: "Driver $id"
+        val teamId=driver.getAsJsonObject("contract")?.getAsJsonObject("m_Team")?.get("\$ref")?.asString
+        EntityOption(id,name,teamId?.let { teams[it] } ?: "Free Agent")
+    }?.distinctBy { it.id }.orEmpty()
+}
+
+internal fun moveDriverToTeam(data:JsonObject,driverId:String,targetTeamId:String):Boolean {
+    val teams=teamOptions(data)
+    if(teams.none { it.id==targetTeamId }) return false
+    val driver=collectObjectsWithId(data).firstOrNull { it.second.get("\$id")?.asString==driverId }?.second ?: return false
+    val contract=driver.get("contract")?.takeIf { it.isJsonObject }?.asJsonObject ?: return false
+    val teamRef=contract.get("m_Team")?.takeIf { it.isJsonObject }?.asJsonObject ?: return false
+    if(teamRef.get("\$ref")?.asString==targetTeamId) return false
+    val oldTeamId=teamRef.get("\$ref")?.asString
+    teamRef.addProperty("\$ref",targetTeamId)
+    val driverRef=JsonObject().apply { addProperty("\$ref",driverId) }
+    val allTeams=collectObjectsWithId(data).map { it.second }
+    allTeams.forEach { team ->
+        val roster=team.get("m_Drivers")?.takeIf { it.isJsonArray }?.asJsonArray ?: return@forEach
+        for(i in roster.size()-1 downTo 0) {
+            if(roster[i].isJsonObject && roster[i].asJsonObject.get("\$ref")?.asString==driverId) roster.remove(i)
+        }
+    }
+    val target=collectObjectsWithId(data).firstOrNull { it.second.get("\$id")?.asString==targetTeamId }?.second
+    val targetRoster=target?.get("m_Drivers")?.takeIf { it.isJsonArray }?.asJsonArray
+    if(targetRoster!=null && targetRoster.none { it.isJsonObject && it.asJsonObject.get("\$ref")?.asString==driverId }) targetRoster.add(driverRef)
+    // The contract reference is authoritative; roster arrays are synchronized only when present.
+    return oldTeamId!=targetTeamId
+}
+
+internal fun swapTeamsBetweenDivisions(data:JsonObject,teamA:String,teamB:String):Boolean {
+    if(teamA==teamB) return false
+    val valid=teamOptions(data).map { it.id }.toSet()
+    if(teamA !in valid || teamB !in valid) return false
+    data.get("championshipManager")?.takeIf { it.isJsonObject } ?: return false
+    data class Location(val array:JsonArray,val index:Int)
+    val locations=mutableMapOf<String,MutableList<Location>>()
+    fun visit(node:JsonElement,path:List<String>) {
+        when {
+            node.isJsonObject -> node.asJsonObject.entrySet().forEach { (key,value) -> visit(value,path+key) }
+            node.isJsonArray -> {
+                if(path.any { it.contains("team",true) }) {
+                    node.asJsonArray.forEachIndexed { index,value ->
+                        val id=value.takeIf { it.isJsonObject }?.asJsonObject?.get("\$ref")?.asString
+                        if(id in valid) locations.getOrPut(id!!) { mutableListOf() }.add(Location(node.asJsonArray,index))
+                    }
+                }
+                node.asJsonArray.forEachIndexed { index,value -> visit(value,path+"[$index]") }
+            }
+        }
+    }
+    visit(data.getAsJsonObject("championshipManager"),listOf("championshipManager"))
+    val a=locations[teamA]?.firstOrNull() ?: return false
+    val b=locations[teamB]?.firstOrNull() ?: return false
+    val aRef=a.array[a.index].asJsonObject
+    val bRef=b.array[b.index].asJsonObject
+    aRef.addProperty("\$ref",teamB)
+    bRef.addProperty("\$ref",teamA)
+    return true
+}
+
 private fun applyGodModeAction(current:Mm4SaveCodec.Document,action:String):Mm4SaveCodec.Document? {
     val data=current.data.deepCopy().asJsonObject
     when(action) {
@@ -1405,6 +1484,14 @@ private fun applyGodModeAction(current:Mm4SaveCodec.Document,action:String):Mm4S
         "debug_unlock" -> {
             val research=data.getAsJsonObject("researchManager") ?: return null
             research.addProperty("m_IsDebugUnlocked",true)
+        }
+        action.startsWith("swap_teams|") -> {
+            val parts=action.split("|")
+            if(parts.size!=3 || !swapTeamsBetweenDivisions(data,parts[1],parts[2])) return null
+        }
+        action.startsWith("move_driver|") -> {
+            val parts=action.split("|")
+            if(parts.size!=3 || !moveDriverToTeam(data,parts[1],parts[2])) return null
         }
         "unlock_suppliers" -> {
             val supplier=data.getAsJsonObject("supplierNetworkManager") ?: return null
@@ -1435,11 +1522,37 @@ private fun GodModePage(doc:Mm4SaveCodec.Document,onAction:(String)->Unit) {
     val hq=doc.data.getAsJsonObject("headquarters")?.getAsJsonArray("m_Upgrades")
     val unlocked=hq?.count { it.asJsonObject.getAsJsonObject("Value")?.get("State")?.asInt==1 } ?: 0
     val research=doc.data.getAsJsonObject("researchManager")
+    val teams=remember(doc.data) { teamOptions(doc.data) }
+    val drivers=remember(doc.data) { driverOptions(doc.data) }
+    var teamA by remember { mutableStateOf<String?>(null) }
+    var teamB by remember { mutableStateOf<String?>(null) }
+    var driverId by remember { mutableStateOf<String?>(null) }
+    var targetTeam by remember { mutableStateOf<String?>(null) }
+    var picker by remember { mutableStateOf<String?>(null) }
+    val pickerOptions=when(picker) { "teamA","teamB","targetTeam" -> teams; "driver" -> drivers; else -> emptyList() }
     LazyColumn(contentPadding=PaddingValues(14.dp),verticalArrangement=Arrangement.spacedBy(10.dp)) {
         item {
             GlassCard(Modifier.fillMaxWidth()) {
                 Text("GOD MODE",color=Gold,fontWeight=FontWeight.Black,fontSize=13.sp)
                 Text("Kontrol khusus untuk mengubah karier secara ekstrem. Setiap tombol mengubah data save dan bisa dibatalkan dengan membuka file asli lagi.",color=Muted,fontSize=11.sp)
+            }
+        }
+        item {
+            GlassCard(Modifier.fillMaxWidth()) {
+                Text("TEAM SWAP • PINDAH DIVISI",color=Gold,fontWeight=FontWeight.Bold)
+                Text("Pilih dua tim untuk menukar slot divisi mereka. Fitur hanya aktif jika save menyimpan daftar tim di championship manager.",color=Muted,fontSize=10.sp)
+                Button(onClick={picker="teamA"},modifier=Modifier.fillMaxWidth()) { Text(teams.firstOrNull { it.id==teamA }?.name ?: "PILIH TIM PERTAMA") }
+                Button(onClick={picker="teamB"},modifier=Modifier.fillMaxWidth()) { Text(teams.firstOrNull { it.id==teamB }?.name ?: "PILIH TIM KEDUA") }
+                Button(onClick={if(teamA!=null && teamB!=null) onAction("swap_teams|$teamA|$teamB")},enabled=teamA!=null && teamB!=null && teamA!=teamB,modifier=Modifier.fillMaxWidth(),colors=ButtonDefaults.buttonColors(containerColor=Blue)) { Text("TUKAR DIVISI TIM") }
+            }
+        }
+        item {
+            GlassCard(Modifier.fillMaxWidth()) {
+                Text("MOVE DRIVER • PINDAH TIM",color=Gold,fontWeight=FontWeight.Bold)
+                Text("Memindahkan pembalap dengan memperbarui referensi tim pada kontrak. Roster tim ikut disinkronkan jika struktur save menyediakan daftar m_Drivers.",color=Muted,fontSize=10.sp)
+                Button(onClick={picker="driver"},modifier=Modifier.fillMaxWidth()) { Text(drivers.firstOrNull { it.id==driverId }?.name ?: "PILIH PEMBALAP") }
+                Button(onClick={picker="targetTeam"},modifier=Modifier.fillMaxWidth()) { Text(teams.firstOrNull { it.id==targetTeam }?.name ?: "PILIH TIM TUJUAN") }
+                Button(onClick={if(driverId!=null && targetTeam!=null) onAction("move_driver|$driverId|$targetTeam")},enabled=driverId!=null && targetTeam!=null,modifier=Modifier.fillMaxWidth(),colors=ButtonDefaults.buttonColors(containerColor=Blue)) { Text("PINDAHKAN PEMBALAP") }
             }
         }
         item {
@@ -1481,6 +1594,26 @@ private fun GodModePage(doc:Mm4SaveCodec.Document,onAction:(String)->Unit) {
             Text("Pemindahan tim antar divisi dan transfer pembalap belum diaktifkan pada build ini. Keduanya harus menjaga referensi roster, kontrak, klasemen, dan kejuaraan secara serentak. Tidak akan dibuat tombol yang berisiko merusak save.",color=Muted,fontSize=10.sp)
         }
     }
+    if(picker!=null) AlertDialog(
+        onDismissRequest={picker=null},
+        title={Text(when(picker) { "teamA"->"Pilih tim pertama"; "teamB"->"Pilih tim kedua"; "driver"->"Pilih pembalap"; else->"Pilih tim tujuan" })},
+        text={
+            LazyColumn(Modifier.heightIn(max=420.dp)) {
+                items(pickerOptions,key={it.id}) { option ->
+                    TextButton(onClick={
+                        when(picker) { "teamA"->teamA=option.id; "teamB"->teamB=option.id; "driver"->driverId=option.id; "targetTeam"->targetTeam=option.id }
+                        picker=null
+                    },modifier=Modifier.fillMaxWidth()) {
+                        Column(Modifier.fillMaxWidth()) {
+                            Text(option.name,color=Color.White,fontWeight=FontWeight.SemiBold)
+                            if(option.detail.isNotBlank()) Text(option.detail,color=Muted,fontSize=10.sp)
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton={TextButton(onClick={picker=null}) { Text("Tutup") }}
+    )
 }
 @Composable
 private fun GlassCard(modifier: Modifier = Modifier, content: @Composable ColumnScope.() -> Unit) {
