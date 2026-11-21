@@ -135,11 +135,13 @@ private data class EditTarget(val root:String,val path:List<String>,val value:Js
 }
 private fun flatten(root:JsonElement):List<Pair<List<String>,JsonElement>>{
  val out=mutableListOf<Pair<List<String>,JsonElement>>()
- fun walk(node:JsonElement,path:List<String>){when{
-  node.isJsonObject->node.asJsonObject.entrySet().forEach{(k,v)->walk(v,path+k)}
-  node.isJsonArray->node.asJsonArray.forEachIndexed{i,v->walk(v,path+"[$i]")}
-  else->out+=path to node
- }}
+ fun walk(node:JsonElement,path:List<String>){
+  if(path.isNotEmpty())out+=path to node
+  when{
+   node.isJsonObject->node.asJsonObject.entrySet().forEach{(k,v)->walk(v,path+k)}
+   node.isJsonArray->node.asJsonArray.forEachIndexed{i,v->walk(v,path+"[$i]")}
+  }
+ }
  walk(root,emptyList());return out
 }
 private fun setPath(root:JsonObject,path:List<String>,value:JsonElement):Boolean{
