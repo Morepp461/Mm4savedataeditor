@@ -1167,7 +1167,7 @@ private fun WorldSettingsPage(doc:Mm4SaveCodec.Document,onEdit:(String,List<Stri
             GlassCard(Modifier.fillMaxWidth()) {
                 Text(worldGroupLabel(group.key),fontWeight=FontWeight.Bold)
                 Text(categoryDescription(group.value,flatten(group.value).size),color=Muted,fontSize=10.sp)
-                flatten(group.value).filter { (path,value) -> path.none { it == "\\$ref" || it == "\\$version" } && value.isJsonPrimitive }.forEach { (path,value) ->
+                flatten(group.value).filter { (path,value) -> path.none { it == "\$ref" || it == "\$version" } && value.isJsonPrimitive }.forEach { (path,value) ->
                     Row(Modifier.fillMaxWidth().clickable { onEdit("Game Data",listOf(group.key)+path,value) }.padding(vertical=6.dp),verticalAlignment=Alignment.CenterVertically) {
                         Text(humanLabel(path.last()),Modifier.weight(1f),fontSize=11.sp)
                         Text(preview(value),color=Gold,fontSize=11.sp)
@@ -1871,8 +1871,11 @@ private fun GodModePage(doc:Mm4SaveCodec.Document,onAction:(String)->Unit) {
         item {
             GlassCard(Modifier.fillMaxWidth()) {
                 Text("NAMA DIVISI RESMI",color=Gold,fontWeight=FontWeight.Bold)
-                Text("Divisi MM4 disimpan sebagai ID numerik 0–3, bukan nama teks. Editor memakai label F1, F2, F3, dan F4 berdasarkan ID tanpa menambahkan properti nama fiktif ke save.",color=Muted,fontSize=10.sp)
-                Button(onClick={onAction("rename_divisions")},modifier=Modifier.fillMaxWidth(),colors=ButtonDefaults.buttonColors(containerColor=Blue)) { Text("UBAH NAMA DIVISI F1–F4") }
+                Text("Nama yang ditampilkan mengikuti ID championship MM4. Editor tidak menulis properti nama palsu ke file save.",color=Muted,fontSize=10.sp)
+                InfoLine("ID 0",careerDivisionLabel(0))
+                InfoLine("ID 1",careerDivisionLabel(1))
+                InfoLine("ID 2",careerDivisionLabel(2))
+                InfoLine("ID 3",careerDivisionLabel(3))
             }
         }
         item {
