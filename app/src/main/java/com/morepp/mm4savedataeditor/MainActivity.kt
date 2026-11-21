@@ -1320,7 +1320,7 @@ private fun EditValueDialog(target: EditTarget, onClose: () -> Unit, onSave: (Js
                     isNumber -> {
                         Text(value, fontSize = 24.sp, fontWeight = FontWeight.Bold, color = Gold)
                         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                            OutlinedButton(onClick = { value = (currentNumber - numberStep).toLong().toString() }) { Text("−") }
+                            OutlinedButton(onClick = { value = (value.toDouble() - numberStep).toLong().toString() }) { Text("−") }
                             Text("Langkah ${'
 }
 
@@ -1522,7 +1522,7 @@ internal fun mutateDocument(
     }
 }
 }{numberStep.toLong()}", color = Muted, fontSize = 10.sp)
-                            OutlinedButton(onClick = { value = (currentNumber + numberStep).toLong().toString() }) { Text("+") }
+                            OutlinedButton(onClick = { value = (value.toDouble() + numberStep).toLong().toString() }) { Text("+") }
                         }
                         Text("Gunakan tombol untuk memilih nilai. Tidak perlu mengetik angka manual.", color = Muted, fontSize = 10.sp)
                     }
