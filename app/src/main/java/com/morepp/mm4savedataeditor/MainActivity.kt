@@ -119,7 +119,7 @@ private fun EditorApp() {
                     withContext(Dispatchers.IO) {
                         val bytes = Mm4SaveCodec.encode(current)
                         val verified = Mm4SaveCodec.decode(bytes, current.sourceName)
-                        check(verified.info == current.info && verified.data == current.data) {
+                        check(Mm4SaveCodec.sameContent(verified, current)) {
                             "Validasi round-trip gagal."
                         }
                         context.contentResolver.openOutputStream(uri, "wt")?.use { it.write(bytes) }
@@ -403,7 +403,7 @@ private fun CareerHeader(
 }
 
 
-private val Sections = listOf("Overview", "Drivers", "Team", "Finance", "HQ", "Save Info", "Advanced")
+private val Sections = listOf("Overview", "Drivers", "Staff", "Teams", "Cars", "Finance", "HQ", "World", "Save Info", "Advanced")
 
 @Composable
 private fun CareerWorkspace(
@@ -418,9 +418,12 @@ private fun CareerWorkspace(
         when (section) {
             "Overview" -> OverviewPage(document, onSection)
             "Drivers" -> DriverPage(document, selectedDriver, onDriver, onEdit)
-            "Team" -> TeamPage(document, onEdit)
+            "Staff" -> EntityCatalogPage(document, "staff", onEdit)
+            "Teams" -> EntityCatalogPage(document, "team", onEdit)
+            "Cars" -> EntityCatalogPage(document, "car", onEdit)
             "Finance" -> FinancePage(document, onEdit)
-            "HQ" -> HqPage(document)
+            "HQ" -> HqPage(document, onEdit)
+            "World" -> WorldSettingsPage(document, onEdit)
             "Save Info" -> InfoPage(document, onEdit)
             else -> AdvancedPage(document, onEdit)
         }
