@@ -1167,7 +1167,7 @@ private fun HqPage(doc: Mm4SaveCodec.Document, onEdit: (String,List<String>,Json
 
 private val SupplierNames=listOf("Micronix Racing","Shimizu","Polymat Group","Tectra Fibres","Norex","Mersault","Kitano")
 private fun componentTypeName(type:Int)=when(type){1->"Suspension";3->"Exhaust";4->"ECU";5->"Gearbox";else->"Component type #"+type}
-private fun componentRarityName(rarity:Int)=when(rarity){0->"Common";1->"Uncommon";2->"Rare";3->"Epic";4->"Legendary";else->"Rarity #"+rarity}
+private fun componentRarityName(rarity:Int)=when(rarity){0->"Common";1->"Uncommon";else->"Rarity #"+rarity}
 private fun componentStatName(stat:Int)=when(stat){
  0->"Top Speed";1->"Acceleration";2->"Braking";3->"Low Speed Cornering";4->"High Speed Cornering";5->"Tyre Wear";6->"Fuel Efficiency";else->"Stat #"+stat
 }
@@ -1183,6 +1183,18 @@ private fun ComponentMarketplacePage(doc:Mm4SaveCodec.Document,onEdit:(String,Li
     Text("COMPONENT MARKETPLACE",color=Gold,fontWeight=FontWeight.Black,fontSize=12.sp)
     Text("Open Market & 7 supplier stores",fontSize=21.sp,fontWeight=FontWeight.Black)
     Text("Edit harga, rarity, diskon, status stok, tipe komponen, serta bonus statistik. Nama supplier mengikuti tab di video.",color=Muted,fontSize=10.sp)
+   }
+  }
+  item {
+   GlassCard(Modifier.fillMaxWidth()) {
+    Text("PREMIUM STORE • READ ONLY",color=Gold,fontWeight=FontWeight.Black,fontSize=12.sp)
+    Text("Investments",fontWeight=FontWeight.Bold,fontSize=11.sp)
+    Text("$15,000,000 pack • Rp 52,000  |  $60,000,000 pack • Rp 109,000",color=Muted,fontSize=10.sp)
+    Text("Game Changers",fontWeight=FontWeight.Bold,fontSize=11.sp)
+    Text("Chairman's Payment • Game Editor",color=Muted,fontSize=10.sp)
+    Text("Bundles",fontWeight=FontWeight.Bold,fontSize=11.sp)
+    Text("Game Editor + Chairman's Payment • Premium Liveries Bundle",color=Muted,fontSize=10.sp)
+    Text("Katalog premium ini terlihat di video, tetapi tidak tersimpan di SlotTwo.msv. Bagian ini hanya referensi; tidak ada kontrol edit palsu untuk data yang tidak ada di save.",color=Muted,fontSize=10.sp)
    }
   }
   item {
