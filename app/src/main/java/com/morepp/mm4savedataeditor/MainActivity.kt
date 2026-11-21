@@ -7,6 +7,7 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -811,6 +812,7 @@ private fun GlassCard(modifier: Modifier = Modifier, content: @Composable Column
     val shape = RoundedCornerShape(18.dp)
     Column(
         modifier.clip(shape)
+            .border(1.dp, Color.White.copy(alpha = 0.16f), shape)
             .background(Brush.linearGradient(listOf(Color(0xC936568A), Color(0xB91B2D58), Color(0xA51A2445))))
             .padding(1.dp)
             .clip(RoundedCornerShape(17.dp))
