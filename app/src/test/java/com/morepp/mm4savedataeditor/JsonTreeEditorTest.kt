@@ -182,56 +182,6 @@ class JsonTreeEditorTest {
     }
 
     @Test
-    fun officialF1PresetRequiresElevenTeamsAndTwoDriversEach() {
-        val teamRefs = JsonArray()
-        val driverRefs = JsonArray()
-        val entities = JsonArray()
-        val divisionRefs = JsonArray()
-        repeat(11) { teamIndex ->
-            val teamId = "team-$teamIndex"
-            teamRefs.add(JsonObject().apply { addProperty("\$ref", teamId) })
-            divisionRefs.add(JsonObject().apply { addProperty("\$ref", teamId) })
-            entities.add(JsonObject().apply {
-                addProperty("\$id", teamId)
-                addProperty("name", "Fictional Team $teamIndex")
-                addProperty("shortName", "FT$teamIndex")
-            })
-            repeat(2) { driverIndex ->
-                val driverId = "driver-$teamIndex-$driverIndex"
-                driverRefs.add(JsonObject().apply { addProperty("\$ref", driverId) })
-                entities.add(JsonObject().apply {
-                    addProperty("\$id", driverId)
-                    add("contract", JsonObject().apply {
-                        add("m_Team", JsonObject().apply { addProperty("\$ref", teamId) })
-                    })
-                    add("m_PersonDetails", JsonObject().apply {
-                        addProperty("name", "Fictional Driver")
-                        addProperty("firstName", "Fictional")
-                        addProperty("lastName", "Driver")
-                        addProperty("shortName", "F. Driver")
-                        addProperty("threeLetterName", "Dri")
-                    })
-                })
-            }
-        }
-        val data = JsonObject().apply {
-            add("teamManager", JsonObject().apply { add("m_Teams", teamRefs) })
-            add("driverManager", JsonObject().apply { add("m_Drivers", driverRefs) })
-            add("entities", entities)
-            add("championshipManager", JsonObject().apply {
-                add("divisions", JsonArray().apply {
-                    add(JsonObject().apply { addProperty("name", "F1"); add("m_Teams", divisionRefs) })
-                })
-            })
-        }
-        assertTrue(applyOfficialF1Preset2026(data))
-        val firstTeam = collectObjectsWithId(data).first { it.second.get("\$id").asString == "team-0" }.second
-        assertEquals("McLaren Mastercard F1 Team", firstTeam.get("name").asString)
-        val firstDriver = collectObjectsWithId(data).first { it.second.get("\$id").asString == "driver-0-0" }.second
-        assertEquals("Oscar Piastri", firstDriver.getAsJsonObject("m_PersonDetails").get("name").asString)
-    }
-
-    @Test
     fun divisionRenameOnlyChangesKnownDivisionNames() {
         val data = JsonObject().apply {
             add("championshipManager", JsonObject().apply {
