@@ -51,20 +51,20 @@ private data class EditTarget(val root:String,val path:List<String>,val value:Js
  var fileName by remember{mutableStateOf("Belum ada save data")}
  var dirty by remember{mutableStateOf(false)}
  var busy by remember{mutableStateOf(false)}
- var error by remember{mutableStateOf<String?>(null)}
+ var errorMessage by remember{mutableStateOf<String?>(null)}
  var edit by remember{mutableStateOf<EditTarget?>(null)}
  val open=rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()){uri:Uri?->if(uri!=null)scope.launch{
-  busy=true;error=null
+  busy=true;errorMessage=null
   try{val loaded=withContext(Dispatchers.IO){val bytes=context.contentResolver.openInputStream(uri)?.use{it.readBytes()}?:error("Tidak bisa membaca file.");Mm4SaveCodec.decode(bytes,uri.lastPathSegment?:"career.msv")}
    doc=loaded;fileName=uri.lastPathSegment?:"MM4 career";tab="Save Info";query="";dirty=false
-  }catch(t:Throwable){error=t.message?:"Gagal membuka save."}finally{busy=false}
+  }catch(t:Throwable){errorMessage=t.message?:"Gagal membuka save."}finally{busy=false}
  }}
  val export=rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/octet-stream")){uri:Uri?->val current=doc
-  if(uri!=null&&current!=null)scope.launch{busy=true;error=null
+  if(uri!=null&&current!=null)scope.launch{busy=true;errorMessage=null
    try{withContext(Dispatchers.IO){val bytes=Mm4SaveCodec.encode(current);val check=Mm4SaveCodec.decode(bytes,current.sourceName)
     check(check.info==current.info&&check.data==current.data){"Validasi round-trip gagal."}
     context.contentResolver.openOutputStream(uri,"wt")?.use{it.write(bytes)}?:error("Tidak bisa menulis file.")
-   };dirty=false}catch(t:Throwable){error=t.message?:"Export gagal."}finally{busy=false}
+   };dirty=false}catch(t:Throwable){errorMessage=t.message?:"Export gagal."}finally{busy=false}
   }
  }
  MaterialTheme(colorScheme=darkColorScheme(background=Ink,surface=Panel,primary=Red,secondary=Gold,onSurface=Color.White,onBackground=Color.White)){
@@ -117,7 +117,7 @@ private data class EditTarget(val root:String,val path:List<String>,val value:Js
    }
   }
   if(busy)AlertDialog(onDismissRequest={},confirmButton={},title={Text("Memproses save…")},text={LinearProgressIndicator(Modifier.fillMaxWidth())})
-  error?.let{msg->AlertDialog(onDismissRequest={error=null},title={Text("Operasi gagal")},text={Text(msg)},confirmButton={TextButton(onClick={error=null}){Text("Tutup")}})}
+  errorMessage?.let{msg->AlertDialog(onDismissRequest={errorMessage=null},title={Text("Operasi gagal")},text={Text(msg)},confirmButton={TextButton(onClick={errorMessage=null}){Text("Tutup")}})}
   edit?.let{target->
    var raw by remember(target){mutableStateOf(target.value.toString())};var invalid by remember{mutableStateOf(false)}
    AlertDialog(onDismissRequest={edit=null},title={Text("EDIT FIELD")},text={Column{
