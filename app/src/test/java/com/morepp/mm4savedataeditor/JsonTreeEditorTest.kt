@@ -6,6 +6,7 @@ import com.google.gson.JsonPrimitive
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -64,4 +65,28 @@ class JsonTreeEditorTest {
         assertEquals(250, edited!!.data.get("balance").asInt)
         assertEquals("original", original.info.get("career").asString)
     }
+    @Test
+    fun invalidArrayIndicesAndPrimitiveParentsAreRejected() {
+        val root = JsonObject().apply {
+            add("drivers", JsonArray().apply { add(JsonObject().apply { addProperty("rating", 75) }) })
+            addProperty("teamName", "Caleris")
+        }
+
+        assertFalse(setPath(root, listOf("drivers", "[4]", "rating"), JsonPrimitive(90)))
+        assertFalse(removePath(root, listOf("drivers", "[x]")))
+        assertFalse(appendChild(root, listOf("teamName"), "extra", JsonPrimitive(true)))
+        assertNull(resolvePath(root, listOf("drivers", "[x]")))
+        assertEquals(75, root.getAsJsonArray("drivers")[0].asJsonObject.get("rating").asInt)
+    }
+
+    @Test
+    fun objectAppendRejectsBlankAndDuplicateKeysWithoutChangingTree() {
+        val root = JsonObject().apply { addProperty("existing", 1) }
+
+        assertFalse(appendChild(root, emptyList(), " ", JsonPrimitive(2)))
+        assertFalse(appendChild(root, emptyList(), "existing", JsonPrimitive(2)))
+        assertEquals(1, root.size())
+        assertEquals(1, root.get("existing").asInt)
+    }
+
 }
