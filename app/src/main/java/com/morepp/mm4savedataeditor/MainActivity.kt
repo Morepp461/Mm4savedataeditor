@@ -2223,8 +2223,6 @@ private fun WatermarkFooter() {
     }
 }
 
-@Composable
-
 internal fun editorBounds(document:Mm4SaveCodec.Document?,root:String,path:List<String>):Pair<String?,String?> {
     if(root!="Game Data" || path.isEmpty()) return null to null
     return when {
@@ -2245,6 +2243,7 @@ internal fun editorBounds(document:Mm4SaveCodec.Document?,root:String,path:List<
     }
 }
 
+@Composable
 private fun EditValueDialog(target: EditTarget, onClose: () -> Unit, onSave: (JsonElement) -> Unit) {
     val primitive = target.value.asJsonPrimitive
     val isBoolean = primitive.isBoolean
