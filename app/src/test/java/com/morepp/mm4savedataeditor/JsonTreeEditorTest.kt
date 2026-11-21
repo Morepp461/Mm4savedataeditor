@@ -249,4 +249,33 @@ class JsonTreeEditorTest {
         assertEquals("Unrelated Series", divisions[2].asJsonObject.get("name").asString)
     }
 
+    @Test
+    fun headquartersLevelMaximumIsDerivedFromSavedUpgradeNodes() {
+        val document = Mm4SaveCodec.Document(
+            JsonObject(),
+            JsonObject().apply {
+                add("headquarters", JsonObject().apply {
+                    add("m_CurrentTierInformation", JsonArray().apply {
+                        add(JsonObject().apply { addProperty("Key", 0); addProperty("Value", 1) })
+                    })
+                    add("m_Upgrades", JsonArray().apply {
+                        repeat(3) { add(JsonObject().apply { add("Value", JsonObject().apply { addProperty("pathType", 0) }) }) }
+                        add(JsonObject().apply { add("Value", JsonObject().apply { addProperty("pathType", 1) }) })
+                    })
+                })
+            },
+            "hq-bounds.msv"
+        )
+        val bounds = editorBounds(document, "Game Data", listOf("headquarters","m_CurrentTierInformation","[0]","Value"))
+        assertEquals("0", bounds.first)
+        assertEquals("3", bounds.second)
+    }
+
+    @Test
+    fun knownHqStateAndAttributeEditorsHaveHardLimits() {
+        val document = Mm4SaveCodec.Document(JsonObject(), JsonObject(), "bounds.msv")
+        assertEquals("2", editorBounds(document, "Game Data", listOf("headquarters","m_Upgrades","[0]","Value","State")).second)
+        assertEquals("20", editorBounds(document, "Game Data", listOf("driver","m_Stats","m_Stats","[0]","m_Stat")).second)
+    }
+
 }
