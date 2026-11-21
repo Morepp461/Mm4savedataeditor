@@ -1,6 +1,6 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
-    <application android:allowBackup="false" android:label="MM4 Save Data Editor"
-        android:theme="@android:style/Theme.Material.NoActionBar" android:supportsRtl="true">
+    <application android:allowBackup="false" android:label="MM4 Save Data Editor" android:icon="@mipmap/ic_launcher" android:roundIcon="@mipmap/ic_launcher"
+        android:theme="@style/Theme.MM4SaveDataEditor" android:supportsRtl="true">
         <activity android:name=".MainActivity" android:exported="true">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN"/>
