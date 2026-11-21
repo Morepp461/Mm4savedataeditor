@@ -1,66 +1,62 @@
 # MM4 Save Data Editor
 
-A personal Android editor for Motorsport Manager 4 career saves, with a game-oriented interface and typed controls. The app is designed to preserve unknown save data rather than requiring users to understand or manually edit serialized structures.
+An Android career-save editor for Motorsport Manager 4. It reads the supported v40 .msv container, presents game-oriented editing workspaces, and writes a separately selected save file after a codec round-trip integrity check.
 
-## Current editor workspaces
+## Workspaces
 
-- **Drivers:** discover the career roster through the save's driver references; edit personal profile, driver attributes, potential/modifiers, salary and contract fields.
-- **Staff:** discover stored staff and applicants by their actual profile/role structures; edit personal profile, role attributes, salary and contract data.
-- **Teams:** browse all teams referenced by the career; expose team name, short name, reputation and financial fields only.
-- **Cars:** expose each team's car attributes through dedicated attribute controls; unrelated car fields are not presented as editable.
-- **Finance:** view and edit the player's team balance and inspect transaction history.
-- **Headquarters:** show facility status, unlock timers and upgrade paths using readable labels.
-- **World & Rules:** inspect supported career groups such as championships, component marketplace, suppliers, research, sessions, circuits and weather.
-- **God Mode:** provide explicit save-backed actions for balance, HQ, research/debug and supplier unlocks.
-- **Save Info / Advanced:** provide typed controls for supported primitive values. No arbitrary JSON text entry is required for normal editing.
+- **Overview:** career summary and shortcuts.
+- **Drivers:** roster resolved through save references; personal profile, attributes, potential/modifiers, salary and contract.
+- **Staff:** staff and applicant records discovered from the serialized role schema; profile, role attributes, salary and contract.
+- **Teams:** team identity, reputation and top-level financial data.
+- **Cars:** per-team car performance attributes.
+- **Finance:** team balance and transaction history.
+- **Headquarters:** facility upgrade state, timers, and upgrade path.
+- **World:** discovered championship, marketplace, supplier, research, session, circuit and weather groups.
+- **Save Info / Advanced:** typed primitive editing for supported values.
+- **God Mode:** explicit save-backed bulk actions.
 
-The editor deliberately limits the Teams, Cars, Drivers and Staff workspaces to their intended game fields. It does not expose arbitrary object/array creation or deletion as normal career-editing features.
+## Editing safeguards and usability
 
-## Save container profile
+- Team and staff workspaces use category-specific field allowlists. Nested car, driver and staff attributes are not exposed as team financial fields.
+- Car attributes are edited through dedicated attribute cards.
+- Undo/redo supports the last 50 primitive field edits. Bulk God Mode actions clear the edit history to prevent stale-path undo.
+- Numeric edits use decimal-safe arithmetic and preserve large integer precision.
+- Workspace changes use short fade/slide transitions.
+- The app includes the persistent **Created by : Morepp** watermark.
 
-The current codec supports the observed sample profile from `SlotTwo.msv`:
+## Container profile
 
-- Magic: `0x99131871`
-- Container version: `40`
-- Header: six little-endian Int32 values (24 bytes)
-- Payload: LZ4 Save Info block followed by LZ4 Game Data block
+The codec supports the observed MM4 sample profile:
 
-The decoder rejects unknown magic/version values and invalid block lengths rather than guessing. This is a sample-derived profile, not proof that every MM4 release or platform uses the same format.
+- Magic: 0x99131871
+- Container version: 40
+- Six little-endian Int32 header values (24 bytes)
+- LZ4-compressed Save Info and Game Data blocks
+
+Unknown magic/version values, invalid lengths, truncated payloads, and oversized input are rejected. This profile is sample-derived and is not a claim of compatibility with every future MM4 save format.
 
 ## Export safety
 
-- Import uses Android's system file picker.
-- Export always targets a separate document selected through Android's system document picker.
-- Export re-decodes the generated container and compares both JSON trees before writing.
-- Explicit JSON null fields and unknown fields are preserved by the codec.
-- The app refuses to overwrite the exact source URI selected for import.
-- Keep the original save untouched and test an exported duplicate in Motorsport Manager 4.
+- Import uses Android's system document picker.
+- Export uses Android's create-document picker and a destination separate from the source URI.
+- Before writing, the generated container is decoded again and both JSON trees are compared.
+- Explicit null fields and unknown fields are preserved.
+- A failed validation prevents output from being written.
+- Keep the original save unchanged and test an exported duplicate in Motorsport Manager 4.
 
-A successful codec round-trip proves container integrity only. It does **not** prove that every edited game field is semantically accepted by the game.
+The project owner has confirmed that an exported edited save from a recent build loads and is playable in MM4. This is real-game validation for that tested save/build, not a guarantee for every possible field or career.
 
 ## Build and CI
 
-GitHub Actions runs:
+GitHub Actions runs JVM unit tests, Android lint, debug APK packaging, package identity verification, and artifact upload. The personal-use APK is debug-signed by the Android build pipeline.
 
-1. JVM unit tests
-2. Android lint
-3. Debug APK build
-4. APK package identity verification
-5. Artifact upload
+## Version
 
-The workflow uses JDK 17, Gradle 8.9 and Android SDK 35. The installable personal-use debug APK is uploaded to the successful Actions run.
-
-## Validation boundary
-
-Automated tests cover codec round-trip behavior, explicit null preservation, malformed/truncated containers, JSON path mutation and the current team/staff/car field-visibility policy.
-
-The exact supplied `SlotTwo.msv` must still be tested on-device after export. Only a duplicate career save should be used for this test. A passing CI build is not a substitute for loading the exported file in Motorsport Manager 4.
-
-## App version
-
-- Version: **1.3.1**
-- Application ID: `com.morepp.mm4savedataeditor`
+- Version: **1.4.0**
+- Version code: **5**
+- Application ID: com.morepp.mm4savedataeditor
 - Minimum Android: API 26
 - Target Android: API 35
+- JDK 17 / Gradle 8.9 / Android SDK 35
 
-The debug APK is for personal sideload testing. A public Play Store release requires a private release keystore controlled by the project owner. Never commit the private keystore or its passwords to this repository.
+A public Play Store release requires a private release keystore controlled by the project owner. Never commit private signing material or passwords to this repository.
