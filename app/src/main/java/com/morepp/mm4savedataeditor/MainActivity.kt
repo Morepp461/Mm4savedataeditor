@@ -583,6 +583,131 @@ private fun TeamPage(doc: Mm4SaveCodec.Document, onEdit: (String,List<String>,Js
     }
 }
 
+
+@Composable
+private fun EntityCatalogPage(doc: Mm4SaveCodec.Document, category: String, onEdit: (String,List<String>,JsonElement)->Unit) {
+    var selected by remember(category) { mutableStateOf<Int?>(null) }
+    var query by remember(category) { mutableStateOf("") }
+    val entities = doc.data.getAsJsonObject("entityManager")?.getAsJsonArray("m_Entities")
+    val records = entities?.mapIndexedNotNull { index, element ->
+        if (!element.isJsonObject) return@mapIndexedNotNull null
+        val obj = element.asJsonObject
+        val type = obj.get("$"+"type")?.asString ?: return@mapIndexedNotNull null
+        val match = when(category) {
+            "staff" -> listOf("staff","designer","strategist","mechanic","engineer").any { type.contains(it,true) } && !type.contains("driver",true)
+            "team" -> type.contains("team",true) && !type.contains("teamdetail",true)
+            else -> type.contains("car",true) || type.contains("vehicle",true)
+        }
+        if (!match) null else {
+            val person = obj.getAsJsonObject("m_PersonDetails")
+            val name = listOf("name","m_Name","Name","m_TeamName").firstNotNullOfOrNull { key ->
+                person?.get(key)?.takeIf { it.isJsonPrimitive }?.asString
+                    ?: obj.get(key)?.takeIf { it.isJsonPrimitive }?.asString
+            } ?: (type + " #" + (obj.get("$"+"id")?.asString ?: index.toString()))
+            Triple(index, obj, name)
+        }
+    }.orEmpty()
+    val chosen = records.firstOrNull { it.first == selected }
+    if (chosen == null) {
+        LazyColumn(contentPadding=PaddingValues(14.dp), verticalArrangement=Arrangement.spacedBy(9.dp)) {
+            item { GlassCard(Modifier.fillMaxWidth()) {
+                Text(when(category) { "staff" -> "STAFF MANAGEMENT"; "team" -> "TEAM DATABASE"; else -> "CAR DATABASE" }, color=Gold, fontWeight=FontWeight.Bold, fontSize=11.sp)
+                Text(records.size.toString()+" records found", fontSize=23.sp, fontWeight=FontWeight.Black)
+                Text("Semua record yang dikenali di save ditampilkan. Pilih satu untuk membuka profil dan mengedit field secara langsung.", color=Muted, fontSize=11.sp)
+            } }
+            item { OutlinedTextField(query,{query=it},Modifier.fillMaxWidth(),placeholder={Text("Cari nama atau tipe")},leadingIcon={Icon(Icons.Default.Search,null)},singleLine=true) }
+            items(records.filter { it.third.contains(query,true) || it.second.get("$"+"type")?.asString?.contains(query,true)==true },key={it.first}) { record ->
+                GlassCard(Modifier.fillMaxWidth().clickable { selected=record.first }) {
+                    Row(verticalAlignment=Alignment.CenterVertically) {
+                        Icon(when(category) { "staff" -> Icons.Default.Badge; "team" -> Icons.Default.Groups; else -> Icons.Default.DirectionsCar },null,tint=Gold,modifier=Modifier.size(28.dp))
+                        Spacer(Modifier.width(12.dp))
+                        Column(Modifier.weight(1f)) { Text(record.third,fontWeight=FontWeight.Bold); Text(record.second.get("$"+"type")?.asString ?: category,color=Muted,fontSize=10.sp) }
+                        Icon(Icons.Default.ChevronRight,null,tint=Muted)
+                    }
+                }
+            }
+            if(category=="team") item {
+                val player=doc.data.getAsJsonObject("player")?.getAsJsonObject("m_TeamDetails")
+                if(player!=null) GlassCard(Modifier.fillMaxWidth()) {
+                    Text("PLAYER TEAM SETTINGS",color=Gold,fontWeight=FontWeight.Bold)
+                    flatten(player).filter { it.second.isJsonPrimitive }.forEach { (path,value) ->
+                        Row(Modifier.fillMaxWidth().clickable { onEdit("Game Data",listOf("player","m_TeamDetails")+path,value) }.padding(vertical=7.dp),verticalAlignment=Alignment.CenterVertically) {
+                            Text(humanLabel(path.last()),Modifier.weight(1f),fontSize=11.sp)
+                            Text(preview(value),color=Gold,fontSize=11.sp)
+                            Icon(Icons.Default.Edit,null,tint=Muted,modifier=Modifier.size(14.dp))
+                        }
+                    }
+                }
+            }
+        }
+    } else {
+        val (index,record,name)=chosen
+        val type=record.get("$"+"type")?.asString ?: category
+        val fields=flatten(record).filter { it.second.isJsonPrimitive && it.first.lastOrNull()!="$"+"version" }
+        Column(Modifier.fillMaxSize()) {
+            Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically) {
+                IconButton(onClick={selected=null}) { Icon(Icons.Default.ArrowBack,"Kembali") }
+                Column { Text(name,fontWeight=FontWeight.Bold,fontSize=18.sp); Text(humanLabel(type),color=Muted,fontSize=10.sp) }
+            }
+            LazyColumn(contentPadding=PaddingValues(14.dp),verticalArrangement=Arrangement.spacedBy(7.dp)) {
+                item { GlassCard(Modifier.fillMaxWidth()) {
+                    Text("PROFILE EDITOR",color=Gold,fontWeight=FontWeight.Bold,fontSize=10.sp)
+                    Text(fields.size.toString()+" editable values",fontSize=21.sp,fontWeight=FontWeight.Black)
+                    Text("Nama, umur, kontrak, atribut, identitas, dan nilai lain pada record ini dapat diedit tanpa input JSON.",color=Muted,fontSize=10.sp)
+                } }
+                items(fields,key={it.first.joinToString("/")}) { (path,value) ->
+                    val label=if(path.any { it=="m_Stats" }) statAttributeLabel(category,type,path.last().removePrefix("[").removeSuffix("]").toIntOrNull() ?: 0) else humanLabel(path.last())
+                    GlassCard(Modifier.fillMaxWidth().clickable { onEdit("Game Data",listOf("entityManager","m_Entities","[$index]")+path,value) }) {
+                        Row(verticalAlignment=Alignment.CenterVertically) {
+                            Column(Modifier.weight(1f)) { Text(label,fontWeight=FontWeight.SemiBold,fontSize=12.sp); Text(path.dropLast(1).joinToString(" / "),color=Muted,fontSize=9.sp,maxLines=1) }
+                            Text(preview(value),color=Gold,fontWeight=FontWeight.Bold,fontSize=12.sp)
+                            Icon(Icons.Default.Edit,null,tint=Muted,modifier=Modifier.size(16.dp))
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+private fun statAttributeLabel(category:String,type:String,index:Int):String {
+    val labels=when {
+        category=="staff" && type.contains("designer",true) -> listOf("Performance","Reliability","Leadership","Bonus","Success Rate")
+        category=="staff" && type.contains("strategist",true) -> listOf("Race Starts","Overtaking","Defending","Consistency","Focus")
+        category=="staff" && type.contains("mechanic",true) -> listOf("Setup Skill","Car Knowledge","Pit Stop Skill","Reliability")
+        category=="car" -> listOf("Top Speed","Acceleration","Braking","Low Speed Cornering","High Speed Cornering","Tyre Wear","Fuel Efficiency","Car Reliability")
+        else -> listOf("Braking","Smoothness","Control","Consistency","Race Starts","Awareness","Cornering","Defending","Instinct","Focus","Reactions","Decisions","Overtaking","Bravery","Composure")
+    }
+    return labels.getOrNull(index) ?: "Attribute "+(index+1)
+}
+
+@Composable
+private fun WorldSettingsPage(doc:Mm4SaveCodec.Document,onEdit:(String,List<String>,JsonElement)->Unit) {
+    val keywords=listOf("store","shop","unlock","rule","regulation","gameplay","league","championship","race","calendar","difficulty","option","setting")
+    val groups=doc.data.entrySet().filter { e -> keywords.any { e.key.contains(it,true) } }
+    LazyColumn(contentPadding=PaddingValues(14.dp),verticalArrangement=Arrangement.spacedBy(9.dp)) {
+        item { GlassCard(Modifier.fillMaxWidth()) {
+            Text("CAREER WORLD & RULES",color=Gold,fontWeight=FontWeight.Bold,fontSize=11.sp)
+            Text("Store, unlocks, regulations, championship and gameplay settings detected in this save.",color=Muted,fontSize=11.sp)
+            Text(groups.size.toString()+" data groups detected",fontSize=20.sp,fontWeight=FontWeight.Black)
+        } }
+        items(groups) { group ->
+            GlassCard(Modifier.fillMaxWidth()) {
+                Text(humanLabel(group.key),fontWeight=FontWeight.Bold)
+                Text(categoryDescription(group.value,flatten(group.value).size),color=Muted,fontSize=10.sp)
+                flatten(group.value).filter { it.second.isJsonPrimitive }.forEach { (path,value) ->
+                    Row(Modifier.fillMaxWidth().clickable { onEdit("Game Data",listOf(group.key)+path,value) }.padding(vertical=6.dp),verticalAlignment=Alignment.CenterVertically) {
+                        Text(humanLabel(path.last()),Modifier.weight(1f),fontSize=11.sp)
+                        Text(preview(value),color=Gold,fontSize=11.sp)
+                        Icon(Icons.Default.Edit,null,tint=Muted,modifier=Modifier.size(14.dp))
+                    }
+                }
+            }
+        }
+        if(groups.isEmpty()) item { Text("Belum ditemukan grup Store/Rules/Unlock yang bisa dikenali di save ini. Data lain tetap dipertahankan di Advanced.",color=Muted) }
+    }
+}
+
 @Composable
 private fun FinancePage(doc: Mm4SaveCodec.Document, onEdit: (String,List<String>,JsonElement)->Unit) {
     val finance = doc.data.getAsJsonObject("financeManager") ?: JsonObject()
