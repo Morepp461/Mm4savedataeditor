@@ -443,7 +443,7 @@ private fun CareerHeader(
 }
 
 
-private val Sections = listOf("Overview", "Drivers", "Staff", "Teams", "Cars", "Finance", "HQ", "World", "Save Info", "Advanced", "God Mode")
+private val Sections = listOf("Overview", "Drivers", "Staff", "Teams", "Cars", "Finance", "HQ", "World", "Diagnostics", "Save Info", "Advanced", "God Mode")
 
 @Composable
 private fun CareerWorkspace(
@@ -475,6 +475,7 @@ private fun CareerWorkspace(
                 "Finance" -> FinancePage(document, onEdit)
                 "HQ" -> HqPage(document, onEdit)
                 "World" -> WorldSettingsPage(document, onEdit)
+                "Diagnostics" -> SaveDiagnosticsPage(document)
                 "Save Info" -> InfoPage(document, onEdit)
                 "God Mode" -> GodModePage(document, onGodAction)
                 else -> AdvancedPage(document, onEdit)
@@ -567,7 +568,7 @@ private fun DriverPage(doc: Mm4SaveCodec.Document, selected: String?, onSelect: 
                             Column(Modifier.weight(1f)) {
                                 Text(driver.name,fontWeight=FontWeight.Bold)
                                 val details=driver.data.getAsJsonObject("m_PersonDetails")
-                                Text("${driver.team} • Age ${ageFromDate(details?.get("dateOfBirth")?.asString)} • Driver ID ${driver.data.get("m_DriverID")?.asString ?: "—"}",color=Muted,fontSize=10.sp)
+                                Text("${driver.team} • Age ${ageFromDate(details?.get("dateOfBirth")?.asString, doc.info.get("gameDate")?.takeIf { it.isJsonPrimitive }?.asString)} • Driver ID ${driver.data.get("m_DriverID")?.asString ?: "—"}",color=Muted,fontSize=10.sp)
                             }
                             Icon(Icons.Default.ChevronRight,null,tint=Muted)
                         }
@@ -646,13 +647,15 @@ private fun DriverPage(doc: Mm4SaveCodec.Document, selected: String?, onSelect: 
     }
 }
 
-private fun ageFromDate(date:String?):String {
+private fun ageFromDate(date:String?, careerDate:String? = null):String {
     if(date.isNullOrBlank()) return "—"
     return try {
         val birth=java.time.LocalDate.parse(date.take(10))
-        val today=java.time.LocalDate.now()
-        java.time.Period.between(birth,today).years.coerceAtLeast(0).toString()
-    } catch(_:Throwable) { "—" }
+        val reference=careerDate?.takeIf { it.length >= 10 }
+            ?.let { java.time.LocalDate.parse(it.take(10)) }
+            ?: java.time.LocalDate.now()
+        java.time.Period.between(birth,reference).years.coerceAtLeast(0).toString()
+    } catch(_:Exception) { "—" }
 }
 
 private fun collectTypedObjects(root:JsonElement,type:String):List<Pair<List<String>,JsonObject>> {
@@ -962,7 +965,81 @@ private fun FinancePage(doc: Mm4SaveCodec.Document, onEdit: (String,List<String>
             }
         }
         item { Text("TRANSACTION HISTORY", color = Gold, fontWeight = FontWeight.Bold, fontSize = 11.sp) }
-        items(history?.size() ?: 0) { i -> GlassCard(Modifier.fillMaxWidth()) { InfoLine("Transaction " + (i + 1), formatMoney(history!![i].asLong)) } }
+        items(history?.size() ?: 0) { i -> GlassCard(Modifier.fillMaxWidth()) { InfoLine("Transaction " + (i + 1), financeHistoryLabel(history!![i])) } }
+    }
+}
+
+private fun financeHistoryLabel(value: JsonElement): String {
+    if (value.isJsonPrimitive && value.asJsonPrimitive.isNumber) {
+        return runCatching { formatMoney(value.asLong) }.getOrDefault(preview(value))
+    }
+    if (value.isJsonObject) {
+        val obj = value.asJsonObject
+        val amount = listOf("amount", "m_Amount", "value", "m_Value", "balance")
+            .firstNotNullOfOrNull { key -> obj.get(key)?.takeIf { it.isJsonPrimitive && it.asJsonPrimitive.isNumber } }
+        if (amount != null) return runCatching { formatMoney(amount.asLong) }.getOrDefault(preview(value))
+    }
+    return preview(value)
+}
+
+@Composable
+private fun SaveDiagnosticsPage(doc: Mm4SaveCodec.Document) {
+    val entities = remember(doc.data) { collectObjectsWithId(doc.data) }
+    val ids = remember(entities) { entities.mapNotNull { it.second.get("\$id")?.takeIf { v -> v.isJsonPrimitive }?.asString } }
+    val idCounts = remember(ids) { ids.groupingBy { it }.eachCount() }
+    val duplicateIds = remember(idCounts) { idCounts.filterValues { it > 1 } }
+    val entityIdSet = remember(ids) { ids.toSet() }
+    val driverRefs = doc.data.getAsJsonObject("driverManager")?.getAsJsonArray("m_Drivers")
+        ?.mapNotNull { ref -> ref.takeIf { it.isJsonObject }?.asJsonObject?.get("\$ref")?.takeIf { it.isJsonPrimitive }?.asString }
+        .orEmpty()
+    val teamRefs = doc.data.getAsJsonObject("teamManager")?.getAsJsonArray("m_Teams")
+        ?.mapNotNull { ref -> ref.takeIf { it.isJsonObject }?.asJsonObject?.get("\$ref")?.takeIf { it.isJsonPrimitive }?.asString }
+        .orEmpty()
+    val unresolvedDrivers = driverRefs.count { it !in entityIdSet }
+    val unresolvedTeams = teamRefs.count { it !in entityIdSet }
+    val explicitNulls = remember(doc.data) { flatten(doc.data).count { it.second.isJsonNull } }
+    LazyColumn(contentPadding = PaddingValues(14.dp), verticalArrangement = Arrangement.spacedBy(9.dp)) {
+        item {
+            GlassCard(Modifier.fillMaxWidth()) {
+                Text("SAVE HEALTH CHECK", color = Gold, fontWeight = FontWeight.Black, fontSize = 12.sp)
+                Text("Pemeriksaan hanya-baca terhadap struktur dan referensi career save. Tidak ada data yang diubah.", color = Muted, fontSize = 11.sp)
+                Text("${doc.data.size()} top-level data groups", fontSize = 20.sp, fontWeight = FontWeight.Black)
+            }
+        }
+        item {
+            GlassCard(Modifier.fillMaxWidth()) {
+                Text("ENTITY & ROSTER REFERENCES", color = Gold, fontWeight = FontWeight.Bold, fontSize = 11.sp)
+                InfoLine("Objects with entity IDs", entities.size.toString())
+                InfoLine("Unique entity IDs", entityIdSet.size.toString())
+                InfoLine("Driver roster references", driverRefs.size.toString())
+                InfoLine("Unresolved driver references", unresolvedDrivers.toString())
+                InfoLine("Team references", teamRefs.size.toString())
+                InfoLine("Unresolved team references", unresolvedTeams.toString())
+            }
+        }
+        item {
+            GlassCard(Modifier.fillMaxWidth()) {
+                Text("STRUCTURE WARNINGS", color = Gold, fontWeight = FontWeight.Bold, fontSize = 11.sp)
+                InfoLine("Duplicate entity IDs", duplicateIds.size.toString())
+                InfoLine("Explicit null values", explicitNulls.toString())
+                InfoLine("Save container version", "40 (supported profile)")
+                Text(
+                    if (unresolvedDrivers == 0 && unresolvedTeams == 0 && duplicateIds.isEmpty())
+                        "Tidak ditemukan masalah referensi pada pemeriksaan dasar ini."
+                    else "Ada referensi atau ID yang perlu diperiksa. Angka ini merupakan indikator, bukan bukti save rusak.",
+                    color = if (unresolvedDrivers == 0 && unresolvedTeams == 0 && duplicateIds.isEmpty()) Color(0xFF82D7A2) else Gold,
+                    fontSize = 10.sp
+                )
+            }
+        }
+        if (duplicateIds.isNotEmpty()) {
+            item {
+                GlassCard(Modifier.fillMaxWidth()) {
+                    Text("DUPLICATE ID SAMPLE", color = Gold, fontWeight = FontWeight.Bold)
+                    duplicateIds.entries.take(20).forEach { (id, count) -> InfoLine(id, "${count} occurrences") }
+                }
+            }
+        }
     }
 }
 
