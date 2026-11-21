@@ -451,8 +451,9 @@ private fun JsonBrowser(
     moduleFilter: String?,
     onEdit: (List<String>, JsonElement) -> Unit
 ) {
-    val entries = remember(root, query, moduleFilter) {
-        flatten(root).filter { (path, value) ->
+    val allEntries = remember(root) { flatten(root) }
+    val filteredEntries = remember(allEntries, query, moduleFilter) {
+        allEntries.filter { (path, value) ->
             (moduleFilter == null || path.firstOrNull() == moduleFilter) &&
                 (query.isBlank() ||
                     path.joinToString(".").contains(query, ignoreCase = true) ||
@@ -460,59 +461,183 @@ private fun JsonBrowser(
                         value.toString().contains(query, ignoreCase = true)))
         }
     }
+    val groups = remember(filteredEntries) {
+        filteredEntries.groupBy { it.first.firstOrNull() ?: "Data" }
+    }
+    var expanded by remember(rootName, moduleFilter) { mutableStateOf(setOf<String>()) }
+    LaunchedEffect(query) {
+        if (query.isNotBlank()) expanded = groups.keys
+    }
+
     Column(Modifier.fillMaxSize()) {
-        Text(
-            "$rootName • ${entries.size} NODE",
-            color = Gold,
-            fontSize = 10.sp,
-            fontWeight = FontWeight.Bold,
-            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
-        )
-        LazyColumn(
-            Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp)
+        Row(
+            Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            items(entries, key = { it.first.joinToString("/") }) { (path, value) ->
-                Row(
-                    Modifier.fillMaxWidth()
-                        .padding(vertical = 3.dp)
-                        .clip(RoundedCornerShape(12.dp))
-                        .background(Panel)
-                        .clickable { onEdit(path, value) }
-                        .padding(horizontal = 12.dp, vertical = 11.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Column(Modifier.weight(1f)) {
-                        Text(
-                            path.lastOrNull() ?: rootName,
-                            fontWeight = FontWeight.SemiBold,
-                            fontSize = 13.sp
-                        )
-                        Text(
-                            path.dropLast(1).joinToString(" › "),
-                            color = Muted,
-                            fontSize = 9.sp,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
-                        Text(
-                            preview(value),
-                            color = Gold,
-                            fontSize = 11.sp,
-                            maxLines = 2,
-                            overflow = TextOverflow.Ellipsis
-                        )
+            Column(Modifier.weight(1f)) {
+                Text(
+                    if (rootName == "Save Info") "INFORMASI KARIER" else "DATABASE KARIER",
+                    color = Gold,
+                    fontSize = 10.sp,
+                    fontWeight = FontWeight.Bold,
+                    letterSpacing = 1.sp
+                )
+                Text(
+                    if (query.isBlank()) "${groups.size} kategori • ${filteredEntries.size} data" else "${filteredEntries.size} hasil pencarian",
+                    color = Muted,
+                    fontSize = 11.sp
+                )
+            }
+            if (query.isBlank()) {
+                TextButton(onClick = {
+                    expanded = if (expanded.size == groups.size) emptySet() else groups.keys
+                }) {
+                    Text(if (expanded.size == groups.size) "Tutup semua" else "Buka semua", color = Gold, fontSize = 11.sp)
+                }
+            }
+        }
+        if (filteredEntries.isEmpty()) {
+            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                Text("Tidak ada data yang cocok. Coba kata kunci lain.", color = Muted)
+            }
+        } else {
+            LazyColumn(
+                Modifier.fillMaxSize(),
+                contentPadding = PaddingValues(horizontal = 14.dp, vertical = 4.dp),
+                verticalArrangement = Arrangement.spacedBy(9.dp)
+            ) {
+                groups.forEach { (groupKey, items) ->
+                    val groupValue = root.get(groupKey)
+                    val isOpen = query.isNotBlank() || groupKey in expanded
+                    item(key = "group:$groupKey") {
+                        Column(
+                            Modifier.fillMaxWidth()
+                                .clip(RoundedCornerShape(18.dp))
+                                .background(
+                                    Brush.horizontalGradient(
+                                        listOf(Color(0xFF242B35), Color(0xFF1A2028), Color(0xFF292326))
+                                    )
+                                )
+                                .clickable {
+                                    expanded = if (groupKey in expanded) expanded - groupKey else expanded + groupKey
+                                }
+                                .padding(15.dp)
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Column(Modifier.weight(1f)) {
+                                    Text(humanizeField(groupKey), fontSize = 15.sp, fontWeight = FontWeight.Bold)
+                                    Text(
+                                        "${items.size} data • ${dataTypeLabel(groupValue)}",
+                                        color = Muted,
+                                        fontSize = 10.sp
+                                    )
+                                }
+                                Text(preview(groupValue ?: JsonParser.parseString("null")), color = Gold, fontSize = 11.sp)
+                                Spacer(Modifier.width(8.dp))
+                                Icon(
+                                    if (isOpen) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
+                                    contentDescription = if (isOpen) "Tutup kategori" else "Buka kategori",
+                                    tint = Gold
+                                )
+                            }
+                            if (isOpen && groupValue != null) {
+                                Spacer(Modifier.height(8.dp))
+                                Text(
+                                    "PILIH DATA DI BAWAH UNTUK MELIHAT ATAU MENGUBAH NILAINYA",
+                                    color = Muted,
+                                    fontSize = 9.sp,
+                                    letterSpacing = .5.sp
+                                )
+                            }
+                        }
                     }
-                    Icon(
-                        Icons.Default.Edit,
-                        contentDescription = "Edit field",
-                        tint = Muted,
-                        modifier = Modifier.size(16.dp)
-                    )
+                    if (isOpen) {
+                        items.filter { it.first.size > 1 || query.isNotBlank() }.forEach { (path, value) ->
+                            item(key = "field:${path.joinToString("/")}") {
+                                Row(
+                                    Modifier.fillMaxWidth()
+                                        .padding(start = 8.dp)
+                                        .clip(RoundedCornerShape(14.dp))
+                                        .background(Color(0xFF1B222A))
+                                        .clickable { onEdit(path, value) }
+                                        .padding(horizontal = 14.dp, vertical = 13.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Column(Modifier.weight(1f)) {
+                                        Text(
+                                            humanizeField(path.lastOrNull() ?: groupKey),
+                                            fontWeight = FontWeight.SemiBold,
+                                            fontSize = 13.sp
+                                        )
+                                        Text(
+                                            path.dropLast(1).drop(1).joinToString("  ›  ") { humanizeField(it) }
+                                                .ifBlank { humanizeField(groupKey) },
+                                            color = Muted,
+                                            fontSize = 9.sp,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis
+                                        )
+                                        Spacer(Modifier.height(5.dp))
+                                        Text(
+                                            preview(value),
+                                            color = Gold,
+                                            fontSize = 11.sp,
+                                            maxLines = 2,
+                                            overflow = TextOverflow.Ellipsis
+                                        )
+                                    }
+                                    Column(horizontalAlignment = Alignment.End) {
+                                        Text(dataTypeLabel(value), color = Muted, fontSize = 9.sp)
+                                        Icon(Icons.Default.Edit, contentDescription = "Edit data", tint = Color(0xFFB8C1CD), modifier = Modifier.padding(top = 6.dp).size(17.dp))
+                                    }
+                                }
+                            }
+                        }
+                    }
                 }
             }
         }
     }
+}
+
+private fun humanizeField(raw: String): String {
+    val known = mapOf(
+        "createdDate" to "Tanggal Dibuat",
+        "lastEditedDate" to "Terakhir Diubah",
+        "gameDate" to "Tanggal Dalam Game",
+        "teamColor" to "Warna Tim",
+        "primaryColor" to "Warna Utama",
+        "secondaryColor" to "Warna Sekunder",
+        "teamName" to "Nama Tim",
+        "playerName" to "Nama Pemain",
+        "teams" to "Daftar Tim",
+        "drivers" to "Daftar Pembalap",
+        "staff" to "Staf",
+        "sponsors" to "Sponsor",
+        "calendar" to "Kalender",
+        "races" to "Balapan",
+        "standings" to "Klasemen",
+        "contracts" to "Kontrak",
+        "finances" to "Keuangan",
+        "facilities" to "Fasilitas",
+        "car" to "Mobil Balap",
+        "research" to "Riset",
+        "championship" to "Kejuaraan"
+    )
+    known[raw]?.let { return it }
+    val spaced = raw.replace(Regex("([a-z0-9])([A-Z])"), "$1 $2")
+        .replace('_', ' ')
+        .replace('-', ' ')
+    return spaced.replaceFirstChar { if (it.isLowerCase()) it.titlecase() else it.toString() }
+}
+
+private fun dataTypeLabel(value: JsonElement?): String = when {
+    value == null || value.isJsonNull -> "KOSONG"
+    value.isJsonObject -> "OBJEK"
+    value.isJsonArray -> "DAFTAR"
+    value.asJsonPrimitive.isBoolean -> "LOGIKA"
+    value.asJsonPrimitive.isNumber -> "ANGKA"
+    else -> "TEKS"
 }
 
 private fun preview(value: JsonElement): String = when {
