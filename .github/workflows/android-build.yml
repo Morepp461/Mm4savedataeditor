@@ -91,7 +91,7 @@ jobs:
           RELEASE_APK="app/build/outputs/apk/release/app-release.apk"
           test -s "$DEBUG_APK"
           test -s "$RELEASE_APK"
-          apksigner verify --verbose --print-certs "$RELEASE_APK" | tee "$RUNNER_TEMP/apk-signature.txt"
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose --print-certs "$RELEASE_APK" | tee "$RUNNER_TEMP/apk-signature.txt"
           EXPECTED="$(keytool -exportcert -alias "$KEY_ALIAS" -keystore "$STORE" -storepass "$KEYSTORE_PASSWORD" | sha256sum | awk '{print toupper($1)}')"
           ACTUAL="$(sed -n 's/.*certificate SHA-256 digest: //p' "$RUNNER_TEMP/apk-signature.txt" | head -n 1 | tr -d ':' | tr '[:lower:]' '[:upper:]')"
           test -n "$ACTUAL"
