@@ -1072,6 +1072,24 @@ private fun applyGodModeAction(current:Mm4SaveCodec.Document,action:String):Mm4S
             val research=data.getAsJsonObject("researchManager") ?: return null
             research.addProperty("m_IsDebugUnlocked",true)
         }
+        "unlock_suppliers" -> {
+            val supplier=data.getAsJsonObject("supplierNetworkManager") ?: return null
+            val nodes=supplier.getAsJsonArray("m_NodeDictionary") ?: return null
+            var changed=0
+            fun unlock(node:JsonElement) {
+                if(node.isJsonObject) {
+                    val obj=node.asJsonObject
+                    if(obj.has("m_IsOwned")) { obj.addProperty("m_IsOwned",true); changed++ }
+                    if(obj.has("m_HasOwnedBeenRevealed")) obj.addProperty("m_HasOwnedBeenRevealed",true)
+                    obj.get("m_Nodes")?.takeIf { it.isJsonArray }?.asJsonArray?.forEach { unlock(it) }
+                } else if(node.isJsonArray) node.asJsonArray.forEach { unlock(it) }
+            }
+            nodes.forEach { row ->
+                val value=row.asJsonObject.get("Value")
+                if(value!=null) unlock(value)
+            }
+            if(changed==0) return null
+        }
         else -> return null
     }
     return current.copy(data=data)
@@ -1119,7 +1137,14 @@ private fun GodModePage(doc:Mm4SaveCodec.Document,onAction:(String)->Unit) {
             }
         }
         item {
-            Text("Pemindahan pembalap/tim dan unlock toko penuh belum dijalankan melalui tombol spekulatif. Struktur save memakai relasi silang antar roster, standings, kontrak, dan kejuaraan. Operasi tersebut harus memperbarui semua relasi sekaligus agar tidak merusak karier.",color=Muted,fontSize=10.sp)
+            GlassCard(Modifier.fillMaxWidth()) {
+                Text("BUKA JARINGAN SUPPLIER",fontWeight=FontWeight.Bold)
+                Text("Membuka seluruh node supplier yang tersimpan di jaringan pemasok. Ini membuka supplier, bukan mengubah komponen yang sudah terpasang di mobil.",color=Muted,fontSize=11.sp)
+                Button(onClick={onAction("unlock_suppliers")},modifier=Modifier.fillMaxWidth(),colors=ButtonDefaults.buttonColors(containerColor=Blue)) { Text("BUKA SEMUA SUPPLIER") }
+            }
+        }
+        item {
+            Text("Pemindahan tim antar divisi dan transfer pembalap belum diaktifkan pada build ini. Keduanya harus menjaga referensi roster, kontrak, klasemen, dan kejuaraan secara serentak. Tidak akan dibuat tombol yang berisiko merusak save.",color=Muted,fontSize=10.sp)
         }
     }
 }
