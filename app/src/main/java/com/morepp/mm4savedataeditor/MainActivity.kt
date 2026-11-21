@@ -730,7 +730,6 @@ private fun EntityCatalogPage(doc: Mm4SaveCodec.Document, category: String, onEd
                     CatalogRecord(path,obj,displayName,if(isApplicant) role + " • Kandidat" else role,group)
                 }.distinctBy { it.data.get("\$id")?.asString }.sortedWith(compareBy({it.group},{it.type},{it.name}))
             }
-            }
         }
     }
     val chosen=records.firstOrNull { it.path.joinToString("/") == selected }
@@ -790,14 +789,15 @@ private fun EntityCatalogPage(doc: Mm4SaveCodec.Document, category: String, onEd
                     Text("Edit nama, identitas, atribut, kontrak, dan pengaturan tanpa memasukkan JSON.",color=Muted,fontSize=10.sp)
                 }
             }
-            if(isCar && stats!=null) {
+            if((isCar || category=="staff") && stats!=null) {
                 item { Text("CAR PERFORMANCE",color=Gold,fontWeight=FontWeight.Bold,fontSize=12.sp) }
                 items(stats.size()) { index ->
                     val value=stats[index]
-                    GlassCard(Modifier.fillMaxWidth().clickable { onEdit("Game Data",chosen.path+(if(category=="staff") listOf("stats","m_Stats","[$index]","m_Stat") else listOf("m_Stats","[$index]")),if(category=="staff") value.asJsonObject.get("m_Stat") ?: value else value) }) {
+                    val statValue=if(category=="staff" && value.isJsonObject) value.asJsonObject.get("m_Stat") ?: value else value
+                    GlassCard(Modifier.fillMaxWidth().clickable { onEdit("Game Data",chosen.path+(if(category=="staff") listOf("stats","m_Stats","[$index]","m_Stat") else listOf("m_Stats","[$index]")),statValue) }) {
                         Row(verticalAlignment=Alignment.CenterVertically) {
-                            Text(labels.getOrNull(index) ?: "Car attribute ${index+1}",Modifier.weight(1f),fontWeight=FontWeight.SemiBold)
-                            Text(preview(value),color=Gold,fontWeight=FontWeight.Bold)
+                            Text(labels.getOrNull(index) ?: ("Attribute " + (index+1)),Modifier.weight(1f),fontWeight=FontWeight.SemiBold)
+                            Text(preview(statValue),color=Gold,fontWeight=FontWeight.Bold)
                             Icon(Icons.Default.Edit,null,tint=Muted,modifier=Modifier.size(15.dp))
                         }
                     }
