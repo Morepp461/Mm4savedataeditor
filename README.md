@@ -1,54 +1,73 @@
 # MM4 Save Data Editor
 
-Android application for browsing and editing Motorsport Manager 4 career save files.
+Native Android application for browsing and editing Motorsport Manager 4 career save files.
 
-## Features in this build
+## Included features
 
-- Import a save through Android's system file picker.
-- Read the observed MM4 container profile: 24-byte little-endian header, Save Info LZ4 block, Game Data LZ4 block.
-- Browse nested objects, arrays, and primitive values in both Save Info and Game Data.
-- Search paths and serialized values.
-- Edit any existing node by replacing its JSON value while preserving JSON types.
-- Add properties to objects and append items to arrays.
-- Delete an existing property or array item with a confirmation step.
-- Export to a new `.msv` file through Android's system document picker.
-- Decode the generated output again before writing it, to verify container round-trip integrity.
-- Keep unknown fields in the loaded JSON tree rather than dropping fields the editor does not understand.
+- Import a save through Android's system document picker.
+- Decode the observed MM4 container profile: 24-byte little-endian header, Save Info LZ4 block, and Game Data LZ4 block.
+- Browse nested objects, arrays, and primitive values in both data sections.
+- Search field paths and serialized primitive values.
+- Replace JSON values while preserving their JSON types.
+- Add object properties and array items.
+- Delete properties and array items with confirmation.
+- Export to a separate `.msv` file through Android's system document picker.
+- Decode the generated output again and compare both JSON trees before writing.
+- Preserve unknown JSON fields that are not directly understood by the editor.
 
-## Observed save container profile
+## Observed container profile
 
-The profile below was inspected from the supplied `SlotTwo.msv` sample:
+The current decoder is based on the supplied `SlotTwo.msv` sample:
 
-- Magic bits: `0x99131871`
+- Magic: `0x99131871`
 - Container version: `40`
-- Header: six little-endian Int32 values (24 bytes): magic, version, info compressed length, info plain length, data compressed length, data plain length.
+- Header: six little-endian Int32 values (24 bytes): magic, version, compressed and plain lengths for Save Info, then compressed and plain lengths for Game Data.
 - Payload: LZ4 Save Info block followed by LZ4 Game Data block.
 
-This is a sample-derived profile, not proof that every MM4 release or platform uses the same format. The decoder rejects unknown magic/version values instead of guessing.
+This is a sample-derived profile, not proof that every MM4 version or platform uses the same format. Unknown magic/version values and invalid lengths are rejected rather than guessed.
 
-## Build outputs
+## Build and signing
 
-GitHub Actions runs JVM codec tests and builds two APK variants:
+GitHub Actions runs unit tests, Android release lint, and builds both APK variants.
 
-- **Debug APK**: signed with the Android debug key and installable for device testing.
-- **Release APK**: unsigned release artifact. It must be signed with the owner's private release key before Play Store distribution or a public release.
+- **Debug APK** is signed with the Android debug key and intended for development/testing only.
+- **Release APK** must be signed with the private release keystore configured in GitHub Actions secrets:
+  - `KEYSTORE_BASE64`
+  - `KEYSTORE_PASSWORD`
+  - `KEY_ALIAS`
+  - `KEY_PASSWORD`
 
-The workflow uploads both artifacts to its GitHub Actions run.
+The release workflow fails instead of silently falling back to a debug key. It verifies the APK signature and checks that the signing certificate matches the configured keystore. Never commit or share the keystore or passwords.
 
-## Build locally
+## Local build
 
 Requirements: JDK 17, Android SDK 35, Gradle 8.9.
 
+The release build requires these environment variables:
+
+- `MM4_KEYSTORE_PATH`
+- `MM4_KEYSTORE_PASSWORD`
+- `MM4_KEY_ALIAS`
+- `MM4_KEY_PASSWORD`
+
+Commands:
+
 ```bash
 gradle testDebugUnitTest
+gradle lintRelease
 gradle assembleDebug assembleRelease
 ```
 
-## Validation status and limitations
+## Validation boundaries
 
-- Codec unit tests cover JSON round-trip, unknown magic, and truncated input.
-- The editor has structural JSON operations but does not yet have game-specific semantic rules for every MM4 field.
-- A successful compression/decompression round-trip does **not** prove that the game accepts every edited value.
-- The supplied sample profile needs real in-game validation with a duplicate career save before claiming full compatibility.
-- Keep the original save untouched. Export to a separate file and test that copy in Motorsport Manager 4.
-- A signed public release requires a release keystore controlled and backed up by the project owner. Never commit that private key to this repository.
+Automated codec tests and successful APK signing do not prove that Motorsport Manager 4 accepts every edited value. The editor currently provides structural JSON editing; it does not implement game-specific semantic validation for every field.
+
+Before treating a build as a fully game-validated release:
+
+1. Keep the original career save untouched and make a duplicate.
+2. Open the duplicate in the editor, make a small reversible change, and export to a new file.
+3. Load the exported copy in Motorsport Manager 4.
+4. Confirm the career loads and the edited value behaves as expected.
+5. Repeat with representative Save Info and Game Data fields.
+
+Do not overwrite the original save. Compatibility with other MM4 versions remains unverified until tested with samples from those versions.
