@@ -443,7 +443,7 @@ private fun CareerHeader(
 }
 
 
-private val Sections = listOf("Overview", "Drivers", "Staff", "Teams", "Cars", "Shop", "Finance", "HQ", "World", "Diagnostics", "Save Info", "Advanced", "God Mode")
+private val Sections = listOf("Overview", "Drivers", "Staff", "Teams", "Cars", "Finance", "HQ", "World", "Diagnostics", "Save Info", "Advanced", "God Mode")
 
 @Composable
 private fun CareerWorkspace(
@@ -472,7 +472,6 @@ private fun CareerWorkspace(
                 "Staff" -> EntityCatalogPage(document, "staff", onEdit)
                 "Teams" -> EntityCatalogPage(document, "team", onEdit)
                 "Cars" -> EntityCatalogPage(document, "car", onEdit)
-                "Shop" -> ComponentMarketplacePage(document, onEdit)
                 "Finance" -> FinancePage(document, onEdit)
                 "HQ" -> HqPage(document, onEdit)
                 "World" -> WorldSettingsPage(document, onEdit)
@@ -600,12 +599,16 @@ private fun DriverPage(doc: Mm4SaveCodec.Document, selected: String?, onSelect: 
                         val value=details?.get(key)
                         if(value!=null && value.isJsonPrimitive) Row(Modifier.fillMaxWidth().clickable { onEdit("Game Data",profilePath+listOf("m_PersonDetails",key),value) }.padding(vertical=5.dp),verticalAlignment=Alignment.CenterVertically) {
                             Text(humanizeField(key),Modifier.weight(1f),color=Muted,fontSize=11.sp)
-                            Text(preview(value),color=Gold,fontWeight=FontWeight.SemiBold,fontSize=11.sp)
+                            Text(driverProfileDisplayValue(key,value),color=Gold,fontWeight=FontWeight.SemiBold,fontSize=11.sp)
                             Icon(Icons.Default.Edit,null,tint=Muted,modifier=Modifier.size(14.dp))
                         }
                     }
                     val nationality=details?.getAsJsonObject("nationality")?.get("mNationalityID")
-                    if(nationality!=null) InfoLine("Nationality", nationalityLabel(nationality))
+                    if(nationality!=null) Row(Modifier.fillMaxWidth().clickable { onEdit("Game Data",profilePath+listOf("m_PersonDetails","nationality","mNationalityID"),nationality) }.padding(vertical=5.dp),verticalAlignment=Alignment.CenterVertically) {
+                        Text("Nationality",Modifier.weight(1f),color=Muted,fontSize=11.sp)
+                        Text(nationalityLabel(nationality),color=Gold,fontWeight=FontWeight.SemiBold,fontSize=10.sp)
+                        Icon(Icons.Default.Edit,null,tint=Muted,modifier=Modifier.size(14.dp))
+                    }
                 }
             }
             item {
@@ -631,9 +634,9 @@ private fun DriverPage(doc: Mm4SaveCodec.Document, selected: String?, onSelect: 
                     Row(verticalAlignment=Alignment.CenterVertically) {
                         Column(Modifier.weight(1f)) {
                             Text(label,fontWeight=FontWeight.SemiBold,fontSize=12.sp)
-                            Text("Potential ${potential?.asString ?: "—"} / 20",color=Muted,fontSize=9.sp)
+                            Text("Potential ${displayIntegerStat(potential)} / 20",color=Muted,fontSize=9.sp)
                         }
-                        Text("${value?.asString ?: "—"} / 20",color=Gold,fontWeight=FontWeight.Bold)
+                        Text("${displayIntegerStat(value)} / 20",color=Gold,fontWeight=FontWeight.Bold)
                         IconButton(onClick={if(value!=null) onEdit("Game Data",profilePath+listOf("m_Stats","m_Stats","[$n]","m_Stat"),value)}) { Icon(Icons.Default.Edit,null,tint=Muted) }
                     }
                     Row(horizontalArrangement=Arrangement.spacedBy(8.dp)) {
@@ -810,7 +813,7 @@ private fun EntityCatalogPage(doc: Mm4SaveCodec.Document, category: String, onEd
                 isCatalogPrimitiveEditable(category, row.first)
         }
         val isCar=category=="car"
-        val stats=if(category=="staff") chosen.data.getAsJsonObject("stats")?.getAsJsonArray("m_Stats") else chosen.data.getAsJsonArray("m_Stats")
+        val stats=if(category=="staff") safeObject(chosen.data,"stats")?.let { safeArray(it,"m_Stats") } else safeArray(chosen.data,"m_Stats")
         val labels=when {
             isCar -> listOf("Top Speed","Acceleration","Braking","Low Speed Cornering","High Speed Cornering","Tyre Wear","Fuel Efficiency")
             category=="staff" && chosen.type.contains("Designer",true) -> listOf("Performance","Reliability","Leadership","Bonus","Success Rate")
@@ -843,7 +846,7 @@ private fun EntityCatalogPage(doc: Mm4SaveCodec.Document, category: String, onEd
                     GlassCard(Modifier.fillMaxWidth().clickable { onEdit("Game Data",chosen.path+(if(category=="staff") listOf("stats","m_Stats","[$index]","m_Stat") else listOf("m_Stats","[$index]")),statValue) }) {
                         Row(verticalAlignment=Alignment.CenterVertically) {
                             Text(labels.getOrNull(index) ?: ("Attribute " + (index+1)),Modifier.weight(1f),fontWeight=FontWeight.SemiBold)
-                            Text(preview(statValue),color=Gold,fontWeight=FontWeight.Bold)
+                            Text(displayIntegerStat(statValue),color=Gold,fontWeight=FontWeight.Bold)
                             Icon(Icons.Default.Edit,null,tint=Muted,modifier=Modifier.size(15.dp))
                         }
                     }
@@ -896,7 +899,24 @@ internal fun isStaffEditablePath(path: List<String>): Boolean {
     return compensationTerms.any { term -> root.contains(term, ignoreCase = true) }
 }
 
-private fun nationalityLabel(value: JsonElement): String { return if (value.isJsonPrimitive) "Kode negara ${value.asString} (pemetaan ID MM4 belum tersedia)" else "Nationality belum dikenali" }
+private fun nationalityLabel(value: JsonElement): String = nationalityNameFromCareerId(value.asString)
+
+private fun nationalityNameFromCareerId(id:String):String = when(id) {
+    else -> "ID $id • belum ada di katalog save"
+}
+
+private fun safeObject(parent:JsonObject,key:String):JsonObject? = parent.get(key)?.takeIf { it.isJsonObject }?.asJsonObject
+private fun safeArray(parent:JsonObject,key:String):JsonArray? = parent.get(key)?.takeIf { it.isJsonArray }?.asJsonArray
+
+internal fun driverProfileDisplayValue(key:String,value:JsonElement):String = when(key) {
+    "tweetHandle" -> value.asString.takeUnless { it.startsWith("MMM_TweetHandles_",true) }.orEmpty().ifBlank { "Belum diatur" }
+    "dateOfBirth" -> runCatching { java.time.LocalDate.parse(value.asString.take(10)).format(java.time.format.DateTimeFormatter.ofPattern("dd MMM yyyy",java.util.Locale("id","ID"))) }.getOrDefault("Tanggal tidak valid")
+    else -> preview(value)
+}
+
+internal fun displayIntegerStat(value:JsonElement?):String = value?.let { v ->
+    if(v.isJsonPrimitive && v.asJsonPrimitive.isNumber) runCatching { java.math.BigDecimal(v.asString).setScale(0,java.math.RoundingMode.HALF_UP).toPlainString() }.getOrDefault(preview(v)) else preview(v)
+} ?: "—"
 
 private fun collectObjectsWithId(root:JsonElement):List<Pair<List<String>,JsonObject>> {
     val found=mutableListOf<Pair<List<String>,JsonObject>>()
@@ -1308,7 +1328,7 @@ private fun AdvancedPage(doc: Mm4SaveCodec.Document, onEdit: (String,List<String
         item {
             GlassCard(Modifier.fillMaxWidth()) {
                 Text("PENGATURAN LANJUTAN",color=Gold,fontWeight=FontWeight.Bold,fontSize=11.sp)
-                Text("Semua data lanjutan dikelompokkan berdasarkan bagian game. Cari dengan istilah sederhana, buka kelompok, lalu pilih nilai yang ingin diubah. Tidak perlu menulis JSON.",color=Muted,fontSize=11.sp)
+                Text("Bagian ini berisi field teknis yang belum punya editor khusus. Nama dan lokasi field ditampilkan agar jelas sumber datanya. Ubah hanya nilai yang kamu pahami; data mentah dan referensi internal tidak ditampilkan sebagai pengaturan biasa.",color=Muted,fontSize=11.sp)
                 Text("${fields.size} editable fields",fontSize=20.sp,fontWeight=FontWeight.Black)
             }
         }
