@@ -1938,6 +1938,14 @@ private fun applyGodModeAction(current:Mm4SaveCodec.Document,action:String):Mm4S
 
 @Composable
 private fun GodModePage(doc:Mm4SaveCodec.Document,onAction:(String)->Unit) {
+    val supplierManager=doc.data.get("supplierNetworkManager")?.takeIf { it.isJsonObject }?.asJsonObject
+    val supplierNodeCount=supplierManager?.get("m_NodeDictionary")?.let { node ->
+        when {
+            node.isJsonObject -> node.asJsonObject.size()
+            node.isJsonArray -> node.asJsonArray.size()
+            else -> 0
+        }
+    } ?: 0
     val balance=doc.data.getAsJsonObject("financeManager")?.get("m_Balance")?.asLong ?: 0L
     val hq=doc.data.getAsJsonObject("headquarters")?.getAsJsonArray("m_Upgrades")
     val unlocked=hq?.count { row ->
@@ -2027,8 +2035,17 @@ private fun GodModePage(doc:Mm4SaveCodec.Document,onAction:(String)->Unit) {
         item {
             GlassCard(Modifier.fillMaxWidth()) {
                 Text("BUKA JARINGAN SUPPLIER",fontWeight=FontWeight.Bold)
-                Text("Membuka seluruh node supplier yang tersimpan di jaringan pemasok. Ini membuka supplier, bukan mengubah komponen yang sudah terpasang di mobil.",color=Muted,fontSize=11.sp)
-                Button(onClick={onAction("unlock_suppliers")},modifier=Modifier.fillMaxWidth(),colors=ButtonDefaults.buttonColors(containerColor=Blue)) { Text("BUKA SEMUA SUPPLIER") }
+                Text(
+                    if(supplierNodeCount>0) "Ditemukan $supplierNodeCount entri jaringan supplier. Membuka node yang benar-benar tersimpan; komponen terpasang tidak diubah."
+                    else "Save ini belum memiliki node jaringan supplier (dictionary kosong). Game belum menyimpan graph yang bisa dibuka, jadi tombol dinonaktifkan agar tidak memberi hasil palsu.",
+                    color=Muted,fontSize=11.sp
+                )
+                Button(
+                    onClick={onAction("unlock_suppliers")},
+                    enabled=supplierNodeCount>0,
+                    modifier=Modifier.fillMaxWidth(),
+                    colors=ButtonDefaults.buttonColors(containerColor=Blue,disabledContainerColor=PanelAlt)
+                ) { Text(if(supplierNodeCount>0) "BUKA SEMUA SUPPLIER" else "JARINGAN BELUM TERSEDIA") }
             }
         }
         item {
