@@ -256,6 +256,7 @@ class JsonTreeEditorTest {
                             })
                             add("m_PersonDetails",JsonObject().apply { addProperty("name","Original Driver $numericTeamId-$driverIndex") })
                             add("m_Stats",JsonObject().apply { add("m_Stats",JsonArray().apply { add(JsonObject().apply { addProperty("m_Stat",1) }) }) })
+                            add("improvement",JsonObject().apply { add("m_Driver",JsonObject().apply { addProperty("\$ref",driverEntityId) }) })
                         })
                     }
                     entityRows.add(JsonObject().apply {
@@ -304,6 +305,7 @@ class JsonTreeEditorTest {
         assertEquals("Template Driver 1-0",byId["driver-1-0"]!!.getAsJsonObject("m_PersonDetails").get("name").asString)
         assertEquals(99,byId["driver-1-0"]!!.getAsJsonObject("m_Stats").getAsJsonArray("m_Stats")[0].asJsonObject.get("m_Stat").asInt)
         assertEquals("team-1",byId["driver-1-0"]!!.getAsJsonObject("contract").getAsJsonObject("m_Team").get("\$ref").asString)
+        assertEquals("driver-1-0",byId["driver-1-0"]!!.getAsJsonObject("improvement").getAsJsonObject("m_Driver").get("\$ref").asString)
         assertEquals(40,(0..3).sumOf { division ->
             byId["champ-$division"]!!.getAsJsonArray("m_TeamIDs").size()
         })
