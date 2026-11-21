@@ -1442,7 +1442,7 @@ internal fun swapTeamsBetweenDivisions(data:JsonObject,teamA:String,teamB:String
                 if(path.any { it.contains("team",true) }) {
                     node.asJsonArray.forEachIndexed { index,value ->
                         val id=value.takeIf { it.isJsonObject }?.asJsonObject?.get("\$ref")?.asString
-                        if(id in valid) locations.getOrPut(id!!) { mutableListOf() }.add(Location(node.asJsonArray,index))
+                        if(id!=null && id in valid) locations.getOrPut(id) { mutableListOf() }.add(Location(node.asJsonArray,index))
                     }
                 }
                 node.asJsonArray.forEachIndexed { index,value -> visit(value,path+"[$index]") }
@@ -1461,12 +1461,12 @@ internal fun swapTeamsBetweenDivisions(data:JsonObject,teamA:String,teamB:String
 
 private fun applyGodModeAction(current:Mm4SaveCodec.Document,action:String):Mm4SaveCodec.Document? {
     val data=current.data.deepCopy().asJsonObject
-    when(action) {
-        "max_balance" -> {
+    when {
+        action=="max_balance" -> {
             val finance=data.getAsJsonObject("financeManager") ?: return null
             finance.addProperty("m_Balance",2_000_000_000L)
         }
-        "unlock_hq" -> {
+        action=="unlock_hq" -> {
             val hq=data.getAsJsonObject("headquarters") ?: return null
             val upgrades=hq.getAsJsonArray("m_Upgrades") ?: return null
             upgrades.forEach { row ->
@@ -1475,13 +1475,13 @@ private fun applyGodModeAction(current:Mm4SaveCodec.Document,action:String):Mm4S
                 if(value.has("weeksToUnlock")) value.addProperty("weeksToUnlock",0)
             }
         }
-        "max_research" -> {
+        action=="max_research" -> {
             val research=data.getAsJsonObject("researchManager") ?: return null
             val cap=research.get("m_ResearchCap")?.asInt ?: 100000
             research.addProperty("m_SeasonResearchPointsMM4",cap)
             research.addProperty("m_IsDebugUnlocked",true)
         }
-        "debug_unlock" -> {
+        action=="debug_unlock" -> {
             val research=data.getAsJsonObject("researchManager") ?: return null
             research.addProperty("m_IsDebugUnlocked",true)
         }
@@ -1493,7 +1493,7 @@ private fun applyGodModeAction(current:Mm4SaveCodec.Document,action:String):Mm4S
             val parts=action.split("|")
             if(parts.size!=3 || !moveDriverToTeam(data,parts[1],parts[2])) return null
         }
-        "unlock_suppliers" -> {
+        action=="unlock_suppliers" -> {
             val supplier=data.getAsJsonObject("supplierNetworkManager") ?: return null
             val nodes=supplier.getAsJsonArray("m_NodeDictionary") ?: return null
             var changed=0
