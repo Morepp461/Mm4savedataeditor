@@ -10,7 +10,7 @@ val downloadAppIcon by tasks.registering {
     doLast {
         val output = generatedIconRes.get().file("drawable-nodpi/app_icon.png").asFile
         output.parentFile.mkdirs()
-        val iconSource = layout.projectDirectory.file("branding/app-icon-upload/SAVE DATA_20261121_122401_0000.png").asFile
+        val iconSource = layout.projectDirectory.file("../branding/app-icon-upload/SAVE DATA_20261121_122401_0000.png").asFile
         check(iconSource.isFile) { "App icon source is missing: ${iconSource.path}" }
         iconSource.inputStream().use { input ->
             output.outputStream().use { target -> input.copyTo(target) }
