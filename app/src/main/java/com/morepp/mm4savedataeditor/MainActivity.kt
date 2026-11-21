@@ -488,6 +488,7 @@ private fun DriverPage(doc: Mm4SaveCodec.Document, selected: String?, onSelect: 
             DriverRecord(path,obj,id,name)
         }?.distinctBy { it.id }?.sortedBy { it.name.lowercase() }.orEmpty()
     }
+    val referenced=doc.data.getAsJsonObject("driverManager")?.getAsJsonArray("m_Drivers")?.size() ?: 0
     val chosen=drivers.firstOrNull { it.id==selected }
     if(chosen==null) {
         var search by remember { mutableStateOf("") }
@@ -495,7 +496,7 @@ private fun DriverPage(doc: Mm4SaveCodec.Document, selected: String?, onSelect: 
             GlassCard(Modifier.fillMaxWidth().padding(horizontal=12.dp, vertical=6.dp)) {
                 Text("DRIVER DATABASE",color=Gold,fontWeight=FontWeight.Bold,fontSize=11.sp)
                 Text("${drivers.size} driver profiles available",fontSize=22.sp,fontWeight=FontWeight.Black)
-                Text("${referenced} driver references in career roster. Only fully stored profiles are listed for safe editing.",color=Muted,fontSize=10.sp)
+                Text("${referenced} driver references in career roster. Profiles are resolved by ID, including records without a $type marker.",color=Muted,fontSize=10.sp)
             }
             OutlinedTextField(search,{search=it},Modifier.fillMaxWidth().padding(horizontal=14.dp, vertical=6.dp),placeholder={Text("Search driver name")},leadingIcon={Icon(Icons.Default.Search,null)},singleLine=true)
             LazyColumn(contentPadding=PaddingValues(14.dp),verticalArrangement=Arrangement.spacedBy(8.dp)) {
