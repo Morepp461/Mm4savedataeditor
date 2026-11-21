@@ -109,4 +109,17 @@ class JsonTreeEditorTest {
         assertEquals("2.5", stepNumericValue("1.5", 1.0, 1))
         assertEquals("0.25", stepNumericValue("0.5", 0.25, -1))
     }
+
+    @Test
+    fun driverAgeUsesCareerDateInsteadOfPhoneDate() {
+        assertEquals("29", ageFromDate("1990-06-10", "2020-06-09"))
+        assertEquals("30", ageFromDate("1990-06-10", "2020-06-10"))
+    }
+
+    @Test
+    fun financeHistorySupportsPrimitiveAndObjectRecords() {
+        assertEquals("£1,250", financeHistoryLabel(JsonPrimitive(1250)))
+        val record = JsonObject().apply { addProperty("amount", 8750) }
+        assertEquals("£8,750", financeHistoryLabel(record))
+    }
 }
