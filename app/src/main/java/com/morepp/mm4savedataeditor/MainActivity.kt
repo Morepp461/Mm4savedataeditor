@@ -208,7 +208,7 @@ private fun EditorApp() {
                         onSection = { selectedTab = it; selectedDriver = null },
                         selectedDriver = selectedDriver,
                         onDriver = { selectedDriver = it },
-                        onEdit = { root, path, value -> editTarget = EditTarget(root, path, value.deepCopy()) },
+                        onEdit = { root, path, value -> if (value.isJsonPrimitive) editTarget = EditTarget(root, path, value.deepCopy()) },
                         onGodAction = { action ->
                             val latest = document ?: return@CareerWorkspace
                             val changed = applyGodModeAction(latest, action)
@@ -356,7 +356,7 @@ private fun WelcomePanel(busy: Boolean, onOpen: () -> Unit) {
             }
             Spacer(Modifier.height(16.dp))
             Text(
-                "DYNAMIC DATA BROWSER • RAW JSON EDITOR • LZ4 EXPORT",
+                "CAREER EDITOR • KONTROL TERARAH • LZ4 EXPORT",
                 color = Gold,
                 fontSize = 9.sp
             )
@@ -601,16 +601,7 @@ private fun DriverPage(doc: Mm4SaveCodec.Document, selected: String?, onSelect: 
                     }
                 }
             }
-            item { Text("OTHER DRIVER SETTINGS",color=Gold,fontWeight=FontWeight.Bold,fontSize=11.sp) }
-            items(flatten(d).filter { it.second.isJsonPrimitive && it.first.firstOrNull()!="m_Stats" },key={it.first.joinToString("/")}) { (path,value) ->
-                GlassCard(Modifier.fillMaxWidth().clickable { onEdit("Game Data",profilePath+path,value) }) {
-                    Row(verticalAlignment=Alignment.CenterVertically) {
-                        Text(humanizeField(path.last()),Modifier.weight(1f),fontSize=11.sp)
-                        Text(preview(value),color=Gold,fontSize=11.sp)
-                        Icon(Icons.Default.Edit,null,tint=Muted,modifier=Modifier.size(14.dp))
-                    }
-                }
-            }
+
         }
     }
 }
@@ -769,7 +760,16 @@ private fun EntityCatalogPage(doc: Mm4SaveCodec.Document, category: String, onEd
             }
         }
     } else {
-        val fields=flatten(chosen.data).filter { row -> row.second.isJsonPrimitive && row.first.lastOrNull()!="\$version" && (category!="team" || row.first.lastOrNull()!="\$version") && (category!="car" || row.first.firstOrNull()!="m_Stats") }
+        val fields=flatten(chosen.data).filter { row ->
+            row.second.isJsonPrimitive &&
+                row.first.lastOrNull() != "\$version" &&
+                when (category) {
+                    "team" -> isTeamEditablePath(row.first)
+                    "staff" -> isStaffEditablePath(row.first)
+                    "car" -> false // Car attributes are rendered exclusively from the team's m_Stats array below.
+                    else -> true
+                }
+        }
         val isCar=category=="car"
         val stats=if(category=="staff") chosen.data.getAsJsonObject("stats")?.getAsJsonArray("m_Stats") else chosen.data.getAsJsonArray("m_Stats")
         val labels=when {
@@ -797,7 +797,7 @@ private fun EntityCatalogPage(doc: Mm4SaveCodec.Document, category: String, onEd
                 }
             }
             if((isCar || category=="staff") && stats!=null) {
-                item { Text("CAR PERFORMANCE",color=Gold,fontWeight=FontWeight.Bold,fontSize=12.sp) }
+                item { Text(if (isCar) "ATRIBUT MOBIL" else "ATRIBUT STAFF",color=Gold,fontWeight=FontWeight.Bold,fontSize=12.sp) }
                 items(stats.size()) { index ->
                     val value=stats[index]
                     val statValue=if(category=="staff" && value.isJsonObject) value.asJsonObject.get("m_Stat") ?: value else value
@@ -826,6 +826,26 @@ private fun EntityCatalogPage(doc: Mm4SaveCodec.Document, category: String, onEd
             }
         }
     }
+}
+
+private fun isTeamEditablePath(path: List<String>): Boolean {
+    if (path.isEmpty()) return false
+    val root = path.first()
+    if (path.size == 1 && root in setOf("name", "shortName", "m_Reputation", "reputation")) return true
+    val financialTerms = listOf(
+        "financial", "finance", "budget", "balance", "cash", "debt", "loan",
+        "wage", "salary", "sponsor", "income", "revenue", "expense", "cost",
+        "profit", "loss", "bank", "payroll"
+    )
+    return path.any { part -> financialTerms.any { term -> part.contains(term, ignoreCase = true) } }
+}
+
+private fun isStaffEditablePath(path: List<String>): Boolean {
+    if (path.isEmpty()) return false
+    val root = path.first()
+    if (root in setOf("m_PersonDetails", "contract")) return true
+    val compensationTerms = listOf("salary", "wage", "pay", "perracecost", "signingfee")
+    return path.any { part -> compensationTerms.any { term -> part.contains(term, ignoreCase = true) } }
 }
 
 private fun nationalityLabel(value: JsonElement): String { return if (value.isJsonPrimitive) "Kode negara ${value.asString} (pemetaan ID MM4 belum tersedia)" else "Nationality belum dikenali" }
