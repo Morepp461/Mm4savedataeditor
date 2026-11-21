@@ -9,8 +9,10 @@ An Android career-save editor for Motorsport Manager 4. It reads the supported v
 - **Staff:** staff and applicant records discovered from the serialized role schema; profile, role attributes, salary and contract.
 - **Teams:** team identity, reputation and top-level financial data.
 - **Cars:** per-team car performance attributes.
+- **Shop:** open-market components and supplier inventories, including price, discount, rarity, stock state and performance-stat editing.
 - **Finance:** team balance and transaction history.
-- **Headquarters:** facility upgrade state, timers, and upgrade path.
+- **Headquarters:** the 19 facility names and effects shown in the supplied gameplay video, category levels, plus separately identified raw upgrade nodes with editable state, timers and path type. Raw node IDs are not falsely assigned to individual facilities.
+- **Component Marketplace:** open-market stock and seven supplier inventories (Micronix Racing, Shimizu, Polymat Group, Tectra Fibres, Norex, Mersault and Kitano). Component names are decoded where confirmed by the video; unknown type IDs remain numeric rather than guessed.
 - **World:** discovered championship, marketplace, supplier, research, session, circuit and weather groups.
 - **Save Info / Advanced:** typed primitive editing for supported values.
 - **God Mode:** explicit save-backed bulk actions.
