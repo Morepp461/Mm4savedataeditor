@@ -479,18 +479,26 @@ private fun OverviewPage(doc: Mm4SaveCodec.Document, go: (String) -> Unit) {
 
 @Composable
 private fun DriverPage(doc: Mm4SaveCodec.Document, selected: String?, onSelect: (String?) -> Unit, onEdit: (String,List<String>,JsonElement)->Unit) {
-    data class DriverRecord(val path:List<String>,val data:JsonObject,val id:String,val name:String)
+    data class DriverRecord(val path:List<String>,val data:JsonObject,val id:String,val name:String,val team:String)
     val drivers=remember(doc.data) {
         val all=collectObjectsWithId(doc.data).associateBy { it.second.get("\$id")?.asString }
+        val teamNames=doc.data.getAsJsonObject("teamManager")?.getAsJsonArray("m_Teams")
+            ?.mapNotNull { teamRef ->
+                val teamId=teamRef.asJsonObject.get("\$ref")?.asString ?: return@mapNotNull null
+                val team=all[teamId]?.second ?: return@mapNotNull null
+                teamId to (team.get("name")?.asString?.takeIf { it.isNotBlank() } ?: "Free Agent")
+            }?.toMap().orEmpty()
         val roster=doc.data.getAsJsonObject("driverManager")?.getAsJsonArray("m_Drivers")
         roster?.mapNotNull { ref ->
             val id=ref.asJsonObject.get("\$ref")?.asString ?: return@mapNotNull null
             val pair=all[id] ?: return@mapNotNull null
             val (path,obj)=pair
             val details=obj.getAsJsonObject("m_PersonDetails") ?: return@mapNotNull null
-            val name=details.get("name")?.asString?.trim().orEmpty().ifBlank { "Unnamed driver" }
-            DriverRecord(path,obj,id,name)
-        }?.distinctBy { it.id }?.sortedBy { it.name.lowercase() }.orEmpty()
+            val name=details.get("name")?.asString?.trim().orEmpty().ifBlank { "Unnamed driver • " + id }
+            val teamId=obj.getAsJsonObject("contract")?.getAsJsonObject("m_Team")?.get("\$ref")?.asString
+            val team=teamId?.let { teamNames[it] } ?: "Free Agent"
+            DriverRecord(path,obj,id,name,team)
+        }?.distinctBy { it.id }?.sortedWith(compareBy({ it.team.lowercase() },{ it.name.lowercase() })).orEmpty()
     }
     val referenced=doc.data.getAsJsonObject("driverManager")?.getAsJsonArray("m_Drivers")?.size() ?: 0
     val chosen=drivers.firstOrNull { it.id==selected }
@@ -512,7 +520,7 @@ private fun DriverPage(doc: Mm4SaveCodec.Document, selected: String?, onSelect: 
                             Column(Modifier.weight(1f)) {
                                 Text(driver.name,fontWeight=FontWeight.Bold)
                                 val details=driver.data.getAsJsonObject("m_PersonDetails")
-                                Text("Age ${ageFromDate(details?.get("dateOfBirth")?.asString)} • Driver ID ${driver.data.get("m_DriverID")?.asString ?: "—"}",color=Muted,fontSize=10.sp)
+                                Text("${driver.team} • Age ${ageFromDate(details?.get("dateOfBirth")?.asString)} • Driver ID ${driver.data.get("m_DriverID")?.asString ?: "—"}",color=Muted,fontSize=10.sp)
                             }
                             Icon(Icons.Default.ChevronRight,null,tint=Muted)
                         }
@@ -664,7 +672,7 @@ private fun TeamPage(doc: Mm4SaveCodec.Document, onEdit: (String,List<String>,Js
 
 @Composable
 private fun EntityCatalogPage(doc: Mm4SaveCodec.Document, category: String, onEdit: (String,List<String>,JsonElement)->Unit) {
-    data class CatalogRecord(val path:List<String>,val data:JsonObject,val name:String,val type:String)
+    data class CatalogRecord(val path:List<String>,val data:JsonObject,val name:String,val type:String,val group:String="")
     var selected by remember(category) { mutableStateOf<String?>(null) }
     var query by remember(category) { mutableStateOf("") }
     val records=remember(doc.data,category) {
@@ -693,22 +701,34 @@ private fun EntityCatalogPage(doc: Mm4SaveCodec.Document, category: String, onEd
             else -> {
                 val driverIds=doc.data.getAsJsonObject("driverManager")?.getAsJsonArray("m_Drivers")
                     ?.mapNotNull { it.asJsonObject.get("\$ref")?.asString }?.toSet().orEmpty()
-                collectObjectsWithId(doc.data).mapNotNull { (path,obj) ->
+                val all=collectObjectsWithId(doc.data)
+                val teamNames=all.mapNotNull { (_,team) ->
+                    val id=team.get("\$id")?.asString
+                    val name=team.get("name")?.takeIf { it.isJsonPrimitive }?.asString
+                    if(id!=null && !name.isNullOrBlank() && team.has("m_TeamID")) id to name else null
+                }.toMap()
+                all.mapNotNull { (path,obj) ->
                     val id=obj.get("\$id")?.asString ?: return@mapNotNull null
                     if(id in driverIds) return@mapNotNull null
-                    val person=obj.getAsJsonObject("m_PersonDetails") ?: return@mapNotNull null
-                    val personName=person.get("name")?.asString?.trim().orEmpty()
-                    val displayName=personName.ifBlank { "Unnamed staff • " + (obj.get("\\$id")?.asString ?: "Unknown ID") }
-                    val joined=path.joinToString("/")
-                    val type=when {
-                        joined.contains("m_EngineerContractController") || obj.get("\$type")?.asString=="Engineer" -> "Engineer"
-                        joined.contains("m_MechanicContractController") -> "Mechanic"
-                        joined.contains("m_StrategistContractController") -> "Strategist"
-                        joined.contains("m_Applicants") -> "Staff Applicant"
-                        else -> obj.get("\$type")?.asString ?: "Staff"
+                    val stats=obj.getAsJsonObject("stats") ?: return@mapNotNull null
+                    val role=when {
+                        stats.has("m_Engineer") -> "Designer"
+                        stats.has("m_Mechanic") -> "Mechanic"
+                        stats.has("m_Strategist") -> "Strategist"
+                        else -> return@mapNotNull null
                     }
-                    CatalogRecord(path,obj,displayName,type)
-                }.distinctBy { it.data.get("\$id")?.asString }.sortedWith(compareBy({it.type},{it.name}))
+                    val person=obj.getAsJsonObject("m_PersonDetails")
+                    val personName=person?.get("name")?.takeIf { it.isJsonPrimitive }?.asString?.trim().orEmpty()
+                    val regen=obj.getAsJsonObject("m_PersonRegenDetails")
+                    val displayName=personName.ifBlank {
+                        val seed=regen?.get("regenSeed")?.asString ?: id
+                        "Prospek " + role + " • " + seed.takeLast(5)
+                    }
+                    val teamRef=obj.getAsJsonObject("contract")?.getAsJsonObject("m_Team")?.get("\$ref")?.asString
+                    val group=teamRef?.let { teamNames[it] } ?: "Free agent / belum ditempatkan"
+                    val isApplicant=path.any { it=="m_Applicants" }
+                    CatalogRecord(path,obj,displayName,if(isApplicant) role + " • Kandidat" else role,group)
+                }.distinctBy { it.data.get("\$id")?.asString }.sortedWith(compareBy({it.group},{it.type},{it.name}))
             }
         }
     }
@@ -734,7 +754,7 @@ private fun EntityCatalogPage(doc: Mm4SaveCodec.Document, category: String, onEd
                         Spacer(Modifier.width(12.dp))
                         Column(Modifier.weight(1f)) {
                             Text(record.name,fontWeight=FontWeight.Bold)
-                            Text(record.type,color=Muted,fontSize=10.sp)
+                            Text(if(record.group.isBlank()) record.type else "${record.type} • ${record.group}",color=Muted,fontSize=10.sp)
                         }
                         Icon(Icons.Default.ChevronRight,null,tint=Muted)
                     }
@@ -742,11 +762,11 @@ private fun EntityCatalogPage(doc: Mm4SaveCodec.Document, category: String, onEd
             }
         }
     } else {
-        val fields=flatten(chosen.data).filter { row -> row.second.isJsonPrimitive && row.first.lastOrNull()!="\$version" && (category!="team" || row.first.firstOrNull() !in setOf("car","m_StaffController","m_DriverController","m_Staff","m_Drivers","m_Stats")) && (category!="car" || row.first.firstOrNull()!="m_Stats") }
+        val fields=flatten(chosen.data).filter { row -> row.second.isJsonPrimitive && row.first.lastOrNull()!="\$version" && (category!="team" || (row.first.size==1 && row.first[0] in setOf("name","shortName","aggression","m_TeamID","m_Reputation","m_EngineerRacePerformanceModifier","m_MechanicsRacePerformanceModifier","m_UIStarValue","m_ColorID","m_LiveryID","m_LogoID","m_BadgeID","driversBodyStyle","m_Location"))) && (category!="car" || row.first.firstOrNull()!="m_Stats") }
         val isCar=category=="car"
-        val stats=chosen.data.getAsJsonArray("m_Stats")
+        val stats=if(category=="staff") chosen.data.getAsJsonObject("stats")?.getAsJsonArray("m_Stats") else chosen.data.getAsJsonArray("m_Stats")
         val labels=when {
-            isCar -> listOf("Top Speed","Acceleration","Braking","Low Speed Cornering","High Speed Cornering","Tyre Wear","Fuel Efficiency","Car Reliability")
+            isCar -> listOf("Top Speed","Acceleration","Braking","Low Speed Cornering","High Speed Cornering","Tyre Wear","Fuel Efficiency")
             category=="staff" && chosen.type.contains("Designer",true) -> listOf("Performance","Reliability","Leadership","Bonus","Success Rate")
             category=="staff" && chosen.type.contains("Strategist",true) -> listOf("Race Starts","Overtaking","Defending","Consistency","Focus")
             category=="staff" && chosen.type.contains("Mechanic",true) -> listOf("Setup Skill","Car Knowledge","Pit Stop Skill","Reliability")
@@ -769,21 +789,23 @@ private fun EntityCatalogPage(doc: Mm4SaveCodec.Document, category: String, onEd
                     Text("Edit nama, identitas, atribut, kontrak, dan pengaturan tanpa memasukkan JSON.",color=Muted,fontSize=10.sp)
                 }
             }
-            if(isCar && stats!=null) {
+            if((isCar || category=="staff") && stats!=null) {
                 item { Text("CAR PERFORMANCE",color=Gold,fontWeight=FontWeight.Bold,fontSize=12.sp) }
                 items(stats.size()) { index ->
                     val value=stats[index]
-                    GlassCard(Modifier.fillMaxWidth().clickable { onEdit("Game Data",chosen.path+listOf("m_Stats","[$index]"),value) }) {
+                    val statValue=if(category=="staff" && value.isJsonObject) value.asJsonObject.get("m_Stat") ?: value else value
+                    GlassCard(Modifier.fillMaxWidth().clickable { onEdit("Game Data",chosen.path+(if(category=="staff") listOf("stats","m_Stats","[$index]","m_Stat") else listOf("m_Stats","[$index]")),statValue) }) {
                         Row(verticalAlignment=Alignment.CenterVertically) {
-                            Text(labels.getOrNull(index) ?: "Car attribute ${index+1}",Modifier.weight(1f),fontWeight=FontWeight.SemiBold)
-                            Text(preview(value),color=Gold,fontWeight=FontWeight.Bold)
+                            Text(labels.getOrNull(index) ?: ("Attribute " + (index+1)),Modifier.weight(1f),fontWeight=FontWeight.SemiBold)
+                            Text(preview(statValue),color=Gold,fontWeight=FontWeight.Bold)
                             Icon(Icons.Default.Edit,null,tint=Muted,modifier=Modifier.size(15.dp))
                         }
                     }
                 }
             }
             items(fields,key={it.first.joinToString("/")}) { (path,value) ->
-                val label=if(path.any { it=="m_Stats" }) statAttributeLabel(category,chosen.type,path.last().removePrefix("[").removeSuffix("]").toIntOrNull() ?: 0) else humanizeField(path.last())
+                val statIndex=path.firstOrNull { it.startsWith("[") }?.removePrefix("[")?.removeSuffix("]")?.toIntOrNull() ?: 0
+                val label=if(path.any { it=="m_Stats" }) statAttributeLabel(category,chosen.type,statIndex) else humanizeField(path.last())
                 GlassCard(Modifier.fillMaxWidth().clickable { onEdit("Game Data",chosen.path+path,value) }) {
                     Row(verticalAlignment=Alignment.CenterVertically) {
                         Column(Modifier.weight(1f)) {
