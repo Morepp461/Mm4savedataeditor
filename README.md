@@ -1,64 +1,75 @@
 # MM4 Save Data Editor
 
-An Android career-save editor for Motorsport Manager 4. It reads the supported v40 .msv container, presents game-oriented editing workspaces, and writes a separately selected save file after a codec round-trip integrity check.
+Aplikasi Android untuk mengedit file career **Motorsport Manager 4 (MM4)**. Aplikasi ini membaca file save berformat `.msv` dengan container versi 40, menampilkan data dalam beberapa menu, lalu menyimpan hasil edit ke file baru. Sebelum file dibuat, aplikasi memeriksa ulang hasilnya agar data tidak berubah atau rusak saat proses ekspor.
 
-## Workspaces
+## Menu yang tersedia
 
-- **Overview:** career summary and shortcuts.
-- **Drivers:** roster resolved through save references; personal profile, attributes, potential/modifiers, salary and contract.
-- **Staff:** staff and applicant records discovered from the serialized role schema; profile, role attributes, salary and contract.
-- **Teams:** team identity, reputation and top-level financial data.
-- **Cars:** per-team car performance attributes.
-- **Shop:** open-market components and supplier inventories, including price, discount, rarity, stock state and performance-stat editing.
-- **Finance:** team balance and transaction history.
-- **Headquarters:** the 19 facility names and effects shown in the supplied gameplay video, category levels, plus separately identified raw upgrade nodes with editable state, timers and path type. Raw node IDs are not falsely assigned to individual facilities.
-- **Component Marketplace:** open-market stock and seven supplier inventories (Micronix Racing, Shimizu, Polymat Group, Tectra Fibres, Norex, Mersault and Kitano). Component names are decoded where confirmed by the video; unknown type IDs remain numeric rather than guessed.
-- **World:** discovered championship, marketplace, supplier, research, session, circuit and weather groups.
-- **Save Info / Advanced:** typed primitive editing for supported values.
-- **God Mode:** explicit save-backed bulk actions.
+- **Overview:** ringkasan career dan pintasan ke menu lain.
+- **Drivers:** daftar pembalap yang terhubung dengan data save. Bisa mengedit profil, atribut, potential/modifier, gaji, dan kontrak.
+- **Staff:** data staf dan kandidat sesuai struktur yang ditemukan di save. Bisa mengedit profil, role, atribut, gaji, dan kontrak.
+- **Teams:** nama tim, identitas singkat, reputasi, dan data keuangan utama.
+- **Cars:** atribut performa mobil untuk masing-masing tim.
+- **Shop:** stok komponen di Open Market dan toko supplier. Harga, diskon, rarity, status stok, tipe komponen, dan bonus statistik bisa diedit.
+- **Finance:** saldo tim dan riwayat transaksi.
+- **Headquarters (HQ):** daftar 19 fasilitas beserta efeknya sesuai video gameplay yang diberikan, level kategori HQ, serta data upgrade node. Status, waktu unlock, dan tipe jalur upgrade bisa diedit dari data aslinya.
+- **Component Marketplace:** daftar Open Market dan tujuh toko supplier: Micronix Racing, Shimizu, Polymat Group, Tectra Fibres, Norex, Mersault, dan Kitano. Nama komponen ditampilkan jika jenisnya sudah bisa dipastikan. ID yang belum diketahui tetap ditampilkan sebagai nomor, bukan ditebak.
+- **World:** data championship, marketplace, supplier, research, sesi, sirkuit, dan cuaca yang ditemukan di save.
+- **Save Info / Advanced:** pengeditan nilai dasar dengan tipe data yang didukung.
+- **God Mode:** beberapa perubahan sekaligus langsung pada data save.
 
-## Editing safeguards and usability
+## Fitur dan pengaman edit
 
-- Team and staff workspaces use category-specific field allowlists. Nested car, driver and staff attributes are not exposed as team financial fields.
-- Car attributes are edited through dedicated attribute cards.
-- Undo/redo supports the last 50 primitive field edits. Bulk God Mode actions clear the edit history to prevent stale-path undo.
-- Numeric edits use decimal-safe arithmetic and preserve large integer precision.
-- Workspace changes use short fade/slide transitions.
-- The app includes the persistent **Created by : Morepp** watermark.
+- Menu Teams dan Staff punya batasan field masing-masing. Atribut mobil, pembalap, atau staf yang berada di bagian lain tidak akan ikut muncul sebagai data keuangan tim.
+- Atribut mobil diedit lewat kartu atribut khusus.
+- Ada **Undo dan Redo** untuk membatalkan atau mengulangi sampai 50 perubahan field terakhir.
+- Aplikasi menjaga ketelitian angka desimal dan bilangan bulat yang besar saat diedit.
+- Perpindahan antar-menu memakai animasi singkat.
+- Watermark aplikasi: **Created by : Morepp**.
 
-## Container profile
+## Format file save
 
-The codec supports the observed MM4 sample profile:
+Codec saat ini mendukung format sampel MM4 dengan rincian berikut:
 
-- Magic: 0x99131871
-- Container version: 40
-- Six little-endian Int32 header values (24 bytes)
-- LZ4-compressed Save Info and Game Data blocks
+- Magic: `0x99131871`
+- Versi container: `40`
+- Enam nilai header Int32 little-endian (24 byte)
+- Blok Save Info dan Game Data yang dikompresi dengan LZ4
 
-Unknown magic/version values, invalid lengths, truncated payloads, and oversized input are rejected. This profile is sample-derived and is not a claim of compatibility with every future MM4 save format.
+File dengan magic atau versi yang tidak cocok, panjang data yang tidak valid, payload terpotong, atau ukuran file yang melewati batas akan ditolak.
 
-## Export safety
+Dukungan ini dibuat berdasarkan format file sampel yang sudah diperiksa. Jadi, belum bisa dijamin cocok dengan semua format save MM4 di masa mendatang.
 
-- Import uses Android's system document picker.
-- Export uses Android's create-document picker and a destination separate from the source URI.
-- Before writing, the generated container is decoded again and both JSON trees are compared.
-- Explicit null fields and unknown fields are preserved.
-- A failed validation prevents output from being written.
-- Keep the original save unchanged and test an exported duplicate in Motorsport Manager 4.
+## Impor dan ekspor save
 
-The project owner has confirmed that an exported edited save from a recent build loads and is playable in MM4. This is real-game validation for that tested save/build, not a guarantee for every possible field or career.
+- File dibuka melalui pemilih dokumen bawaan Android.
+- Hasil edit disimpan lewat menu buat dokumen, ke lokasi file yang dipilih sendiri. File asli tidak ditimpa.
+- Sebelum disimpan, file hasil edit dibaca ulang dan struktur JSON-nya dibandingkan dengan data yang akan diekspor.
+- Field yang bernilai null dan field yang belum dikenal tetap dipertahankan.
+- Kalau pemeriksaan gagal, aplikasi tidak akan meneruskan penyimpanan.
 
-## Build and CI
+**Saran:** selalu simpan salinan file sebelum mengedit. Setelah ekspor, coba buka file hasilnya di Motorsport Manager 4 terlebih dahulu sebelum menjadikannya save utama.
 
-GitHub Actions runs JVM unit tests, Android lint, debug APK packaging, package identity verification, and artifact upload. The personal-use APK is debug-signed by the Android build pipeline.
+Salah satu hasil ekspor dari build sebelumnya sudah pernah dibuka dan dimainkan di MM4. Pengujian tersebut berlaku untuk file dan build yang dicoba, bukan jaminan bahwa setiap jenis edit pasti aman untuk semua career.
 
-## Version
+## Build dan pemeriksaan otomatis
 
-- Version: **1.4.0**
+Setiap perubahan yang dikirim ke GitHub akan diperiksa melalui GitHub Actions. Prosesnya mencakup:
+
+- Menjalankan unit test.
+- Menjalankan Android lint.
+- Membuat APK debug.
+- Memeriksa identitas aplikasi di APK.
+- Mengunggah APK sebagai artifact build.
+
+APK untuk penggunaan pribadi ditandatangani dengan debug key dari proses build Android.
+
+## Informasi versi
+
+- Versi aplikasi: **1.4.0**
 - Version code: **5**
-- Application ID: com.morepp.mm4savedataeditor
-- Minimum Android: API 26
-- Target Android: API 35
-- JDK 17 / Gradle 8.9 / Android SDK 35
+- Application ID: `com.morepp.mm4savedataeditor`
+- Minimum Android: **API 26**
+- Target Android: **API 35**
+- JDK 17, Gradle 8.9, Android SDK 35
 
-A public Play Store release requires a private release keystore controlled by the project owner. Never commit private signing material or passwords to this repository.
+Untuk rilis Play Store, aplikasi perlu ditandatangani dengan release keystore milik pemilik proyek. Jangan unggah file keystore atau password-nya ke repository.
