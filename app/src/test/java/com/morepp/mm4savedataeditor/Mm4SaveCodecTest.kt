@@ -2,6 +2,7 @@ package com.morepp.mm4savedataeditor
 
 import com.google.gson.JsonArray
 import com.google.gson.JsonObject
+import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertThrows
 import org.junit.Test
@@ -81,4 +82,31 @@ class Mm4SaveCodecTest {
             Mm4SaveCodec.decode(truncated)
         }
     }
+    @Test
+    fun untouchedGameGeneratedBlocksArePreservedByteForByte() {
+        val info = JsonObject().apply { addProperty("playerName", "Original") }
+        val data = JsonObject().apply {
+            add("opaqueSubsystem", JsonObject().apply {
+                addProperty("largeCounter", 987654321)
+                addProperty("flag", true)
+            })
+        }
+        val source = Mm4SaveCodec.encode(Mm4SaveCodec.Document(info, data, "source.msv"))
+        val decoded = Mm4SaveCodec.decode(source)
+        assertArrayEquals("No-op export must be byte-identical", source, Mm4SaveCodec.encode(decoded))
+
+        val editedInfo = decoded.info.deepCopy().apply { addProperty("playerName", "Edited") }
+        val edited = decoded.copy(info = editedInfo)
+        val exported = Mm4SaveCodec.encode(edited)
+
+        val sourceInfoLength = java.nio.ByteBuffer.wrap(source, 8, 4)
+            .order(java.nio.ByteOrder.LITTLE_ENDIAN).int
+        val sourceDataBlock = source.copyOfRange(24 + sourceInfoLength, source.size)
+        val exportedInfoLength = java.nio.ByteBuffer.wrap(exported, 8, 4)
+            .order(java.nio.ByteOrder.LITTLE_ENDIAN).int
+        val exportedDataBlock = exported.copyOfRange(24 + exportedInfoLength, exported.size)
+        assertArrayEquals("Untouched Game Data LZ4 block must not be recompressed", sourceDataBlock, exportedDataBlock)
+        assertEquals("Edited info must survive export", "Edited", Mm4SaveCodec.decode(exported).info.get("playerName").asString)
+    }
+
 }
