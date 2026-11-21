@@ -1107,139 +1107,93 @@ private fun EditJsonDialog(
     onAddChild: (String?, JsonElement) -> Unit,
     onDelete: () -> Unit
 ) {
-    var raw by remember(target) { mutableStateOf(target.value.toString()) }
+    var working by remember(target) { mutableStateOf(target.value.deepCopy()) }
     var newKey by remember(target) { mutableStateOf("") }
-    var newValue by remember(target) { mutableStateOf("null") }
-    var invalid by remember(target) { mutableStateOf(false) }
+    var newValue by remember(target) { mutableStateOf("") }
+    var newType by remember(target) { mutableStateOf("Text") }
     var showAdd by remember(target) { mutableStateOf(false) }
+    var invalid by remember(target) { mutableStateOf(false) }
     var confirmDelete by remember(target) { mutableStateOf(false) }
-    val isObject = target.value.isJsonObject
-    val isArray = target.value.isJsonArray
-
+    val fields = remember(working) { flatten(working).filter { it.second.isJsonPrimitive } }
     AlertDialog(
         onDismissRequest = onClose,
-        title = { Text("EDIT FIELD") },
+        title = { Text("EDIT DATA GROUP") },
         text = {
-            Column(
-                Modifier.fillMaxWidth().heightIn(max = 520.dp).verticalScroll(rememberScrollState())
-            ) {
-                Text(
-                    target.path.joinToString(" › "),
-                    color = Gold,
-                    fontSize = 10.sp
-                )
-                Spacer(Modifier.height(10.dp))
-                OutlinedTextField(
-                    value = raw,
-                    onValueChange = { raw = it; invalid = false },
-                    modifier = Modifier.fillMaxWidth(),
-                    minLines = 3,
-                    maxLines = 8,
-                    isError = invalid,
-                    label = { Text("JSON value") }
-                )
-                if (invalid) {
-                    Text("JSON tidak valid atau operasi tidak bisa diterapkan.", color = Red, fontSize = 11.sp)
-                }
-                Text(
-                    "Tipe data dipertahankan sebagai JSON. Contoh: 120, true, \"Nama\", null",
-                    color = Muted,
-                    fontSize = 10.sp
-                )
-                if (isObject || isArray) {
-                    Spacer(Modifier.height(14.dp))
-                    OutlinedButton(
-                        onClick = { showAdd = !showAdd },
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Icon(Icons.Default.Add, contentDescription = null)
-                        Spacer(Modifier.width(6.dp))
-                        Text(if (isObject) "TAMBAH PROPERTY" else "TAMBAH ARRAY ITEM")
-                    }
-                    if (showAdd) {
-                        if (isObject) {
-                            OutlinedTextField(
-                                value = newKey,
-                                onValueChange = { newKey = it },
-                                modifier = Modifier.fillMaxWidth(),
-                                label = { Text("Nama property baru") },
-                                singleLine = true
-                            )
-                        }
-                        OutlinedTextField(
-                            value = newValue,
-                            onValueChange = { newValue = it; invalid = false },
-                            modifier = Modifier.fillMaxWidth(),
-                            label = { Text("Nilai JSON baru") },
-                            minLines = 2,
-                            maxLines = 4
-                        )
-                        Button(
-                            onClick = {
+            Column(Modifier.fillMaxWidth().heightIn(max=520.dp).verticalScroll(rememberScrollState()), verticalArrangement=Arrangement.spacedBy(8.dp)) {
+                Text(target.path.joinToString(" › "), color=Gold, fontSize=10.sp)
+                Text(fields.size.toString()+" editable values",color=Muted,fontSize=10.sp)
+                fields.forEach { (path,value) ->
+                    val primitive=value.asJsonPrimitive
+                    Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).background(Panel).padding(9.dp)) {
+                        Text(humanLabel(path.last()),fontWeight=FontWeight.SemiBold,fontSize=11.sp)
+                        if(primitive.isBoolean) {
+                            Row(verticalAlignment=Alignment.CenterVertically) {
+                                Text(if(primitive.asBoolean) "Enabled" else "Disabled",Modifier.weight(1f),color=Muted)
+                                Switch(checked=primitive.asBoolean,onCheckedChange={ next -> working=replaceNested(working,path,com.google.gson.JsonPrimitive(next)) })
+                            }
+                        } else {
+                            var textValue by remember(target,path,working.toString()) { mutableStateOf(if(primitive.isString) primitive.asString else primitive.toString()) }
+                            OutlinedTextField(textValue,{ textValue=it },Modifier.fillMaxWidth(),singleLine=true)
+                            TextButton(onClick={
                                 try {
-                                    val parsed = JsonParser.parseString(newValue)
-                                    if (isObject && newKey.isBlank()) {
-                                        invalid = true
-                                    } else {
-                                        onAddChild(if (isObject) newKey else null, parsed)
-                                    }
-                                } catch (_: Throwable) {
-                                    invalid = true
-                                }
-                            },
-                            modifier = Modifier.fillMaxWidth(),
-                            colors = ButtonDefaults.buttonColors(containerColor = Red)
-                        ) {
-                            Text("TAMBAHKAN")
+                                    val next=if(primitive.isNumber) com.google.gson.JsonParser.parseString(textValue).also { require(it.isJsonPrimitive && it.asJsonPrimitive.isNumber) } else com.google.gson.JsonPrimitive(textValue)
+                                    working=replaceNested(working,path,next)
+                                } catch(_:Throwable) { invalid=true }
+                            }) { Text("APPLY FIELD") }
                         }
                     }
                 }
-                Spacer(Modifier.height(12.dp))
-                if (target.path.isNotEmpty()) {
-                    TextButton(
-                        onClick = { confirmDelete = true },
-                        colors = ButtonDefaults.textButtonColors(contentColor = Red)
-                    ) {
-                        Icon(Icons.Default.DeleteOutline, contentDescription = null)
-                        Spacer(Modifier.width(6.dp))
-                        Text("HAPUS NODE INI")
+                if(working.isJsonObject || working.isJsonArray) {
+                    OutlinedButton(onClick={showAdd=!showAdd},modifier=Modifier.fillMaxWidth()) { Icon(Icons.Default.Add,null); Text("ADD FIELD / ITEM") }
+                    if(showAdd) {
+                        if(working.isJsonObject) OutlinedTextField(newKey,{newKey=it},Modifier.fillMaxWidth(),label={Text("Field name")},singleLine=true)
+                        OutlinedTextField(newValue,{newValue=it},Modifier.fillMaxWidth(),label={Text("Value")},singleLine=true)
+                        Text("Value type",color=Muted,fontSize=10.sp)
+                        Row(horizontalArrangement=Arrangement.spacedBy(5.dp)) {
+                            listOf("Text","Number","Boolean","Object","List").forEach { type ->
+                                FilterChip(selected=newType==type,onClick={newType=type},label={Text(type,fontSize=9.sp)})
+                            }
+                        }
+                        Button(onClick={
+                            try {
+                                val value=when(newType) {
+                                    "Number" -> com.google.gson.JsonParser.parseString(newValue).also { require(it.isJsonPrimitive && it.asJsonPrimitive.isNumber) }
+                                    "Boolean" -> com.google.gson.JsonPrimitive(newValue.toBooleanStrict())
+                                    "Object" -> JsonObject()
+                                    "List" -> JsonArray()
+                                    else -> com.google.gson.JsonPrimitive(newValue)
+                                }
+                                if(working.isJsonObject) {
+                                    require(newKey.isNotBlank() && !working.asJsonObject.has(newKey))
+                                    working=working.deepCopy().also { it.asJsonObject.add(newKey,value) }
+                                } else working=working.deepCopy().also { it.asJsonArray.add(value) }
+                                newKey=""; newValue=""; showAdd=false; invalid=false
+                            } catch(_:Throwable) { invalid=true }
+                        },modifier=Modifier.fillMaxWidth(),colors=ButtonDefaults.buttonColors(containerColor=Red)) { Text("ADD") }
+                        if(invalid) Text("Periksa nama field dan tipe nilainya.",color=Red,fontSize=10.sp)
                     }
                 }
+                if(target.path.isNotEmpty()) TextButton(onClick={confirmDelete=true},colors=ButtonDefaults.textButtonColors(contentColor=Red)) { Text("DELETE GROUP") }
             }
         },
-        confirmButton = {
-            Button(
-                onClick = {
-                    try {
-                        onSave(JsonParser.parseString(raw))
-                    } catch (_: Throwable) {
-                        invalid = true
-                    }
-                },
-                colors = ButtonDefaults.buttonColors(containerColor = Red)
-            ) { Text("SIMPAN NILAI") }
-        },
-        dismissButton = {
-            TextButton(onClick = onClose) { Text("BATAL") }
-        }
+        confirmButton={ Button(onClick={onSave(working)},colors=ButtonDefaults.buttonColors(containerColor=Red)) { Text("SAVE CHANGES") } },
+        dismissButton={ TextButton(onClick=onClose) { Text("CANCEL") } }
     )
+    if(confirmDelete) AlertDialog(
+        onDismissRequest={confirmDelete=false},
+        title={Text("Delete this data group?")},
+        text={Text("This removes the selected group from the edited save.")},
+        confirmButton={TextButton(onClick={onDelete}) { Text("DELETE") }},
+        dismissButton={TextButton(onClick={confirmDelete=false}) { Text("CANCEL") }}
+    )
+}
 
-    if (confirmDelete) {
-        AlertDialog(
-            onDismissRequest = { confirmDelete = false },
-            title = { Text("Hapus node?") },
-            text = { Text("Node ini akan dihapus dari data yang sedang diedit. Export belum dilakukan.") },
-            confirmButton = {
-                TextButton(
-                    onClick = { confirmDelete = false; onDelete() },
-                    colors = ButtonDefaults.textButtonColors(contentColor = Red)
-                ) { Text("HAPUS") }
-            },
-            dismissButton = {
-                TextButton(onClick = { confirmDelete = false }) { Text("KEMBALI") }
-            }
-        )
-    }
+private fun replaceNested(root:JsonElement,path:List<String>,value:JsonElement):JsonElement {
+    if(path.isEmpty()) return value.deepCopy()
+    val wrapper=JsonObject()
+    wrapper.add("root",root.deepCopy())
+    val ok=setPath(wrapper,listOf("root")+path,value)
+    return if(ok) wrapper.get("root") else root
 }
 
 internal fun resolvePath(root: JsonElement, path: List<String>): JsonElement? {
