@@ -20,7 +20,7 @@ object Mm4SaveCodec {
     private const val MAX_BLOCK_BYTES = 64 * 1024 * 1024
 
     private val lz4 = LZ4Factory.fastestInstance()
-    private val gson = GsonBuilder().disableHtmlEscaping().create()
+    private val gson = GsonBuilder().disableHtmlEscaping().serializeNulls().create()
 
     data class Document(
         val info: JsonObject,
