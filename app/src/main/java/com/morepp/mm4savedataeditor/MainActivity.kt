@@ -381,7 +381,49 @@ private fun EditorApp() {
     }
 }
 
-${splash}@Composable
+@Composable
+private fun IntroSplash() {
+    val transition = rememberInfiniteTransition(label = "intro-motion")
+    val pulse by transition.animateFloat(
+        initialValue = 0.94f,
+        targetValue = 1.04f,
+        animationSpec = infiniteRepeatable(tween(1100, easing = FastOutSlowInEasing), RepeatMode.Reverse),
+        label = "logo-pulse"
+    )
+    var showEndingMark by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) { delay(1900); showEndingMark = true }
+    Dialog(onDismissRequest = {}, properties = DialogProperties(usePlatformDefaultWidth = false)) {
+        Box(
+            Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(Color(0xFF0B1430), Color(0xFF182B54), Color(0xFF0B1430)))),
+            contentAlignment = Alignment.Center
+        ) {
+            Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                Image(
+                    painter = painterResource(id = R.drawable.mm4_app_logo),
+                    contentDescription = "MM4 Save Data Editor",
+                    modifier = Modifier.size(132.dp).graphicsLayer {
+                        scaleX = pulse
+                        scaleY = pulse
+                        rotationY = (1f - pulse) * 180f
+                    }
+                )
+                Text("MM4 SAVE DATA EDITOR", color = Color.White, fontSize = 19.sp, fontWeight = FontWeight.Black, letterSpacing = 1.8.sp)
+                Text("CAREER DATA WORKSHOP", color = Gold, fontSize = 10.sp, letterSpacing = 2.4.sp)
+                LinearProgressIndicator(
+                    Modifier.width(176.dp).padding(top = 8.dp),
+                    color = Red,
+                    trackColor = Color.White.copy(alpha = 0.14f)
+                )
+                AnimatedVisibility(visible = showEndingMark, enter = fadeIn(tween(500)) + slideInVertically(tween(500)) { it / 2 }) {
+                    Text("Created by : Morepp", color = Muted, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                }
+            }
+            Text("VERSION 1.5 • PERSONAL BUILD", Modifier.align(Alignment.BottomCenter).padding(bottom = 28.dp), color = Muted.copy(alpha = 0.7f), fontSize = 9.sp, letterSpacing = 1.2.sp)
+        }
+    }
+}
+
+@Composable
 private fun WelcomePanel(busy: Boolean, onOpen: () -> Unit) {
     Box(
         Modifier.fillMaxSize().padding(20.dp),
