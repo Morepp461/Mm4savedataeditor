@@ -1271,21 +1271,8 @@ private fun EditValueDialog(target: EditTarget, onClose: () -> Unit, onSave: (Js
     val currentNumber = if (isNumber) runCatching { primitive.asDouble }.getOrDefault(0.0) else 0.0
     val isAttribute = target.path.any { it == "m_Stats" || it == "m_Stat" || it == "m_Potential" }
     val attributeValue = currentNumber.toInt().coerceIn(0, 20)
-    val numberStep = when {
-        isAttribute -> 1.0
-        kotlin.math.abs(currentNumber) >= 1_000_000 -> 100_000.0
-        kotlin.math.abs(currentNumber) >= 10_000 -> 1_000.0
-        kotlin.math.abs(currentNumber) >= 100 -> 10.0
-        else -> 1.0
-    }
-    val numberDescription = when {
-        isAttribute && attributeValue <= 4 -> "Sangat rendah"
-        isAttribute && attributeValue <= 8 -> "Rendah"
-        isAttribute && attributeValue <= 12 -> "Menengah"
-        isAttribute && attributeValue <= 16 -> "Tinggi"
-        isAttribute -> "Elite"
-        else -> "Nilai numerik tersimpan"
-    }
+    val numberStep = when { kotlin.math.abs(currentNumber) >= 1000000 -> 100000.0; kotlin.math.abs(currentNumber) >= 10000 -> 1000.0; kotlin.math.abs(currentNumber) >= 100 -> 10.0; else -> 1.0 }
+    val meaning = when { attributeValue <= 4 -> "Sangat rendah"; attributeValue <= 8 -> "Rendah"; attributeValue <= 12 -> "Menengah"; attributeValue <= 16 -> "Tinggi"; else -> "Elite" }
     AlertDialog(
         onDismissRequest = onClose,
         title = { Text(humanizeField(target.path.lastOrNull() ?: "Edit value")) },
@@ -1300,30 +1287,39 @@ private fun EditValueDialog(target: EditTarget, onClose: () -> Unit, onSave: (Js
                     }
                     isNumber && isAttribute -> {
                         OutlinedButton(onClick = { choicesOpen = true }, modifier = Modifier.fillMaxWidth()) {
-                            Text("$attributeValue / 20 • $numberDescription")
+                            Text(attributeValue.toString() + " / 20 • " + meaning)
                             Icon(Icons.Default.ArrowDropDown, null)
                         }
                         DropdownMenu(expanded = choicesOpen, onDismissRequest = { choicesOpen = false }) {
                             (0..20).forEach { choice ->
-                                val meaning = when {
-                                    choice <= 4 -> "Sangat rendah"
-                                    choice <= 8 -> "Rendah"
-                                    choice <= 12 -> "Menengah"
-                                    choice <= 16 -> "Tinggi"
-                                    else -> "Elite"
-                                }
-                                DropdownMenuItem(text = { Text("$choice / 20 • $meaning") }, onClick = { value = choice.toString(); choicesOpen = false })
+                                val label = when { choice <= 4 -> "Sangat rendah"; choice <= 8 -> "Rendah"; choice <= 12 -> "Menengah"; choice <= 16 -> "Tinggi"; else -> "Elite" }
+                                DropdownMenuItem(text = { Text(choice.toString() + " / 20 • " + label) }, onClick = { value = choice.toString(); choicesOpen = false })
                             }
                         }
-                        Text("Skala atribut 0–20. Keterangan merupakan panduan umum, bukan label resmi game.", color = Muted, fontSize = 10.sp)
+                        Text("Skala atribut 0–20. Keterangan ini panduan umum, bukan label resmi game.", color = Muted, fontSize = 10.sp)
                     }
                     isNumber -> {
                         Text(value, fontSize = 24.sp, fontWeight = FontWeight.Bold, color = Gold)
                         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                             OutlinedButton(onClick = { value = (value.toDouble() - numberStep).toLong().toString() }) { Text("−") }
-                            Text("Langkah ${'
+                            Text("Langkah " + numberStep.toLong(), color = Muted, fontSize = 10.sp)
+                            OutlinedButton(onClick = { value = (value.toDouble() + numberStep).toLong().toString() }) { Text("+") }
+                        }
+                        Text("Gunakan tombol untuk memilih nilai, tanpa mengetik angka manual.", color = Muted, fontSize = 10.sp)
+                    }
+                    else -> OutlinedTextField(value = value, onValueChange = { value = it }, modifier = Modifier.fillMaxWidth(), label = { Text("Text") }, singleLine = true)
+                }
+            }
+        },
+        confirmButton = {
+            Button(onClick = {
+                val result = when { isBoolean -> JsonPrimitive(value.toBoolean()); isNumber -> JsonPrimitive(value.toDouble()); else -> JsonPrimitive(value) }
+                onSave(result)
+            }, colors = ButtonDefaults.buttonColors(containerColor = Red)) { Text("SAVE CHANGES") }
+        },
+        dismissButton = { TextButton(onClick = onClose) { Text("CANCEL") } }
+    )
 }
-
 @Composable
 private fun EditJsonDialog(
     target: EditTarget,
