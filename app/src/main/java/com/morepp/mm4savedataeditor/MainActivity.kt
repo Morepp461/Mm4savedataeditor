@@ -7,6 +7,7 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -36,11 +37,12 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
-private val Ink = Color(0xFF101216)
-private val Panel = Color(0xFF1B2027)
-private val PanelAlt = Color(0xFF282F39)
+private val Ink = Color(0xFF101A3A)
+private val Panel = Color(0xD91D2D58)
+private val PanelAlt = Color(0xE62A3F73)
 private val Red = Color(0xFFE53935)
-private val Gold = Color(0xFFD9B45B)
+private val Gold = Color(0xFFB9E84F)
+private val Blue = Color(0xFF3488DC)
 private val Muted = Color(0xFF9CA6B2)
 
 class MainActivity : ComponentActivity() {
@@ -140,8 +142,8 @@ private fun EditorApp() {
             background = Ink,
             surface = Panel,
             surfaceVariant = PanelAlt,
-            primary = Red,
-            secondary = Gold,
+            primary = Gold,
+            secondary = Blue,
             onSurface = Color.White,
             onBackground = Color.White,
             onSurfaceVariant = Muted
@@ -336,7 +338,7 @@ private fun WelcomePanel(busy: Boolean, onOpen: () -> Unit) {
                 onClick = onOpen,
                 enabled = !busy,
                 modifier = Modifier.fillMaxWidth(),
-                colors = ButtonDefaults.buttonColors(containerColor = Red),
+                colors = ButtonDefaults.buttonColors(containerColor = Gold),
                 shape = RoundedCornerShape(14.dp)
             ) {
                 Icon(Icons.Default.FolderOpen, contentDescription = null)
@@ -807,7 +809,17 @@ private fun AdvancedPage(doc: Mm4SaveCodec.Document, onEdit: (String,List<String
 
 @Composable
 private fun GlassCard(modifier: Modifier = Modifier, content: @Composable ColumnScope.() -> Unit) {
-    Column(modifier.clip(RoundedCornerShape(17.dp)).background(Brush.linearGradient(listOf(Color(0xDD2A3038), Color(0xCC191E25)))).padding(14.dp), content = content)
+    val shape = RoundedCornerShape(18.dp)
+    Column(
+        modifier.clip(shape)
+            .border(1.dp, Color.White.copy(alpha = 0.16f), shape)
+            .background(Brush.linearGradient(listOf(Color(0xC936568A), Color(0xB91B2D58), Color(0xA51A2445))))
+            .padding(1.dp)
+            .clip(RoundedCornerShape(17.dp))
+            .background(Brush.linearGradient(listOf(Color(0xD82B416B), Color(0xC51B2A50), Color(0xB9152344))))
+            .padding(14.dp),
+        content = content
+    )
 }
 
 @Composable
@@ -1180,7 +1192,7 @@ private fun EditJsonDialog(
                                 } else working=working.deepCopy().also { it.asJsonArray.add(value) }
                                 newKey=""; newValue=""; showAdd=false; invalid=false
                             } catch(_:Throwable) { invalid=true }
-                        },modifier=Modifier.fillMaxWidth(),colors=ButtonDefaults.buttonColors(containerColor=Red)) { Text("ADD") }
+                        },modifier=Modifier.fillMaxWidth(),colors=ButtonDefaults.buttonColors(containerColor=Gold)) { Text("ADD") }
                         if(invalid) Text("Periksa nama field dan tipe nilainya.",color=Red,fontSize=10.sp)
                     }
                 }
