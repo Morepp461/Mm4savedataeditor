@@ -1851,7 +1851,7 @@ internal fun applyOfficialF1Preset2026(data:JsonObject,templateData:JsonObject):
             }
         }
     }
-    if(teamPlan.size()!=40 || driverPlan.size()!=80) return false
+    if(teamPlan.size!=40 || driverPlan.size!=80) return false
 
     // All structural validation is complete before the first mutation.
     teamPlan.forEach { (targetTeam,sourceTeam,_) ->
