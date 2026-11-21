@@ -170,7 +170,20 @@ private fun EditorApp() {
                         }
                         val output = context.contentResolver.openOutputStream(uri, "wt")
                             ?: error("Penyedia file tidak bisa membuka tujuan export untuk ditulis.")
-                        output.use { stream -> stream.write(bytes); stream.flush() }
+                        output.use { stream ->
+                            stream.write(bytes)
+                            stream.flush()
+                        }
+                        // Re-open the exact SAF URI and validate persisted bytes before reporting success.
+                        val persisted = context.contentResolver.openInputStream(uri)
+                            ?: error("File hasil export tidak dapat dibaca kembali.")
+                        val persistedBytes = persisted.use { readSaveBytes(it) }
+                        check(persistedBytes.isNotEmpty()) { "Export menghasilkan file kosong (0 byte)." }
+                        val persistedDocument = Mm4SaveCodec.decode(persistedBytes, current.sourceName)
+                        val persistedMismatch = Mm4SaveCodec.firstDifference(persistedDocument, current)
+                        check(persistedMismatch == null) {
+                            "Verifikasi file setelah ditulis gagal pada $persistedMismatch. Jangan gunakan file ini."
+                        }
                     }
                     hasChanges = false
                 } catch (failure: Exception) {
@@ -1526,7 +1539,7 @@ private fun AdvancedPage(doc: Mm4SaveCodec.Document, onEdit: (String,List<String
     var query by remember { mutableStateOf("") }
     val fields=remember(doc.data,query) {
         flatten(doc.data).filter { (path,value) ->
-            path.none { it == "\\$ref" || it == "\\$version" } && value.isJsonPrimitive && (query.isBlank() ||
+            path.none { it == "\$ref" || it == "\$version" } && value.isJsonPrimitive && (query.isBlank() ||
                 humanizeField(path.last()).contains(query,true) ||
                 path.joinToString(" ").contains(query,true))
         }
@@ -2333,16 +2346,6 @@ private fun EditValueDialog(target: EditTarget, onClose: () -> Unit, onSave: (Js
                         Text(value + " • batas " + target.minValue + "–" + target.maxValue, fontSize = 18.sp, fontWeight = FontWeight.Bold, color = Gold)
                         Slider(value=selected,onValueChange={value=it.toInt().coerceIn(min.toInt(),max.toInt()).toString()},valueRange=min..max,steps=(max-min-1f).toInt().coerceAtLeast(0))
                         Text("Nilai dibatasi sesuai rentang yang dikenali dari struktur save.",color=Muted,fontSize=10.sp)
-                    }
-                    isNumber && target.path==listOf("financeManager","m_Balance") -> {
-                        OutlinedTextField(
-                            value=value,
-                            onValueChange={ typed -> if(typed.isEmpty() || typed.all { it.isDigit() }) value=typed },
-                            modifier=Modifier.fillMaxWidth(),
-                            label={ Text("Saldo (£)") },
-                            supportingText={ Text("Masukkan 0 sampai £2.000.000.000") },
-                            singleLine=true
-                        )
                     }
                     isNumber -> {
                         Text(value, fontSize = 24.sp, fontWeight = FontWeight.Bold, color = Gold)
