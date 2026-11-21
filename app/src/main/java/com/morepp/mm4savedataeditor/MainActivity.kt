@@ -208,7 +208,12 @@ private fun EditorApp() {
                         onSection = { selectedTab = it; selectedDriver = null },
                         selectedDriver = selectedDriver,
                         onDriver = { selectedDriver = it },
-                        onEdit = { root, path, value -> editTarget = EditTarget(root, path, value.deepCopy()) }
+                        onEdit = { root, path, value -> editTarget = EditTarget(root, path, value.deepCopy()) },
+                        onGodAction = { action ->
+                            val latest = document ?: return@CareerWorkspace
+                            val changed = applyGodModeAction(latest, action)
+                            if (changed != null) { document = changed; hasChanges = true }
+                        }
                     )
                 }
             }
@@ -409,13 +414,14 @@ private fun CareerHeader(
 }
 
 
-private val Sections = listOf("Overview", "Drivers", "Staff", "Teams", "Cars", "Finance", "HQ", "World", "Save Info", "Advanced")
+private val Sections = listOf("Overview", "Drivers", "Staff", "Teams", "Cars", "Finance", "HQ", "World", "Save Info", "Advanced", "God Mode")
 
 @Composable
 private fun CareerWorkspace(
     document: Mm4SaveCodec.Document, section: String, onSection: (String) -> Unit,
     selectedDriver: String?, onDriver: (String?) -> Unit,
-    onEdit: (String, List<String>, JsonElement) -> Unit
+    onEdit: (String, List<String>, JsonElement) -> Unit,
+    onGodAction: (String) -> Unit
 ) {
     Column(Modifier.fillMaxSize()) {
         LazyRow(Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 4.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -431,6 +437,7 @@ private fun CareerWorkspace(
             "HQ" -> HqPage(document, onEdit)
             "World" -> WorldSettingsPage(document, onEdit)
             "Save Info" -> InfoPage(document, onEdit)
+            "God Mode" -> GodModePage(document, onGodAction)
             else -> AdvancedPage(document, onEdit)
         }
     }
@@ -762,7 +769,7 @@ private fun EntityCatalogPage(doc: Mm4SaveCodec.Document, category: String, onEd
             }
         }
     } else {
-        val fields=flatten(chosen.data).filter { row -> row.second.isJsonPrimitive && row.first.lastOrNull()!="\$version" && (category!="team" || (row.first.size==1 && row.first[0] in setOf("name","shortName","aggression","m_TeamID","m_Reputation","m_EngineerRacePerformanceModifier","m_MechanicsRacePerformanceModifier","m_UIStarValue","m_ColorID","m_LiveryID","m_LogoID","m_BadgeID","driversBodyStyle","m_Location"))) && (category!="car" || row.first.firstOrNull()!="m_Stats") }
+        val fields=flatten(chosen.data).filter { row -> row.second.isJsonPrimitive && row.first.lastOrNull()!="\$version" && (category!="team" || row.first.lastOrNull()!="\$version") && (category!="car" || row.first.firstOrNull()!="m_Stats") }
         val isCar=category=="car"
         val stats=if(category=="staff") chosen.data.getAsJsonObject("stats")?.getAsJsonArray("m_Stats") else chosen.data.getAsJsonArray("m_Stats")
         val labels=when {
@@ -856,13 +863,13 @@ private fun WorldSettingsPage(doc:Mm4SaveCodec.Document,onEdit:(String,List<Stri
     val groups=doc.data.entrySet().filter { e -> keywords.any { e.key.contains(it,true) } }
     LazyColumn(contentPadding=PaddingValues(14.dp),verticalArrangement=Arrangement.spacedBy(9.dp)) {
         item { GlassCard(Modifier.fillMaxWidth()) {
-            Text("CAREER WORLD & RULES",color=Gold,fontWeight=FontWeight.Bold,fontSize=11.sp)
-            Text("Store, unlocks, regulations, championship and gameplay settings detected in this save.",color=Muted,fontSize=11.sp)
+            Text("DUNIA KARIER & ATURAN",color=Gold,fontWeight=FontWeight.Bold,fontSize=11.sp)
+            Text("Pengaturan musim, kejuaraan, toko komponen, supplier, riset, cuaca, dan aturan yang benar-benar ditemukan di file save.",color=Muted,fontSize=11.sp)
             Text(groups.size.toString()+" data groups detected",fontSize=20.sp,fontWeight=FontWeight.Black)
         } }
         items(groups) { group ->
             GlassCard(Modifier.fillMaxWidth()) {
-                Text(humanLabel(group.key),fontWeight=FontWeight.Bold)
+                Text(worldGroupLabel(group.key),fontWeight=FontWeight.Bold)
                 Text(categoryDescription(group.value,flatten(group.value).size),color=Muted,fontSize=10.sp)
                 flatten(group.value).filter { it.second.isJsonPrimitive }.forEach { (path,value) ->
                     Row(Modifier.fillMaxWidth().clickable { onEdit("Game Data",listOf(group.key)+path,value) }.padding(vertical=6.dp),verticalAlignment=Alignment.CenterVertically) {
@@ -926,7 +933,7 @@ private fun HqPage(doc:Mm4SaveCodec.Document,onEdit:(String,List<String>,JsonEle
                         val key=row.asJsonObject.get("Key")?.asString ?: i.toString()
                         val value=row.asJsonObject.get("Value")
                         Row(Modifier.fillMaxWidth().padding(vertical=4.dp),verticalAlignment=Alignment.CenterVertically) {
-                            Text("Facility group ${key}",Modifier.weight(1f),color=Muted,fontSize=11.sp)
+                            Text(facilityGroupLabel(key.toIntOrNull() ?: i),Modifier.weight(1f),color=Muted,fontSize=11.sp)
                             Text(value?.asString ?: "—",color=Gold,fontWeight=FontWeight.Bold)
                         }
                     }
@@ -942,7 +949,7 @@ private fun HqPage(doc:Mm4SaveCodec.Document,onEdit:(String,List<String>,JsonEle
             GlassCard(Modifier.fillMaxWidth()) {
                 Row(verticalAlignment=Alignment.CenterVertically) {
                     Column(Modifier.weight(1f)) {
-                        Text("Facility ${facility.gameKey}",fontWeight=FontWeight.Bold,fontSize=14.sp)
+                        Text("${facilityGroupLabel(facility.value.get("pathType")?.asInt ?: 0)} • Upgrade ${facility.gameKey}",fontWeight=FontWeight.Bold,fontSize=14.sp)
                         Text(status,color=when(stateNumber){1->Color(0xFF82D7A2);0->Red;else->Gold},fontSize=11.sp)
                     }
                     TextButton(onClick={onEdit("Game Data",listOf("headquarters","m_Upgrades","[${facility.listIndex}]","Value","State"),state ?: com.google.gson.JsonPrimitive(0))}) { Text("CHANGE STATUS") }
@@ -986,8 +993,8 @@ private fun AdvancedPage(doc: Mm4SaveCodec.Document, onEdit: (String,List<String
     LazyColumn(contentPadding=PaddingValues(14.dp),verticalArrangement=Arrangement.spacedBy(8.dp)) {
         item {
             GlassCard(Modifier.fillMaxWidth()) {
-                Text("ADVANCED CAREER DATA",color=Gold,fontWeight=FontWeight.Bold,fontSize=11.sp)
-                Text("Field lanjutan tetap tersedia tanpa editor JSON mentah. Pilih nilai untuk mengedit dengan kontrol sesuai tipenya.",color=Muted,fontSize=11.sp)
+                Text("PENGATURAN LANJUTAN",color=Gold,fontWeight=FontWeight.Bold,fontSize=11.sp)
+                Text("Semua data lanjutan dikelompokkan berdasarkan bagian game. Cari dengan istilah sederhana, buka kelompok, lalu pilih nilai yang ingin diubah. Tidak perlu menulis JSON.",color=Muted,fontSize=11.sp)
                 Text("${fields.size} editable fields",fontSize=20.sp,fontWeight=FontWeight.Black)
             }
         }
@@ -995,8 +1002,8 @@ private fun AdvancedPage(doc: Mm4SaveCodec.Document, onEdit: (String,List<String
         groups.forEach { (group,items) ->
             item {
                 GlassCard(Modifier.fillMaxWidth()) {
-                    Text(humanizeField(group),color=Gold,fontWeight=FontWeight.Bold)
-                    Text("${items.size} editable values",color=Muted,fontSize=10.sp)
+                    Text(worldGroupLabel(group),color=Gold,fontWeight=FontWeight.Bold)
+                    Text("${items.size} nilai yang bisa diubah",color=Muted,fontSize=10.sp)
                 }
             }
             items(items,key={it.first.joinToString("/")}) { (path,value) ->
@@ -1015,6 +1022,132 @@ private fun AdvancedPage(doc: Mm4SaveCodec.Document, onEdit: (String,List<String
     }
 }
 
+private fun facilityGroupLabel(pathType:Int):String = when(pathType) {
+    0 -> "Fasilitas utama"
+    1 -> "Fasilitas pengembangan"
+    2 -> "Fasilitas lanjutan"
+    3 -> "Fasilitas spesialis"
+    4 -> "Fasilitas tingkat tinggi"
+    else -> "Fasilitas"
+}
+
+private fun worldGroupLabel(key:String):String = when(key) {
+    "championshipManager" -> "Kejuaraan & jenjang liga"
+    "componentMarketplace" -> "Toko komponen mobil"
+    "supplierNetworkManager" -> "Supplier & jaringan pemasok"
+    "researchManager" -> "Riset & pengembangan mobil"
+    "sessionManager" -> "Jadwal & sesi balapan"
+    "circuitManager" -> "Sirkuit"
+    "weatherManager" -> "Cuaca balapan"
+    "regenRules" -> "Aturan regenerasi pembalap"
+    "settings" -> "Pengaturan permainan"
+    "challengeManager" -> "Tantangan karier"
+    "invitationalChampionshipManager" -> "Kejuaraan invitasi"
+    else -> humanLabel(key)
+}
+
+private fun applyGodModeAction(current:Mm4SaveCodec.Document,action:String):Mm4SaveCodec.Document? {
+    val data=current.data.deepCopy().asJsonObject
+    when(action) {
+        "max_balance" -> {
+            val finance=data.getAsJsonObject("financeManager") ?: return null
+            finance.addProperty("m_Balance",2_000_000_000L)
+        }
+        "unlock_hq" -> {
+            val hq=data.getAsJsonObject("headquarters") ?: return null
+            val upgrades=hq.getAsJsonArray("m_Upgrades") ?: return null
+            upgrades.forEach { row ->
+                val value=row.asJsonObject.getAsJsonObject("Value") ?: return@forEach
+                if(value.has("State")) value.addProperty("State",1)
+                if(value.has("weeksToUnlock")) value.addProperty("weeksToUnlock",0)
+            }
+        }
+        "max_research" -> {
+            val research=data.getAsJsonObject("researchManager") ?: return null
+            val cap=research.get("m_ResearchCap")?.asInt ?: 100000
+            research.addProperty("m_SeasonResearchPointsMM4",cap)
+            research.addProperty("m_IsDebugUnlocked",true)
+        }
+        "debug_unlock" -> {
+            val research=data.getAsJsonObject("researchManager") ?: return null
+            research.addProperty("m_IsDebugUnlocked",true)
+        }
+        "unlock_suppliers" -> {
+            val supplier=data.getAsJsonObject("supplierNetworkManager") ?: return null
+            val nodes=supplier.getAsJsonArray("m_NodeDictionary") ?: return null
+            var changed=0
+            fun unlock(node:JsonElement) {
+                if(node.isJsonObject) {
+                    val obj=node.asJsonObject
+                    if(obj.has("m_IsOwned")) { obj.addProperty("m_IsOwned",true); changed++ }
+                    if(obj.has("m_HasOwnedBeenRevealed")) obj.addProperty("m_HasOwnedBeenRevealed",true)
+                    obj.get("m_Nodes")?.takeIf { it.isJsonArray }?.asJsonArray?.forEach { unlock(it) }
+                } else if(node.isJsonArray) node.asJsonArray.forEach { unlock(it) }
+            }
+            nodes.forEach { row ->
+                val value=row.asJsonObject.get("Value")
+                if(value!=null) unlock(value)
+            }
+            if(changed==0) return null
+        }
+        else -> return null
+    }
+    return current.copy(data=data)
+}
+
+@Composable
+private fun GodModePage(doc:Mm4SaveCodec.Document,onAction:(String)->Unit) {
+    val balance=doc.data.getAsJsonObject("financeManager")?.get("m_Balance")?.asLong ?: 0L
+    val hq=doc.data.getAsJsonObject("headquarters")?.getAsJsonArray("m_Upgrades")
+    val unlocked=hq?.count { it.asJsonObject.getAsJsonObject("Value")?.get("State")?.asInt==1 } ?: 0
+    val research=doc.data.getAsJsonObject("researchManager")
+    LazyColumn(contentPadding=PaddingValues(14.dp),verticalArrangement=Arrangement.spacedBy(10.dp)) {
+        item {
+            GlassCard(Modifier.fillMaxWidth()) {
+                Text("GOD MODE",color=Gold,fontWeight=FontWeight.Black,fontSize=13.sp)
+                Text("Kontrol khusus untuk mengubah karier secara ekstrem. Setiap tombol mengubah data save dan bisa dibatalkan dengan membuka file asli lagi.",color=Muted,fontSize=11.sp)
+            }
+        }
+        item {
+            GlassCard(Modifier.fillMaxWidth()) {
+                Text("KEUANGAN TANPA BATAS",fontWeight=FontWeight.Bold)
+                Text("Saldo sekarang ${formatMoney(balance)}",color=Muted,fontSize=11.sp)
+                Button(onClick={onAction("max_balance")},modifier=Modifier.fillMaxWidth(),colors=ButtonDefaults.buttonColors(containerColor=Red)) { Text("SET SALDO £2 MILIAR") }
+            }
+        }
+        item {
+            GlassCard(Modifier.fillMaxWidth()) {
+                Text("HQ INSTANT UPGRADE",fontWeight=FontWeight.Bold)
+                Text("$unlocked dari ${hq?.size() ?: 0} upgrade fasilitas berstatus terbuka.",color=Muted,fontSize=11.sp)
+                Button(onClick={onAction("unlock_hq")},modifier=Modifier.fillMaxWidth(),colors=ButtonDefaults.buttonColors(containerColor=Gold)) { Text("BUKA SEMUA UPGRADE HQ") }
+            }
+        }
+        item {
+            GlassCard(Modifier.fillMaxWidth()) {
+                Text("RISET MAKSIMUM",fontWeight=FontWeight.Bold)
+                Text("Riset saat ini ${research?.get("m_SeasonResearchPointsMM4")?.asString ?: "—"} / ${research?.get("m_ResearchCap")?.asString ?: "—"}",color=Muted,fontSize=11.sp)
+                Button(onClick={onAction("max_research")},modifier=Modifier.fillMaxWidth(),colors=ButtonDefaults.buttonColors(containerColor=Blue)) { Text("MAKSIMALKAN RISET & DEBUG") }
+            }
+        }
+        item {
+            GlassCard(Modifier.fillMaxWidth()) {
+                Text("DEBUG / UNLOCK FLAG",fontWeight=FontWeight.Bold)
+                Text("Mengaktifkan flag debug yang memang tersedia di save. Tidak mengarang flag store yang tidak ada di struktur file.",color=Muted,fontSize=11.sp)
+                OutlinedButton(onClick={onAction("debug_unlock")},modifier=Modifier.fillMaxWidth()) { Text("AKTIFKAN DEBUG UNLOCK") }
+            }
+        }
+        item {
+            GlassCard(Modifier.fillMaxWidth()) {
+                Text("BUKA JARINGAN SUPPLIER",fontWeight=FontWeight.Bold)
+                Text("Membuka seluruh node supplier yang tersimpan di jaringan pemasok. Ini membuka supplier, bukan mengubah komponen yang sudah terpasang di mobil.",color=Muted,fontSize=11.sp)
+                Button(onClick={onAction("unlock_suppliers")},modifier=Modifier.fillMaxWidth(),colors=ButtonDefaults.buttonColors(containerColor=Blue)) { Text("BUKA SEMUA SUPPLIER") }
+            }
+        }
+        item {
+            Text("Pemindahan tim antar divisi dan transfer pembalap belum diaktifkan pada build ini. Keduanya harus menjaga referensi roster, kontrak, klasemen, dan kejuaraan secara serentak. Tidak akan dibuat tombol yang berisiko merusak save.",color=Muted,fontSize=10.sp)
+        }
+    }
+}
 @Composable
 private fun GlassCard(modifier: Modifier = Modifier, content: @Composable ColumnScope.() -> Unit) {
     val shape = RoundedCornerShape(18.dp)

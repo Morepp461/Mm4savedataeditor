@@ -39,6 +39,26 @@ class Mm4SaveCodecTest {
     }
 
     @Test
+    fun encodeDecodePreservesExplicitNullFields() {
+        val info = JsonObject().apply {
+            addProperty("teamName", "Caleris")
+            add("optional", com.google.gson.JsonNull.INSTANCE)
+        }
+        val data = JsonObject().apply {
+            add("challengeManager", JsonObject().apply {
+                add("m_CurrentChallenge", com.google.gson.JsonNull.INSTANCE)
+                addProperty("m_QueuedChallengeToStart", 3)
+            })
+        }
+        val original = Mm4SaveCodec.Document(info, data, "null-fields.msv")
+        val decoded = Mm4SaveCodec.decode(Mm4SaveCodec.encode(original))
+        assertEquals(true, decoded.info.has("optional"))
+        assertEquals(true, decoded.data.getAsJsonObject("challengeManager").has("m_CurrentChallenge"))
+        assertEquals(true, decoded.data.getAsJsonObject("challengeManager").get("m_CurrentChallenge").isJsonNull)
+        assertEquals(true, Mm4SaveCodec.sameContent(original, decoded))
+    }
+
+    @Test
     fun decoderRejectsUnknownMagic() {
         val info = JsonObject().apply { addProperty("x", 1) }
         val data = JsonObject().apply { addProperty("y", 2) }
