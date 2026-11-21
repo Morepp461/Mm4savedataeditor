@@ -1,5 +1,3 @@
-import java.net.URL
-
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
@@ -12,8 +10,9 @@ val downloadAppIcon by tasks.registering {
     doLast {
         val output = generatedIconRes.get().file("drawable-nodpi/app_icon.png").asFile
         output.parentFile.mkdirs()
-        val iconUrl = "https://raw.githubusercontent.com/Morepp461/Mm4savedataeditor/fix/release-signing-and-icon-upload-folder/branding/app-icon-upload/SAVE%20DATA_20261121_122401_0000.png"
-        URL(iconUrl).openStream().use { input ->
+        val iconSource = layout.projectDirectory.file("branding/app-icon-upload/SAVE DATA_20261121_122401_0000.png").asFile
+        check(iconSource.isFile) { "App icon source is missing: ${iconSource.path}" }
+        iconSource.inputStream().use { input ->
             output.outputStream().use { target -> input.copyTo(target) }
         }
         check(output.length() > 10_000) { "Downloaded app icon is missing or incomplete" }
