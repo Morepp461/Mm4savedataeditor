@@ -89,4 +89,24 @@ class JsonTreeEditorTest {
         assertFalse(isCatalogPrimitiveEditable("car", listOf("m_Stats", "[0]")))
         assertFalse(isCatalogPrimitiveEditable("car", listOf("m_EngineLevel")))
     }
+
+    @Test
+    fun teamFinancialWhitelistDoesNotLeakNestedCarFields() {
+        assertTrue(isCatalogPrimitiveEditable("team", listOf("m_Financials", "m_Balance")))
+        assertFalse(isCatalogPrimitiveEditable("team", listOf("car", "m_MaintenanceCost")))
+        assertFalse(isCatalogPrimitiveEditable("team", listOf("driver", "m_Salary")))
+    }
+
+    @Test
+    fun staffCompensationWhitelistDoesNotLeakNestedAttributeFields() {
+        assertTrue(isCatalogPrimitiveEditable("staff", listOf("m_Salary")))
+        assertFalse(isCatalogPrimitiveEditable("staff", listOf("stats", "m_Salary")))
+    }
+
+    @Test
+    fun numericSteppingPreservesLargeIntegerPrecisionAndDecimals() {
+        assertEquals("9007199254740994", stepNumericValue("9007199254740993", 1.0, 1))
+        assertEquals("2.5", stepNumericValue("1.5", 1.0, 1))
+        assertEquals("0.25", stepNumericValue("0.5", 0.25, -1))
+    }
 }
