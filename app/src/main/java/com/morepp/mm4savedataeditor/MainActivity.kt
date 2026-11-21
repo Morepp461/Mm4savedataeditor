@@ -533,7 +533,12 @@ private fun JsonBrowser(
                                     )
                                 }
                                 Text(preview(groupValue ?: JsonParser.parseString("null")), color = Gold, fontSize = 11.sp)
-                                Spacer(Modifier.width(8.dp))
+                                IconButton(
+                                    onClick = { if (groupValue != null) onEdit(listOf(groupKey), groupValue) },
+                                    enabled = groupValue != null
+                                ) {
+                                    Icon(Icons.Default.Edit, contentDescription = "Edit seluruh kategori", tint = Color(0xFFB8C1CD), modifier = Modifier.size(17.dp))
+                                }
                                 Icon(
                                     if (isOpen) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
                                     contentDescription = if (isOpen) "Tutup kategori" else "Buka kategori",
