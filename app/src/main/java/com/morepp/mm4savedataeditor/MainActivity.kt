@@ -1085,7 +1085,7 @@ private fun safeObject(parent:JsonObject,key:String):JsonObject? = parent.get(ke
 private fun safeArray(parent:JsonObject,key:String):JsonArray? = parent.get(key)?.takeIf { it.isJsonArray }?.asJsonArray
 
 internal fun driverProfileDisplayValue(key:String,value:JsonElement):String = when(key) {
-    "tweetHandle" -> value.asString.takeUnless { it.startsWith("MMM_TweetHandles_",true) }.orEmpty().ifBlank { "Belum diatur" }
+    "tweetHandle" -> value.asString.takeUnless { it.startsWith("MMM_TweetHandles_",true) }.orEmpty().ifBlank { "Otomatis dari game" }
     "dateOfBirth" -> runCatching { java.time.LocalDate.parse(value.asString.take(10)).format(java.time.format.DateTimeFormatter.ofPattern("dd MMM yyyy",java.util.Locale("id","ID"))) }.getOrDefault("Tanggal tidak valid")
     else -> preview(value)
 }
@@ -2262,7 +2262,7 @@ private fun EditValueDialog(target: EditTarget, onClose: () -> Unit, onSave: (Js
                         }
                         Text("Gunakan tombol untuk memilih nilai, tanpa mengetik angka manual.", color = Muted, fontSize = 10.sp)
                     }
-                    else -> OutlinedTextField(value = value, onValueChange = { value = it }, modifier = Modifier.fillMaxWidth(), label = { Text("Text") }, singleLine = true)
+                    else -> OutlinedTextField(value = value, onValueChange = { value = it }, modifier = Modifier.fillMaxWidth(), label = { Text(if(target.path.lastOrNull()=="dateOfBirth") "Tanggal lahir (YYYY-MM-DD)" else "Text") }, singleLine = true)
                 }
             }
         },
@@ -2271,6 +2271,10 @@ private fun EditValueDialog(target: EditTarget, onClose: () -> Unit, onSave: (Js
                 val result = when {
                     isBoolean -> com.google.gson.JsonPrimitive(value.toBoolean())
                     isNumber -> com.google.gson.JsonPrimitive(java.math.BigDecimal(value))
+                    target.path.lastOrNull()=="dateOfBirth" -> {
+                        val date=java.time.LocalDate.parse(value.take(10)).toString()
+                        com.google.gson.JsonPrimitive(date+"T00:00:00.0000000")
+                    }
                     else -> com.google.gson.JsonPrimitive(value)
                 }
                 onSave(result)
