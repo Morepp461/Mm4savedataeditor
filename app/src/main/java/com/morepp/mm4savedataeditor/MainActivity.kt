@@ -456,7 +456,8 @@ private fun JsonBrowser(
             (moduleFilter == null || path.firstOrNull() == moduleFilter) &&
                 (query.isBlank() ||
                     path.joinToString(".").contains(query, ignoreCase = true) ||
-                    value.toString().contains(query, ignoreCase = true))
+                    ((value.isJsonPrimitive || value.isJsonNull) &&
+                        value.toString().contains(query, ignoreCase = true)))
         }
     }
     Column(Modifier.fillMaxSize()) {
