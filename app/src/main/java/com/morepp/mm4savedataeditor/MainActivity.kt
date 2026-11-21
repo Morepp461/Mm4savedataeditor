@@ -1845,7 +1845,11 @@ internal fun applyOfficialF1Preset2026(data:JsonObject,templateData:JsonObject):
                 val targetDriverId=targetDriver.get("\$id")?.asString ?: return false
                 val sourceDriverId=sourceDriver.get("\$id")?.asString ?: return false
                 if(!seenTargetDrivers.add(targetDriverId) || !seenSourceDrivers.add(sourceDriverId)) return false
-                if(targetDriver.get("m_PersonDetails")?.isJsonObject!=true || sourceDriver.get("m_PersonDetails")?.isJsonObject!=true) return false
+                val targetDetails=targetDriver.get("m_PersonDetails")?.takeIf { it.isJsonObject }?.asJsonObject ?: return false
+                val sourceDetails=sourceDriver.get("m_PersonDetails")?.takeIf { it.isJsonObject }?.asJsonObject ?: return false
+                val sourceNationality=sourceDetails.get("nationality")?.takeIf { it.isJsonObject }?.asJsonObject ?: return false
+                if(sourceNationality.get("mNationalityID")?.let { it.isJsonPrimitive && it.asJsonPrimitive.isNumber }!=true) return false
+                if(targetDetails.get("nationality")?.isJsonObject!=true) return false
                 if(targetDriver.get("m_Stats")?.isJsonObject!=true || sourceDriver.get("m_Stats")?.isJsonObject!=true) return false
                 driverPlan.add(targetDriver to sourceDriver)
             }
@@ -1867,6 +1871,10 @@ internal fun applyOfficialF1Preset2026(data:JsonObject,templateData:JsonObject):
                 targetDriver.add(key,remapDriverSelfReferences(value,sourceId,targetId))
             }
         }
+        // Nationality is a game enum ID, not a display string. Preserve the exact
+        // mNationalityID from the selected source save rather than deriving it from a flag/name.
+        val sourceNationality=sourceDriver.getAsJsonObject("m_PersonDetails").getAsJsonObject("nationality")
+        targetDriver.getAsJsonObject("m_PersonDetails").add("nationality",sourceNationality.deepCopy())
     }
     return true
 }
