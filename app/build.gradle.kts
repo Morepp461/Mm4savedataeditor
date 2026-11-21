@@ -20,6 +20,8 @@ val downloadAppIcon by tasks.registering {
     }
 }
 
+val releaseKeystorePath = System.getenv("MM4_KEYSTORE_PATH")
+val hasPrivateReleaseKey = !releaseKeystorePath.isNullOrBlank()
 android {
     namespace = "com.morepp.mm4savedataeditor"
     compileSdk = 35
@@ -31,13 +33,24 @@ android {
         versionCode = 1
         versionName = "1.0.0"
     }
+    signingConfigs {
+        if (hasPrivateReleaseKey) {
+            create("privateRelease") {
+                storeFile = file(releaseKeystorePath!!)
+                storePassword = System.getenv("MM4_KEYSTORE_PASSWORD")
+                keyAlias = System.getenv("MM4_KEY_ALIAS")
+                keyPassword = System.getenv("MM4_KEY_PASSWORD")
+            }
+        }
+    }
     buildFeatures { compose = true }
     buildTypes {
         release {
             isMinifyEnabled = false
             isShrinkResources = false
-            // Debug-key signed for sideload testing; use a private keystore for public release.
-            signingConfig = signingConfigs.getByName("debug")
+            // Private signing is enabled only when GitHub Actions secrets are configured.
+            signingConfig = if (hasPrivateReleaseKey) signingConfigs.getByName("privateRelease")
+                else signingConfigs.getByName("debug")
         }
     }
     compileOptions {
