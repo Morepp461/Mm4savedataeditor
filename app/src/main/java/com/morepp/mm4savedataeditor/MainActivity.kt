@@ -256,47 +256,13 @@ private fun EditorApp() {
             )
         }
 
-        editTarget?.let { target ->
-            if (target.value.isJsonPrimitive) {
-                EditValueDialog(
-                    target = target,
-                    onClose = { editTarget = null },
-                    onSave = { value ->
-                        val current = document ?: return@EditValueDialog
-                        val updated = mutateDocument(current, target.root) { setPath(it, target.path, value) }
-                        if (updated != null) { document = updated; hasChanges = true; editTarget = null }
-                    }
-                )
-            } else EditJsonDialog(
+        editTarget?.takeIf { it.value.isJsonPrimitive }?.let { target ->
+            EditValueDialog(
                 target = target,
                 onClose = { editTarget = null },
                 onSave = { value ->
-                    val current = document ?: return@EditJsonDialog
-                    val updated = mutateDocument(current, target.root) {
-                        setPath(it, target.path, value)
-                    }
-                    if (updated != null) {
-                        document = updated
-                        hasChanges = true
-                        editTarget = null
-                    }
-                },
-                onAddChild = { key, value ->
-                    val current = document ?: return@EditJsonDialog
-                    val updated = mutateDocument(current, target.root) {
-                        appendChild(it, target.path, key, value)
-                    }
-                    if (updated != null) {
-                        document = updated
-                        hasChanges = true
-                        editTarget = null
-                    }
-                },
-                onDelete = {
-                    val current = document ?: return@EditJsonDialog
-                    val updated = mutateDocument(current, target.root) {
-                        removePath(it, target.path)
-                    }
+                    val current = document ?: return@EditValueDialog
+                    val updated = mutateDocument(current, target.root) { setPath(it, target.path, value) }
                     if (updated != null) {
                         document = updated
                         hasChanges = true
@@ -1497,103 +1463,6 @@ private fun EditValueDialog(target: EditTarget, onClose: () -> Unit, onSave: (Js
         dismissButton = { TextButton(onClick = onClose) { Text("CANCEL") } }
     )
 }
-@Composable
-private fun EditJsonDialog(
-    target: EditTarget,
-    onClose: () -> Unit,
-    onSave: (JsonElement) -> Unit,
-    onAddChild: (String?, JsonElement) -> Unit,
-    onDelete: () -> Unit
-) {
-    var working by remember(target) { mutableStateOf(target.value.deepCopy()) }
-    var newKey by remember(target) { mutableStateOf("") }
-    var newValue by remember(target) { mutableStateOf("") }
-    var newType by remember(target) { mutableStateOf("Text") }
-    var showAdd by remember(target) { mutableStateOf(false) }
-    var invalid by remember(target) { mutableStateOf(false) }
-    var confirmDelete by remember(target) { mutableStateOf(false) }
-    val fields = remember(working) { flatten(working).filter { it.second.isJsonPrimitive } }
-    AlertDialog(
-        onDismissRequest = onClose,
-        title = { Text("EDIT DATA GROUP") },
-        text = {
-            Column(Modifier.fillMaxWidth().heightIn(max=520.dp).verticalScroll(rememberScrollState()), verticalArrangement=Arrangement.spacedBy(8.dp)) {
-                Text(target.path.joinToString(" › "), color=Gold, fontSize=10.sp)
-                Text(fields.size.toString()+" editable values",color=Muted,fontSize=10.sp)
-                fields.forEach { (path,value) ->
-                    val primitive=value.asJsonPrimitive
-                    Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).background(Panel).padding(9.dp)) {
-                        Text(humanLabel(path.last()),fontWeight=FontWeight.SemiBold,fontSize=11.sp)
-                        if(primitive.isBoolean) {
-                            Row(verticalAlignment=Alignment.CenterVertically) {
-                                Text(if(primitive.asBoolean) "Enabled" else "Disabled",Modifier.weight(1f),color=Muted)
-                                Switch(checked=primitive.asBoolean,onCheckedChange={ next -> working=replaceNested(working,path,com.google.gson.JsonPrimitive(next)) })
-                            }
-                        } else {
-                            var textValue by remember(target,path,working.toString()) { mutableStateOf(if(primitive.isString) primitive.asString else primitive.toString()) }
-                            OutlinedTextField(textValue,{ textValue=it },Modifier.fillMaxWidth(),singleLine=true)
-                            TextButton(onClick={
-                                try {
-                                    val next=if(primitive.isNumber) com.google.gson.JsonParser.parseString(textValue).also { require(it.isJsonPrimitive && it.asJsonPrimitive.isNumber) } else com.google.gson.JsonPrimitive(textValue)
-                                    working=replaceNested(working,path,next)
-                                } catch(_:Throwable) { invalid=true }
-                            }) { Text("APPLY FIELD") }
-                        }
-                    }
-                }
-                if(working.isJsonObject || working.isJsonArray) {
-                    OutlinedButton(onClick={showAdd=!showAdd},modifier=Modifier.fillMaxWidth()) { Icon(Icons.Default.Add,null); Text("ADD FIELD / ITEM") }
-                    if(showAdd) {
-                        if(working.isJsonObject) OutlinedTextField(newKey,{newKey=it},Modifier.fillMaxWidth(),label={Text("Field name")},singleLine=true)
-                        OutlinedTextField(newValue,{newValue=it},Modifier.fillMaxWidth(),label={Text("Value")},singleLine=true)
-                        Text("Value type",color=Muted,fontSize=10.sp)
-                        Row(horizontalArrangement=Arrangement.spacedBy(5.dp)) {
-                            listOf("Text","Number","Boolean","Object","List").forEach { type ->
-                                FilterChip(selected=newType==type,onClick={newType=type},label={Text(type,fontSize=9.sp)})
-                            }
-                        }
-                        Button(onClick={
-                            try {
-                                val value=when(newType) {
-                                    "Number" -> com.google.gson.JsonParser.parseString(newValue).also { require(it.isJsonPrimitive && it.asJsonPrimitive.isNumber) }
-                                    "Boolean" -> com.google.gson.JsonPrimitive(newValue.toBooleanStrict())
-                                    "Object" -> JsonObject()
-                                    "List" -> JsonArray()
-                                    else -> com.google.gson.JsonPrimitive(newValue)
-                                }
-                                if(working.isJsonObject) {
-                                    require(newKey.isNotBlank() && !working.asJsonObject.has(newKey))
-                                    working=working.deepCopy().also { it.asJsonObject.add(newKey,value) }
-                                } else working=working.deepCopy().also { it.asJsonArray.add(value) }
-                                newKey=""; newValue=""; showAdd=false; invalid=false
-                            } catch(_:Throwable) { invalid=true }
-                        },modifier=Modifier.fillMaxWidth(),colors=ButtonDefaults.buttonColors(containerColor=Gold)) { Text("ADD") }
-                        if(invalid) Text("Periksa nama field dan tipe nilainya.",color=Red,fontSize=10.sp)
-                    }
-                }
-                if(target.path.isNotEmpty()) TextButton(onClick={confirmDelete=true},colors=ButtonDefaults.textButtonColors(contentColor=Red)) { Text("DELETE GROUP") }
-            }
-        },
-        confirmButton={ Button(onClick={onSave(working)},colors=ButtonDefaults.buttonColors(containerColor=Red)) { Text("SAVE CHANGES") } },
-        dismissButton={ TextButton(onClick=onClose) { Text("CANCEL") } }
-    )
-    if(confirmDelete) AlertDialog(
-        onDismissRequest={confirmDelete=false},
-        title={Text("Delete this data group?")},
-        text={Text("This removes the selected group from the edited save.")},
-        confirmButton={TextButton(onClick={onDelete}) { Text("DELETE") }},
-        dismissButton={TextButton(onClick={confirmDelete=false}) { Text("CANCEL") }}
-    )
-}
-
-private fun replaceNested(root:JsonElement,path:List<String>,value:JsonElement):JsonElement {
-    if(path.isEmpty()) return value.deepCopy()
-    val wrapper=JsonObject()
-    wrapper.add("root",root.deepCopy())
-    val ok=setPath(wrapper,listOf("root")+path,value)
-    return if(ok) wrapper.get("root") else root
-}
-
 internal fun resolvePath(root: JsonElement, path: List<String>): JsonElement? {
     var node = root
     for (part in path) {
