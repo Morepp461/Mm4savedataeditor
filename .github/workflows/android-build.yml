@@ -54,7 +54,7 @@ jobs:
           else
             echo "has_keystore=false" >> "$GITHUB_OUTPUT"
           fi
-      - name: Validate private release keystore
+      - name: Diagnose and validate private release keystore
         if: steps.signing.outputs.has_keystore == 'true'
         env:
           KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
@@ -63,12 +63,21 @@ jobs:
         run: |
           set -euo pipefail
           STORE="$RUNNER_TEMP/mm4-release-key.jks"
-          if ! keytool -list -keystore "$STORE" -storepass "$KEYSTORE_PASSWORD" -alias "$KEY_ALIAS" >/dev/null 2>&1; then
-            echo "::error::Keystore cannot be opened or KEY_ALIAS does not exist. Check KEYSTORE_PASSWORD and KEY_ALIAS GitHub Actions secrets."
+          echo "Checking decoded keystore file format..."
+          file "$STORE"
+          echo "Checking keystore password and listing aliases..."
+          if ! keytool -list -keystore "$STORE" -storepass "$KEYSTORE_PASSWORD"; then
+            echo "::error::Keystore file was decoded, but Java could not open it with the supplied store password. No secret values were printed."
             exit 1
           fi
-          if ! keytool -certreq -alias "$KEY_ALIAS" -keystore "$STORE" -storepass "$KEYSTORE_PASSWORD" -keypass "$KEY_PASSWORD" -file "$RUNNER_TEMP/mm4-key-validation.csr" >/dev/null 2>&1; then
-            echo "::error::The private key could not be unlocked. Check KEY_PASSWORD. For a key created without a separate key password, use the same value as KEYSTORE_PASSWORD."
+          echo "Checking configured alias..."
+          if ! keytool -list -keystore "$STORE" -storepass "$KEYSTORE_PASSWORD" -alias "$KEY_ALIAS"; then
+            echo "::error::The keystore opened successfully, but the configured alias was not found. Compare KEY_ALIAS with the alias listed above."
+            exit 1
+          fi
+          echo "Checking private-key password..."
+          if ! keytool -certreq -alias "$KEY_ALIAS" -keystore "$STORE" -storepass "$KEYSTORE_PASSWORD" -keypass "$KEY_PASSWORD" -file "$RUNNER_TEMP/mm4-key-validation.csr"; then
+            echo "::error::The store and alias are valid, but the private key could not be unlocked. Check KEY_PASSWORD."
             exit 1
           fi
           rm -f "$RUNNER_TEMP/mm4-key-validation.csr"
