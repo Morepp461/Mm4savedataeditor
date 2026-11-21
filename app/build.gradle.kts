@@ -32,4 +32,5 @@ dependencies {
     implementation("com.google.code.gson:gson:2.11.0")
     implementation("org.lz4:lz4-java:1.8.0")
     debugImplementation("androidx.compose.ui:ui-tooling")
+    testImplementation("junit:junit:4.13.2")
 }
