@@ -77,7 +77,9 @@ class MainActivity : ComponentActivity() {
 private data class EditTarget(
     val root: String,
     val path: List<String>,
-    val value: JsonElement
+    val value: JsonElement,
+    val minValue: String? = null,
+    val maxValue: String? = null
 )
 
 private data class EditOperation(
@@ -279,7 +281,12 @@ private fun EditorApp() {
                         onSection = { selectedTab = it; selectedDriver = null },
                         selectedDriver = selectedDriver,
                         onDriver = { selectedDriver = it },
-                        onEdit = { root, path, value -> if (value.isJsonPrimitive) editTarget = EditTarget(root, path, value.deepCopy()) },
+                        onEdit = { root, path, value ->
+                            if (value.isJsonPrimitive) {
+                                val bounds = editorBounds(document, root, path)
+                                editTarget = EditTarget(root, path, value.deepCopy(), bounds.first, bounds.second)
+                            }
+                        },
                         onGodAction = { action ->
                             val latest = document ?: return@CareerWorkspace
                             val changed = applyGodModeAction(latest, action)
@@ -2217,6 +2224,27 @@ private fun WatermarkFooter() {
 }
 
 @Composable
+
+private fun editorBounds(document:Mm4SaveCodec.Document?,root:String,path:List<String>):Pair<String?,String?> {
+    if(root!="Game Data" || path.isEmpty()) return null to null
+    return when {
+        path.last() in setOf("m_Stat","m_Potential") -> "0" to "20"
+        path.firstOrNull()=="headquarters" && path.lastOrNull()=="State" -> "0" to "2"
+        path.firstOrNull()=="headquarters" && path.lastOrNull()=="pathType" -> "0" to "4"
+        path.size==4 && path[0]=="headquarters" && path[1]=="m_CurrentTierInformation" && path[3]=="Value" -> {
+            val index=path[2].removePrefix("[").removeSuffix("]").toIntOrNull()
+            val row=index?.let { document?.data?.getAsJsonObject("headquarters")?.getAsJsonArray("m_CurrentTierInformation")?.get(it) }
+            val key=row?.takeIf { it.isJsonObject }?.asJsonObject?.get("Key")?.asInt
+            val nodes=document?.data?.getAsJsonObject("headquarters")?.getAsJsonArray("m_Upgrades")
+            val max=if(key!=null) nodes?.count { node ->
+                node.takeIf { it.isJsonObject }?.asJsonObject?.getAsJsonObject("Value")?.get("pathType")?.asInt==key
+            } else null
+            if(max!=null && max>0) "0" to max.toString() else null to null
+        }
+        else -> null to null
+    }
+}
+
 private fun EditValueDialog(target: EditTarget, onClose: () -> Unit, onSave: (JsonElement) -> Unit) {
     val primitive = target.value.asJsonPrimitive
     val isBoolean = primitive.isBoolean
@@ -2227,6 +2255,7 @@ private fun EditValueDialog(target: EditTarget, onClose: () -> Unit, onSave: (Js
     val attributeValue = currentNumber.toInt().coerceIn(0, 20)
     val numberStep = when { kotlin.math.abs(currentNumber) >= 1000000 -> 100000.0; kotlin.math.abs(currentNumber) >= 10000 -> 1000.0; kotlin.math.abs(currentNumber) >= 100 -> 10.0; else -> 1.0 }
     val meaning = when { attributeValue <= 4 -> "Sangat rendah"; attributeValue <= 8 -> "Rendah"; attributeValue <= 12 -> "Menengah"; attributeValue <= 16 -> "Tinggi"; else -> "Elite" }
+    var validationMessage by remember(target) { mutableStateOf<String?>(null) }
     AlertDialog(
         onDismissRequest = onClose,
         title = { Text(humanizeField(target.path.lastOrNull() ?: "Edit value")) },
@@ -2253,6 +2282,14 @@ private fun EditValueDialog(target: EditTarget, onClose: () -> Unit, onSave: (Js
                         }
                         Text("Skala atribut 0–20. Pilih nilai dengan menggeser slider.", color = Muted, fontSize = 10.sp)
                     }
+                    isNumber && target.minValue != null && target.maxValue != null -> {
+                        val min = target.minValue.toFloat()
+                        val max = target.maxValue.toFloat()
+                        val selected = currentNumber.toFloat().coerceIn(min,max)
+                        Text(value + " • batas " + target.minValue + "–" + target.maxValue, fontSize = 18.sp, fontWeight = FontWeight.Bold, color = Gold)
+                        Slider(value=selected,onValueChange={value=it.toInt().coerceIn(min.toInt(),max.toInt()).toString()},valueRange=min..max,steps=(max-min-1f).toInt().coerceAtLeast(0))
+                        Text("Nilai dibatasi sesuai rentang yang dikenali dari struktur save.",color=Muted,fontSize=10.sp)
+                    }
                     isNumber -> {
                         Text(value, fontSize = 24.sp, fontWeight = FontWeight.Bold, color = Gold)
                         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -2264,13 +2301,23 @@ private fun EditValueDialog(target: EditTarget, onClose: () -> Unit, onSave: (Js
                     }
                     else -> OutlinedTextField(value = value, onValueChange = { value = it }, modifier = Modifier.fillMaxWidth(), label = { Text(if(target.path.lastOrNull()=="dateOfBirth") "Tanggal lahir (YYYY-MM-DD)" else "Text") }, singleLine = true)
                 }
+                validationMessage?.let { Text(it,color=Red,fontSize=10.sp) }
             }
         },
         confirmButton = {
             Button(onClick = {
                 val result = when {
                     isBoolean -> com.google.gson.JsonPrimitive(value.toBoolean())
-                    isNumber -> com.google.gson.JsonPrimitive(java.math.BigDecimal(value))
+                    isNumber -> {
+                        val number=java.math.BigDecimal(value)
+                        val min=target.minValue?.let { java.math.BigDecimal(it) }
+                        val max=target.maxValue?.let { java.math.BigDecimal(it) }
+                        if((min!=null && number<min) || (max!=null && number>max)) {
+                            validationMessage="Nilai harus berada di antara " + (target.minValue ?: "—") + " dan " + (target.maxValue ?: "—")
+                            return@Button
+                        }
+                        com.google.gson.JsonPrimitive(number)
+                    }
                     target.path.lastOrNull()=="dateOfBirth" -> {
                         val date=java.time.LocalDate.parse(value.take(10)).toString()
                         com.google.gson.JsonPrimitive(date+"T00:00:00.0000000")
