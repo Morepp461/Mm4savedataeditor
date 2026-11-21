@@ -763,12 +763,7 @@ private fun EntityCatalogPage(doc: Mm4SaveCodec.Document, category: String, onEd
         val fields=flatten(chosen.data).filter { row ->
             row.second.isJsonPrimitive &&
                 row.first.lastOrNull() != "\$version" &&
-                when (category) {
-                    "team" -> isTeamEditablePath(row.first)
-                    "staff" -> isStaffEditablePath(row.first)
-                    "car" -> false // Car attributes are rendered exclusively from the team's m_Stats array below.
-                    else -> true
-                }
+                isCatalogPrimitiveEditable(category, row.first)
         }
         val isCar=category=="car"
         val stats=if(category=="staff") chosen.data.getAsJsonObject("stats")?.getAsJsonArray("m_Stats") else chosen.data.getAsJsonArray("m_Stats")
@@ -828,7 +823,14 @@ private fun EntityCatalogPage(doc: Mm4SaveCodec.Document, category: String, onEd
     }
 }
 
-private fun isTeamEditablePath(path: List<String>): Boolean {
+internal fun isCatalogPrimitiveEditable(category: String, path: List<String>): Boolean = when (category) {
+    "team" -> isTeamEditablePath(path)
+    "staff" -> isStaffEditablePath(path)
+    "car" -> false // Car attributes are rendered exclusively from the team's m_Stats array.
+    else -> true
+}
+
+internal fun isTeamEditablePath(path: List<String>): Boolean {
     if (path.isEmpty()) return false
     val root = path.first()
     if (path.size == 1 && root in setOf("name", "shortName", "m_Reputation", "reputation")) return true
@@ -840,7 +842,7 @@ private fun isTeamEditablePath(path: List<String>): Boolean {
     return path.any { part -> financialTerms.any { term -> part.contains(term, ignoreCase = true) } }
 }
 
-private fun isStaffEditablePath(path: List<String>): Boolean {
+internal fun isStaffEditablePath(path: List<String>): Boolean {
     if (path.isEmpty()) return false
     val root = path.first()
     if (root in setOf("m_PersonDetails", "contract")) return true
