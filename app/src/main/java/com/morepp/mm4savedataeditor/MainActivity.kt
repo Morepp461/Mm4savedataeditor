@@ -6,7 +6,13 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.animateContentSize
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
+import androidx.compose.animation.togetherWith
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -60,6 +66,13 @@ private data class EditTarget(
     val value: JsonElement
 )
 
+private data class EditOperation(
+    val root: String,
+    val path: List<String>,
+    val before: JsonElement,
+    val after: JsonElement
+)
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun EditorApp() {
@@ -77,6 +90,8 @@ private fun EditorApp() {
     var errorMessage by remember { mutableStateOf<String?>(null) }
     var editTarget by remember { mutableStateOf<EditTarget?>(null) }
     var confirmDiscardOpen by remember { mutableStateOf(false) }
+    var undoStack by remember { mutableStateOf(emptyList<EditOperation>()) }
+    var redoStack by remember { mutableStateOf(emptyList<EditOperation>()) }
 
     val openFile = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri: Uri? ->
         if (uri != null) scope.launch {
@@ -96,7 +111,9 @@ private fun EditorApp() {
                 selectedModule = null
                 search = ""
                 hasChanges = false
-            } catch (failure: Throwable) {
+                undoStack = emptyList()
+                redoStack = emptyList()
+            } catch (failure: Exception) {
                 errorMessage = failure.message ?: "Gagal membuka save."
             } finally {
                 busy = false
@@ -132,7 +149,7 @@ private fun EditorApp() {
                         output.use { stream -> stream.write(bytes); stream.flush() }
                     }
                     hasChanges = false
-                } catch (failure: Throwable) {
+                } catch (failure: Exception) {
                     errorMessage = failure.message ?: "Export gagal."
                 } finally {
                     busy = false
@@ -174,6 +191,38 @@ private fun EditorApp() {
                         }
                     },
                     actions = {
+                        IconButton(
+                            onClick = {
+                                val operation = undoStack.lastOrNull() ?: return@IconButton
+                                val current = document ?: return@IconButton
+                                val updated = mutateDocument(current, operation.root) {
+                                    setPath(it, operation.path, operation.before)
+                                }
+                                if (updated != null) {
+                                    document = updated
+                                    undoStack = undoStack.dropLast(1)
+                                    redoStack = (redoStack + operation).takeLast(50)
+                                    hasChanges = true
+                                }
+                            },
+                            enabled = undoStack.isNotEmpty() && !busy
+                        ) { Icon(Icons.Default.Undo, contentDescription = "Undo edit") }
+                        IconButton(
+                            onClick = {
+                                val operation = redoStack.lastOrNull() ?: return@IconButton
+                                val current = document ?: return@IconButton
+                                val updated = mutateDocument(current, operation.root) {
+                                    setPath(it, operation.path, operation.after)
+                                }
+                                if (updated != null) {
+                                    document = updated
+                                    redoStack = redoStack.dropLast(1)
+                                    undoStack = (undoStack + operation).takeLast(50)
+                                    hasChanges = true
+                                }
+                            },
+                            enabled = redoStack.isNotEmpty() && !busy
+                        ) { Icon(Icons.Default.Redo, contentDescription = "Redo edit") }
                         IconButton(onClick = requestOpen) {
                             Icon(Icons.Default.FolderOpen, contentDescription = "Buka save")
                         }
@@ -189,7 +238,8 @@ private fun EditorApp() {
                         titleContentColor = Color.White
                     )
                 )
-            }
+            },
+            bottomBar = { WatermarkFooter() }
         ) { padding ->
             Column(Modifier.fillMaxSize().padding(padding)) {
                 val current = document
@@ -212,7 +262,12 @@ private fun EditorApp() {
                         onGodAction = { action ->
                             val latest = document ?: return@CareerWorkspace
                             val changed = applyGodModeAction(latest, action)
-                            if (changed != null) { document = changed; hasChanges = true }
+                            if (changed != null) {
+                                document = changed
+                                hasChanges = true
+                                undoStack = emptyList()
+                                redoStack = emptyList()
+                            }
                         }
                     )
                 }
@@ -262,8 +317,16 @@ private fun EditorApp() {
                 onClose = { editTarget = null },
                 onSave = { value ->
                     val current = document ?: return@EditValueDialog
+                    val rootBefore = if (target.root == "Save Info") current.info else current.data
+                    val before = resolvePath(rootBefore, target.path)?.deepCopy()
                     val updated = mutateDocument(current, target.root) { setPath(it, target.path, value) }
                     if (updated != null) {
+                        val rootAfter = if (target.root == "Save Info") updated.info else updated.data
+                        val after = resolvePath(rootAfter, target.path)?.deepCopy()
+                        if (before != null && after != null) {
+                            undoStack = (undoStack + EditOperation(target.root, target.path, before, after)).takeLast(50)
+                            redoStack = emptyList()
+                        }
                         document = updated
                         hasChanges = true
                         editTarget = null
@@ -393,18 +456,29 @@ private fun CareerWorkspace(
         LazyRow(Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 4.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             items(Sections) { s -> FilterChip(selected = section == s, onClick = { onSection(s) }, label = { Text(s, fontSize = 11.sp) }) }
         }
-        when (section) {
-            "Overview" -> OverviewPage(document, onSection)
-            "Drivers" -> DriverPage(document, selectedDriver, onDriver, onEdit)
-            "Staff" -> EntityCatalogPage(document, "staff", onEdit)
-            "Teams" -> EntityCatalogPage(document, "team", onEdit)
-            "Cars" -> EntityCatalogPage(document, "car", onEdit)
-            "Finance" -> FinancePage(document, onEdit)
-            "HQ" -> HqPage(document, onEdit)
-            "World" -> WorldSettingsPage(document, onEdit)
-            "Save Info" -> InfoPage(document, onEdit)
-            "God Mode" -> GodModePage(document, onGodAction)
-            else -> AdvancedPage(document, onEdit)
+        AnimatedContent(
+            targetState = section,
+            transitionSpec = {
+                (fadeIn(animationSpec = tween(190)) +
+                    slideInVertically(animationSpec = tween(220)) { height -> height / 18 }) togetherWith
+                    (fadeOut(animationSpec = tween(130)) +
+                        slideOutVertically(animationSpec = tween(170)) { height -> -height / 24 })
+            },
+            label = "career-workspace-transition"
+        ) { targetSection ->
+            when (targetSection) {
+                "Overview" -> OverviewPage(document, onSection)
+                "Drivers" -> DriverPage(document, selectedDriver, onDriver, onEdit)
+                "Staff" -> EntityCatalogPage(document, "staff", onEdit)
+                "Teams" -> EntityCatalogPage(document, "team", onEdit)
+                "Cars" -> EntityCatalogPage(document, "car", onEdit)
+                "Finance" -> FinancePage(document, onEdit)
+                "HQ" -> HqPage(document, onEdit)
+                "World" -> WorldSettingsPage(document, onEdit)
+                "Save Info" -> InfoPage(document, onEdit)
+                "God Mode" -> GodModePage(document, onGodAction)
+                else -> AdvancedPage(document, onEdit)
+            }
         }
     }
 }
@@ -805,7 +879,9 @@ internal fun isTeamEditablePath(path: List<String>): Boolean {
         "wage", "salary", "sponsor", "income", "revenue", "expense", "cost",
         "profit", "loss", "bank", "payroll"
     )
-    return path.any { part -> financialTerms.any { term -> part.contains(term, ignoreCase = true) } }
+    // Match only the top-level financial section. Nested car/driver fields can also
+    // contain words such as "cost" or "salary" and must not leak into Team editing.
+    return financialTerms.any { term -> root.contains(term, ignoreCase = true) }
 }
 
 internal fun isStaffEditablePath(path: List<String>): Boolean {
@@ -813,7 +889,7 @@ internal fun isStaffEditablePath(path: List<String>): Boolean {
     val root = path.first()
     if (root in setOf("m_PersonDetails", "contract")) return true
     val compensationTerms = listOf("salary", "wage", "pay", "perracecost", "signingfee")
-    return path.any { part -> compensationTerms.any { term -> part.contains(term, ignoreCase = true) } }
+    return compensationTerms.any { term -> root.contains(term, ignoreCase = true) }
 }
 
 private fun nationalityLabel(value: JsonElement): String { return if (value.isJsonPrimitive) "Kode negara ${value.asString} (pemetaan ID MM4 belum tersedia)" else "Nationality belum dikenali" }
@@ -1404,6 +1480,28 @@ internal fun flatten(root: JsonElement): List<Pair<List<String>, JsonElement>> {
 }
 
 
+private fun stepNumericValue(current: String, step: Double, direction: Int): String? = runCatching {
+    val currentValue = java.math.BigDecimal(current)
+    val stepValue = java.math.BigDecimal.valueOf(step).multiply(java.math.BigDecimal.valueOf(direction.toLong()))
+    currentValue.add(stepValue).stripTrailingZeros().toPlainString()
+}.getOrNull()
+
+@Composable
+private fun WatermarkFooter() {
+    Row(
+        Modifier.fillMaxWidth()
+            .background(Ink)
+            .border(width = 0.5.dp, color = Color.White.copy(alpha = 0.10f))
+            .padding(horizontal = 16.dp, vertical = 9.dp),
+        horizontalArrangement = Arrangement.Center,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text("Created by :", color = Muted, fontSize = 10.sp, letterSpacing = 0.4.sp)
+        Spacer(Modifier.width(4.dp))
+        Text("Morepp", color = Gold, fontSize = 10.sp, fontWeight = FontWeight.Black, letterSpacing = 0.8.sp)
+    }
+}
+
 @Composable
 private fun EditValueDialog(target: EditTarget, onClose: () -> Unit, onSave: (JsonElement) -> Unit) {
     val primitive = target.value.asJsonPrimitive
@@ -1412,7 +1510,7 @@ private fun EditValueDialog(target: EditTarget, onClose: () -> Unit, onSave: (Js
     var value by remember(target) { mutableStateOf(if (primitive.isString) primitive.asString else primitive.toString()) }
     var choicesOpen by remember(target) { mutableStateOf(false) }
     val currentNumber = if (isNumber) runCatching { primitive.asDouble }.getOrDefault(0.0) else 0.0
-    val isAttribute = target.path.any { it == "m_Stats" || it == "m_Stat" || it == "m_Potential" }
+    val isAttribute = target.path.lastOrNull() in setOf("m_Stat", "m_Potential")
     val attributeValue = currentNumber.toInt().coerceIn(0, 20)
     val numberStep = when { kotlin.math.abs(currentNumber) >= 1000000 -> 100000.0; kotlin.math.abs(currentNumber) >= 10000 -> 1000.0; kotlin.math.abs(currentNumber) >= 100 -> 10.0; else -> 1.0 }
     val meaning = when { attributeValue <= 4 -> "Sangat rendah"; attributeValue <= 8 -> "Rendah"; attributeValue <= 12 -> "Menengah"; attributeValue <= 16 -> "Tinggi"; else -> "Elite" }
@@ -1444,9 +1542,9 @@ private fun EditValueDialog(target: EditTarget, onClose: () -> Unit, onSave: (Js
                     isNumber -> {
                         Text(value, fontSize = 24.sp, fontWeight = FontWeight.Bold, color = Gold)
                         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                            OutlinedButton(onClick = { value = (value.toDouble() - numberStep).toLong().toString() }) { Text("−") }
+                            OutlinedButton(onClick = { value = stepNumericValue(value, numberStep, -1) ?: value }) { Text("−") }
                             Text("Langkah " + numberStep.toLong(), color = Muted, fontSize = 10.sp)
-                            OutlinedButton(onClick = { value = (value.toDouble() + numberStep).toLong().toString() }) { Text("+") }
+                            OutlinedButton(onClick = { value = stepNumericValue(value, numberStep, 1) ?: value }) { Text("+") }
                         }
                         Text("Gunakan tombol untuk memilih nilai, tanpa mengetik angka manual.", color = Muted, fontSize = 10.sp)
                     }
@@ -1456,7 +1554,11 @@ private fun EditValueDialog(target: EditTarget, onClose: () -> Unit, onSave: (Js
         },
         confirmButton = {
             Button(onClick = {
-                val result = when { isBoolean -> com.google.gson.JsonPrimitive(value.toBoolean()); isNumber -> com.google.gson.JsonPrimitive(value.toDouble()); else -> com.google.gson.JsonPrimitive(value) }
+                val result = when {
+                    isBoolean -> com.google.gson.JsonPrimitive(value.toBoolean())
+                    isNumber -> com.google.gson.JsonPrimitive(java.math.BigDecimal(value))
+                    else -> com.google.gson.JsonPrimitive(value)
+                }
                 onSave(result)
             }, colors = ButtonDefaults.buttonColors(containerColor = Red)) { Text("SAVE CHANGES") }
         },
