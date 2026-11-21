@@ -122,4 +122,63 @@ class JsonTreeEditorTest {
         val record = JsonObject().apply { addProperty("amount", 8750) }
         assertEquals("£8,750", financeHistoryLabel(record))
     }
+    @Test
+    fun driverTransferUpdatesContractAndExistingTeamRoster() {
+        val data = JsonObject().apply {
+            add("teamManager", JsonObject().apply {
+                add("m_Teams", JsonArray().apply { add(JsonObject().apply { addProperty("\$ref", "team-a") }); add(JsonObject().apply { addProperty("\$ref", "team-b") }) })
+            })
+            add("entities", JsonArray().apply {
+                add(JsonObject().apply { addProperty("\$id", "team-a"); add("m_Drivers", JsonArray().apply { add(JsonObject().apply { addProperty("\$ref", "driver-1") }) }) })
+                add(JsonObject().apply { addProperty("\$id", "team-b"); add("m_Drivers", JsonArray()) })
+                add(JsonObject().apply {
+                    addProperty("\$id", "driver-1")
+                    add("contract", JsonObject().apply { add("m_Team", JsonObject().apply { addProperty("\$ref", "team-a") }) })
+                })
+            })
+        }
+        assertTrue(moveDriverToTeam(data, "driver-1", "team-b"))
+        val driver = collectObjectsWithId(data).first { it.second.get("\$id").asString == "driver-1" }.second
+        assertEquals("team-b", driver.getAsJsonObject("contract").getAsJsonObject("m_Team").get("\$ref").asString)
+        val oldRoster = collectObjectsWithId(data).first { it.second.get("\$id").asString == "team-a" }.second.getAsJsonArray("m_Drivers")
+        val newRoster = collectObjectsWithId(data).first { it.second.get("\$id").asString == "team-b" }.second.getAsJsonArray("m_Drivers")
+        assertEquals(0, oldRoster.size())
+        assertEquals("driver-1", newRoster[0].asJsonObject.get("\$ref").asString)
+    }
+
+    @Test
+    fun teamSwapExchangesChampionshipReferences() {
+        val data = JsonObject().apply {
+            add("teamManager", JsonObject().apply {
+                add("m_Teams", JsonArray().apply { add(JsonObject().apply { addProperty("\$ref", "team-a") }); add(JsonObject().apply { addProperty("\$ref", "team-b") }) })
+            })
+            add("entities", JsonArray().apply {
+                add(JsonObject().apply { addProperty("\$id", "team-a"); addProperty("name", "Alpha") })
+                add(JsonObject().apply { addProperty("\$id", "team-b"); addProperty("name", "Beta") })
+            })
+            add("championshipManager", JsonObject().apply {
+                add("divisions", JsonArray().apply {
+                    add(JsonObject().apply { addProperty("name", "F1"); add("m_Teams", JsonArray().apply { add(JsonObject().apply { addProperty("\$ref", "team-a") }) }) })
+                    add(JsonObject().apply { addProperty("name", "F2"); add("m_Teams", JsonArray().apply { add(JsonObject().apply { addProperty("\$ref", "team-b") }) }) })
+                })
+            })
+        }
+        assertTrue(swapTeamsBetweenDivisions(data, "team-a", "team-b"))
+        val divisions = data.getAsJsonObject("championshipManager").getAsJsonArray("divisions")
+        assertEquals("team-b", divisions[0].asJsonObject.getAsJsonArray("m_Teams")[0].asJsonObject.get("\$ref").asString)
+        assertEquals("team-a", divisions[1].asJsonObject.getAsJsonArray("m_Teams")[0].asJsonObject.get("\$ref").asString)
+    }
+
+    @Test
+    fun profileDisplayHidesGeneratedTweetHandlesAndFormatsBirthDate() {
+        assertEquals("Belum diatur", driverProfileDisplayValue("tweetHandle", JsonPrimitive("MMM_TweetHandles_10000001")))
+        assertEquals("30 Jul 1993", driverProfileDisplayValue("dateOfBirth", JsonPrimitive("1993-07-30T00:00:00.0000000")))
+    }
+
+    @Test
+    fun displayedAttributeValuesAreRoundedToIntegers() {
+        assertEquals("14", displayIntegerStat(JsonPrimitive(13.7)))
+        assertEquals("13", displayIntegerStat(JsonPrimitive(13.2)))
+    }
+
 }
