@@ -51,9 +51,26 @@ jobs:
           test -n "$KEYSTORE_PASSWORD" || { echo "::error::KEYSTORE_PASSWORD secret is missing."; exit 1; }
           test -n "$KEY_ALIAS" || { echo "::error::KEY_ALIAS secret is missing."; exit 1; }
           test -n "$KEY_PASSWORD" || { echo "::error::KEY_PASSWORD secret is missing."; exit 1; }
+          RAW="$RUNNER_TEMP/mm4-release-key.raw"
           STORE="$RUNNER_TEMP/mm4-release-key.jks"
-          printf '%s' "$KEYSTORE_BASE64" | base64 --decode > "$STORE"
-          test -s "$STORE"
+          printf '%s' "$KEYSTORE_BASE64" | tr -d '[:space:]' | base64 --decode > "$RAW"
+          echo "Decoded candidate size: $(wc -c < "$RAW") bytes"
+          echo "Decoded candidate header: $(od -An -N8 -tx1 "$RAW" | tr -d ' \n')"
+          if keytool -list -keystore "$RAW" -storepass "$KEYSTORE_PASSWORD" >/dev/null 2>&1; then
+            cp "$RAW" "$STORE"
+            echo "Keystore decoded and opened on first pass."
+          elif LC_ALL=C grep -aEq '^[A-Za-z0-9+/=[:space:]]+$' "$RAW"; then
+            echo "First decode contains Base64 text; testing one compatibility decode."
+            tr -d '[:space:]' < "$RAW" | base64 --decode > "$STORE"
+            echo "Second-pass candidate size: $(wc -c < "$STORE") bytes"
+            echo "Second-pass candidate header: $(od -An -N8 -tx1 "$STORE" | tr -d ' \n')"
+            keytool -list -keystore "$STORE" -storepass "$KEYSTORE_PASSWORD" >/dev/null
+            echo "Keystore decoded and opened on compatibility pass."
+          else
+            cp "$RAW" "$STORE"
+            echo "::error::Decoded data is not a readable keystore container. Secret contents were not exposed."
+            exit 1
+          fi
           echo "store=$STORE" >> "$GITHUB_OUTPUT"
       - name: Validate keystore container and alias
         env:
@@ -62,9 +79,9 @@ jobs:
           STORE: ${{ steps.signing.outputs.store }}
         run: |
           set -euo pipefail
-          keytool -list -keystore "$STORE" -storepass "$KEYSTORE_PASSWORD" || { echo "::error::Keystore file decoded, but the keystore password or keystore format is invalid."; exit 1; }
-          keytool -list -keystore "$STORE" -storepass "$KEYSTORE_PASSWORD" -alias "$KEY_ALIAS" || { echo "::error::Keystore opened, but alias '$KEY_ALIAS' was not found. Check KEY_ALIAS."; exit 1; }
-          echo "Keystore container and requested alias are present."
+          keytool -list -keystore "$STORE" -storepass "$KEYSTORE_PASSWORD" >/dev/null
+          keytool -list -keystore "$STORE" -storepass "$KEYSTORE_PASSWORD" -alias "$KEY_ALIAS" >/dev/null || { echo "::error::Keystore opened, but alias '$KEY_ALIAS' was not found. Check KEY_ALIAS."; exit 1; }
+          echo "Keystore container and requested alias are valid."
       - name: Configure Gradle private signing
         env:
           KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
