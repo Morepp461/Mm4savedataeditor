@@ -1,7 +1,7 @@
 name: Android build and test
 on:
   push:
-    branches: [main]
+    branches: [main, 'fix/validate-release-keystore']
   pull_request:
     branches: [main]
   workflow_dispatch:
@@ -9,7 +9,7 @@ permissions:
   contents: read
 jobs:
   verify:
-    name: Unit tests and Android debug APK
+    name: Unit tests and Android APKs
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -34,21 +34,76 @@ jobs:
         run: |
           yes | sdkmanager --licenses >/dev/null
           sdkmanager "platforms;android-35" "build-tools;35.0.0"
+      - name: Prepare private release signing
+        id: signing
+        env:
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          if [ -n "$KEYSTORE_BASE64" ]; then
+            printf '%s' "$KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/mm4-release-key.jks"
+            test -s "$RUNNER_TEMP/mm4-release-key.jks"
+            echo "candidate=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "candidate=false" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Validate private release keystore
+        id: keycheck
+        if: steps.signing.outputs.candidate == 'true'
+        continue-on-error: true
+        env:
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          STORE="$RUNNER_TEMP/mm4-release-key.jks"
+          echo "Keystore byte count: $(wc -c < "$STORE")"
+          keytool -list -keystore "$STORE" -storepass "$KEYSTORE_PASSWORD" >/dev/null
+          keytool -list -keystore "$STORE" -storepass "$KEYSTORE_PASSWORD" -alias "$KEY_ALIAS" >/dev/null
+          keytool -certreq -alias "$KEY_ALIAS" -keystore "$STORE" -storepass "$KEYSTORE_PASSWORD" -keypass "$KEY_PASSWORD" -file "$RUNNER_TEMP/mm4-key-validation.csr" >/dev/null
+          rm -f "$RUNNER_TEMP/mm4-key-validation.csr"
+          echo "Private keystore and credentials validated."
+      - name: Enable private signing when valid
+        if: steps.keycheck.outcome == 'success'
+        env:
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+        run: |
+          echo "MM4_KEYSTORE_PATH=$RUNNER_TEMP/mm4-release-key.jks" >> "$GITHUB_ENV"
+          echo "MM4_KEYSTORE_PASSWORD=$KEYSTORE_PASSWORD" >> "$GITHUB_ENV"
+          echo "MM4_KEY_ALIAS=$KEY_ALIAS" >> "$GITHUB_ENV"
+          echo "MM4_KEY_PASSWORD=$KEY_PASSWORD" >> "$GITHUB_ENV"
+      - name: Use Android debug signing fallback
+        if: steps.keycheck.outcome != 'success'
+        run: echo "::warning::Private keystore unavailable or invalid. Building an installable APK signed with the Android debug key so testing can proceed."
       - name: Run codec unit tests
         run: gradle --no-daemon testDebugUnitTest
-      - name: Build debug APK
+      - name: Build debug and release APKs
         run: gradle --no-daemon assembleDebug assembleRelease
-      - name: Verify APK exists
-        run: test -s app/build/outputs/apk/debug/app-debug.apk
+      - name: Verify APKs exist
+        run: |
+          test -s app/build/outputs/apk/debug/app-debug.apk
+          test -s app/build/outputs/apk/release/app-release.apk
+      - name: Verify release signing
+        if: steps.signing.outputs.has_keystore == 'true'
+        run: |
+          jarsigner -verify -verbose -certs app/build/outputs/apk/release/app-release.apk
       - name: Upload installable debug APK
         uses: actions/upload-artifact@v4
         with:
           name: mm4-save-data-editor-debug
           path: app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
-      - name: Upload unsigned release APK
+      - name: Upload release APK
         uses: actions/upload-artifact@v4
         with:
-          name: mm4-save-data-editor-release-unsigned
-          path: app/build/outputs/apk/release/app-release-unsigned.apk
+          name: mm4-save-data-editor-release
+          path: app/build/outputs/apk/release/app-release.apk
           if-no-files-found: error
+
+# Trigger a fresh validation run after improving keystore diagnostics.
