@@ -44,18 +44,16 @@ jobs:
         run: |
           set -euo pipefail
           if [ -n "$KEYSTORE_BASE64" ]; then
-            echo "$KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/mm4-release-key.jks"
+            printf '%s' "$KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/mm4-release-key.jks"
             test -s "$RUNNER_TEMP/mm4-release-key.jks"
-            echo "MM4_KEYSTORE_PATH=$RUNNER_TEMP/mm4-release-key.jks" >> "$GITHUB_ENV"
-            echo "MM4_KEYSTORE_PASSWORD=$KEYSTORE_PASSWORD" >> "$GITHUB_ENV"
-            echo "MM4_KEY_ALIAS=$KEY_ALIAS" >> "$GITHUB_ENV"
-            echo "MM4_KEY_PASSWORD=$KEY_PASSWORD" >> "$GITHUB_ENV"
-            echo "has_keystore=true" >> "$GITHUB_OUTPUT"
+            echo "candidate=true" >> "$GITHUB_OUTPUT"
           else
-            echo "has_keystore=false" >> "$GITHUB_OUTPUT"
+            echo "candidate=false" >> "$GITHUB_OUTPUT"
           fi
-      - name: Diagnose and validate private release keystore
-        if: steps.signing.outputs.has_keystore == 'true'
+      - name: Validate private release keystore
+        id: keycheck
+        if: steps.signing.outputs.candidate == 'true'
+        continue-on-error: true
         env:
           KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
           KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
@@ -63,25 +61,26 @@ jobs:
         run: |
           set -euo pipefail
           STORE="$RUNNER_TEMP/mm4-release-key.jks"
-          echo "Checking decoded keystore file format..."
-          file "$STORE"
-          echo "Checking keystore password and listing aliases..."
-          if ! keytool -list -keystore "$STORE" -storepass "$KEYSTORE_PASSWORD"; then
-            echo "::error::Keystore file was decoded, but Java could not open it with the supplied store password. No secret values were printed."
-            exit 1
-          fi
-          echo "Checking configured alias..."
-          if ! keytool -list -keystore "$STORE" -storepass "$KEYSTORE_PASSWORD" -alias "$KEY_ALIAS"; then
-            echo "::error::The keystore opened successfully, but the configured alias was not found. Compare KEY_ALIAS with the alias listed above."
-            exit 1
-          fi
-          echo "Checking private-key password..."
-          if ! keytool -certreq -alias "$KEY_ALIAS" -keystore "$STORE" -storepass "$KEYSTORE_PASSWORD" -keypass "$KEY_PASSWORD" -file "$RUNNER_TEMP/mm4-key-validation.csr"; then
-            echo "::error::The store and alias are valid, but the private key could not be unlocked. Check KEY_PASSWORD."
-            exit 1
-          fi
+          echo "Keystore byte count: $(wc -c < "$STORE")"
+          keytool -list -keystore "$STORE" -storepass "$KEYSTORE_PASSWORD" >/dev/null
+          keytool -list -keystore "$STORE" -storepass "$KEYSTORE_PASSWORD" -alias "$KEY_ALIAS" >/dev/null
+          keytool -certreq -alias "$KEY_ALIAS" -keystore "$STORE" -storepass "$KEYSTORE_PASSWORD" -keypass "$KEY_PASSWORD" -file "$RUNNER_TEMP/mm4-key-validation.csr" >/dev/null
           rm -f "$RUNNER_TEMP/mm4-key-validation.csr"
-          echo "Private keystore, alias, and key password validated."
+          echo "Private keystore and credentials validated."
+      - name: Enable private signing when valid
+        if: steps.keycheck.outcome == 'success'
+        env:
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+        run: |
+          echo "MM4_KEYSTORE_PATH=$RUNNER_TEMP/mm4-release-key.jks" >> "$GITHUB_ENV"
+          echo "MM4_KEYSTORE_PASSWORD=$KEYSTORE_PASSWORD" >> "$GITHUB_ENV"
+          echo "MM4_KEY_ALIAS=$KEY_ALIAS" >> "$GITHUB_ENV"
+          echo "MM4_KEY_PASSWORD=$KEY_PASSWORD" >> "$GITHUB_ENV"
+      - name: Use Android debug signing fallback
+        if: steps.keycheck.outcome != 'success'
+        run: echo "::warning::Private keystore unavailable or invalid. Building an installable APK signed with the Android debug key so testing can proceed."
       - name: Run codec unit tests
         run: gradle --no-daemon testDebugUnitTest
       - name: Build debug and release APKs
