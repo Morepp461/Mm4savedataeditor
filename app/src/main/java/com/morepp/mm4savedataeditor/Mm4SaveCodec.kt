@@ -101,7 +101,13 @@ object Mm4SaveCodec {
 
     fun validate(document: Document): Boolean {
         val decoded = decode(encode(document), document.sourceName)
-        return decoded.info == document.info && decoded.data == document.data
+        return sameContent(decoded, document)
+    }
+
+    fun sameContent(left: Document, right: Document): Boolean {
+        // Compare serialized JSON rather than Gson tree equality: numeric primitive wrappers can differ after decoding.
+        return gson.toJson(left.info) == gson.toJson(right.info) &&
+            gson.toJson(left.data) == gson.toJson(right.data)
     }
 
     private fun inflate(source: ByteArray, expectedSize: Int): ByteArray {
