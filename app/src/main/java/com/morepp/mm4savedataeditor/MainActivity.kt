@@ -477,15 +477,18 @@ private fun OverviewPage(doc: Mm4SaveCodec.Document, go: (String) -> Unit) {
 private fun DriverPage(doc: Mm4SaveCodec.Document, selected: String?, onSelect: (String?) -> Unit, onEdit: (String,List<String>,JsonElement)->Unit) {
     data class DriverRecord(val path:List<String>,val data:JsonObject,val id:String,val name:String)
     val drivers=remember(doc.data) {
-        collectTypedObjects(doc.data,"Driver").mapNotNull { (path,obj) ->
+        val all=collectObjectsWithId(doc.data).associateBy { it.second.get("\$id")?.asString }
+        val roster=doc.data.getAsJsonObject("driverManager")?.getAsJsonArray("m_Drivers")
+        roster?.mapNotNull { ref ->
+            val id=ref.asJsonObject.get("\$ref")?.asString ?: return@mapNotNull null
+            val pair=all[id] ?: return@mapNotNull null
+            val (path,obj)=pair
             val details=obj.getAsJsonObject("m_PersonDetails") ?: return@mapNotNull null
-            val id=obj.get("\$id")?.asString ?: path.joinToString("/")
             val name=details.get("name")?.asString?.trim().orEmpty().ifBlank { "Unnamed driver" }
             DriverRecord(path,obj,id,name)
-        }.distinctBy { it.id }.sortedBy { it.name.lowercase() }
+        }?.distinctBy { it.id }?.sortedBy { it.name.lowercase() }.orEmpty()
     }
-    val manager=doc.data.getAsJsonObject("driverManager")
-    val referenced=manager?.getAsJsonArray("m_Drivers")?.size() ?: 0
+    val referenced=doc.data.getAsJsonObject("driverManager")?.getAsJsonArray("m_Drivers")?.size() ?: 0
     val chosen=drivers.firstOrNull { it.id==selected }
     if(chosen==null) {
         var search by remember { mutableStateOf("") }
@@ -493,7 +496,7 @@ private fun DriverPage(doc: Mm4SaveCodec.Document, selected: String?, onSelect: 
             GlassCard(Modifier.fillMaxWidth().padding(horizontal=12.dp, vertical=6.dp)) {
                 Text("DRIVER DATABASE",color=Gold,fontWeight=FontWeight.Bold,fontSize=11.sp)
                 Text("${drivers.size} driver profiles available",fontSize=22.sp,fontWeight=FontWeight.Black)
-                Text("${referenced} driver references in career roster. Only fully stored profiles are listed for safe editing.",color=Muted,fontSize=10.sp)
+                Text("${referenced} driver references in career roster. Profiles are resolved by ID, including records without a \$type marker.",color=Muted,fontSize=10.sp)
             }
             OutlinedTextField(search,{search=it},Modifier.fillMaxWidth().padding(horizontal=14.dp, vertical=6.dp),placeholder={Text("Search driver name")},leadingIcon={Icon(Icons.Default.Search,null)},singleLine=true)
             LazyColumn(contentPadding=PaddingValues(14.dp),verticalArrangement=Arrangement.spacedBy(8.dp)) {
@@ -683,22 +686,26 @@ private fun EntityCatalogPage(doc: Mm4SaveCodec.Document, category: String, onEd
                     CatalogRecord(path+listOf("car"),car,name,"Team Car")
                 }?.distinctBy { it.path.joinToString("/") }.orEmpty()
             }
-            else -> collectTypedObjects(doc.data,"Engineer").plus(
-                collectTypedObjects(doc.data,"Designer")
-            ).plus(collectTypedObjects(doc.data,"Strategist")).plus(
-                collectTypedObjects(doc.data,"Mechanic")
-            ).filter { (path,obj) ->
-                val type=obj.get("\$type")?.asString ?: ""
-                when(category) {
-                    "staff" -> true
-                    else -> false
-                }
-            }.map { (path,obj) ->
-                val type=obj.get("\$type")?.asString ?: "Staff"
-                val person=obj.getAsJsonObject("m_PersonDetails")
-                val name=person?.get("name")?.asString ?: obj.get("name")?.asString ?: "$type • ${obj.get("\$id")?.asString ?: "—"}"
-                CatalogRecord(path,obj,name,type)
-            }.distinctBy { it.data.get("\$id")?.asString ?: it.path.joinToString("/") }
+            else -> {
+                val driverIds=doc.data.getAsJsonObject("driverManager")?.getAsJsonArray("m_Drivers")
+                    ?.mapNotNull { it.asJsonObject.get("\$ref")?.asString }?.toSet().orEmpty()
+                collectObjectsWithId(doc.data).mapNotNull { (path,obj) ->
+                    val id=obj.get("\$id")?.asString ?: return@mapNotNull null
+                    if(id in driverIds) return@mapNotNull null
+                    val person=obj.getAsJsonObject("m_PersonDetails") ?: return@mapNotNull null
+                    val personName=person.get("name")?.asString?.trim().orEmpty()
+                    if(personName.isBlank() || personName=="Morepp Del Rey") return@mapNotNull null
+                    val joined=path.joinToString("/")
+                    val type=when {
+                        joined.contains("m_EngineerContractController") || obj.get("\$type")?.asString=="Engineer" -> "Engineer"
+                        joined.contains("m_MechanicContractController") -> "Mechanic"
+                        joined.contains("m_StrategistContractController") -> "Strategist"
+                        joined.contains("m_Applicants") -> "Staff Applicant"
+                        else -> obj.get("\$type")?.asString ?: "Staff"
+                    }
+                    CatalogRecord(path,obj,personName,type)
+                }.distinctBy { it.data.get("\$id")?.asString }.sortedWith(compareBy({it.type},{it.name}))
+            }
         }
     }
     val chosen=records.firstOrNull { it.path.joinToString("/") == selected }
