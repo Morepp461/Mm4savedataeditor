@@ -265,6 +265,7 @@ class JsonTreeEditorTest {
                     addProperty("\$id",teamEntityId)
                     addProperty("m_TeamID",numericTeamId)
                     addProperty("name","Template Team $numericTeamId")
+                    addProperty("shortName","Template")
                     add("m_TeamDriverData",JsonObject().apply { add("m_Data",driverRows) })
                     add("m_Championship",JsonObject().apply { addProperty("\$ref",championshipId) })
                 })
@@ -289,8 +290,10 @@ class JsonTreeEditorTest {
 
         assertTrue(applyOfficialF1Preset2026(data))
         val byId=collectObjectsWithId(data).associate { it.second.get("\$id").asString to it.second }
-        assertEquals("Template Team 1",byId["team-1"]!!.get("name").asString)
+        assertEquals("McLaren Mastercard F1 Team",byId["team-1"]!!.get("name").asString)
+        assertEquals("McLaren",byId["team-1"]!!.get("shortName").asString)
         assertEquals("Template Driver 1-0",byId["driver-1-0"]!!.getAsJsonObject("m_PersonDetails").get("name").asString)
+        assertEquals("Template Team 11",byId["team-11"]!!.get("name").asString)
         assertEquals(40,(0..3).sumOf { division ->
             byId["champ-$division"]!!.getAsJsonArray("m_TeamIDs").size()
         })
@@ -399,6 +402,13 @@ class JsonTreeEditorTest {
         assertEquals(0,unlockSupplierNetwork(data))
         assertEquals(0,data.getAsJsonObject("supplierNetworkManager")
             .getAsJsonObject("m_NodeDictionary").size())
+    }
+
+    @Test
+    fun influenceBalanceEditorHasTwoBillionLimit() {
+        val bounds=editorBounds(Mm4SaveCodec.Document(JsonObject(),JsonObject(),"influence.msv"),"Game Data",listOf("influenceManager","m_Influence"))
+        assertEquals("0",bounds.first)
+        assertEquals("2000000000",bounds.second)
     }
 
     @Test

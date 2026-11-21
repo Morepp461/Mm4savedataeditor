@@ -318,7 +318,7 @@ private fun EditorApp() {
                                         undoStack = emptyList()
                                         redoStack = emptyList()
                                         val successText = when {
-                                            action == "official_f1_2026" -> "Template F1–F4 berhasil divalidasi dan diterapkan."
+                                            action == "official_f1_2026" -> "Nama 10 tim F1 berhasil diterapkan. Nama pembalap dan divisi lain tetap."
                                             action == "rename_divisions" -> "Label divisi berhasil diperbarui."
                                             action.startsWith("swap_teams|") -> "Tim berhasil ditukar antar divisi."
                                             action.startsWith("move_driver|") -> "Pembalap berhasil dipindahkan."
@@ -642,7 +642,7 @@ private fun CareerWorkspace(
                 "World" -> WorldSettingsPage(document, onEdit)
                 "Diagnostics" -> SaveDiagnosticsPage(document)
                 "Save Info" -> InfoPage(document, onEdit)
-                "God Mode" -> GodModePage(document, onGodAction)
+                "God Mode" -> GodModePage(document, onGodAction, onEdit)
                 else -> AdvancedPage(document, onEdit)
             }
         }
@@ -1723,10 +1723,10 @@ private fun championshipEntityById(data:JsonObject, championshipId:Int):JsonObje
 }
 
 internal fun careerDivisionLabel(championshipId:Int):String = when(championshipId) {
-    0 -> "F1 • World Motorsport"
-    1 -> "F2 • Asia Pacific Super Cup"
-    2 -> "F3 • European Racing"
-    3 -> "F4 • Open Wheel Sprint"
+    0 -> "F1"
+    1 -> "F2"
+    2 -> "F3"
+    3 -> "F4"
     else -> "Divisi $championshipId"
 }
 
@@ -1802,7 +1802,24 @@ internal fun applyOfficialF1Preset2026(data:JsonObject):Boolean {
             }) return false
         }
     }
-    return seenTeams.size==40
+    if(seenTeams.size!=40) return false
+    // Rename only the ten teams in championship ID 0. Driver identities, contracts,
+    // rosters and teams in divisions 1-3 remain unchanged.
+    val f1Ids=championships.first().getAsJsonArray("m_TeamIDs")
+    val renamePlan=f1Ids.mapIndexed { index, numericIdElement ->
+        val numericId=numericIdElement.asInt
+        val team=all.values.firstOrNull {
+            it.second.get("m_TeamID")?.takeIf { value -> value.isJsonPrimitive && value.asJsonPrimitive.isNumber }?.asInt==numericId
+        }?.second ?: return false
+        val preset=OfficialF1Lineup2026.getOrNull(index) ?: return false
+        if(team.get("name")?.isJsonPrimitive!=true || team.get("shortName")?.isJsonPrimitive!=true) return false
+        Triple(team,preset.name,preset.shortName)
+    }
+    renamePlan.forEach { (team,name,shortName) ->
+        team.addProperty("name",name)
+        team.addProperty("shortName",shortName)
+    }
+    return true
 }
 
 internal fun renameCareerDivisions(data:JsonObject):Int {
@@ -1937,7 +1954,7 @@ private fun applyGodModeAction(current:Mm4SaveCodec.Document,action:String):Mm4S
 }
 
 @Composable
-private fun GodModePage(doc:Mm4SaveCodec.Document,onAction:(String)->Unit) {
+private fun GodModePage(doc:Mm4SaveCodec.Document,onAction:(String)->Unit,onEdit:(String,List<String>,JsonElement)->Unit) {
     val supplierManager=doc.data.get("supplierNetworkManager")?.takeIf { it.isJsonObject }?.asJsonObject
     val supplierNodeCount=supplierManager?.get("m_NodeDictionary")?.let { node ->
         when {
@@ -1947,6 +1964,7 @@ private fun GodModePage(doc:Mm4SaveCodec.Document,onAction:(String)->Unit) {
         }
     } ?: 0
     val balance=doc.data.getAsJsonObject("financeManager")?.get("m_Balance")?.asLong ?: 0L
+    val influence=doc.data.getAsJsonObject("influenceManager")?.get("m_Influence")
     val hq=doc.data.getAsJsonObject("headquarters")?.getAsJsonArray("m_Upgrades")
     val unlocked=hq?.count { row ->
         row.isJsonObject && row.asJsonObject.get("Value")?.takeIf { it.isJsonObject }
@@ -2009,6 +2027,20 @@ private fun GodModePage(doc:Mm4SaveCodec.Document,onAction:(String)->Unit) {
                 Text("KEUANGAN TANPA BATAS",fontWeight=FontWeight.Bold)
                 Text("Saldo sekarang ${formatMoney(balance)}",color=Muted,fontSize=11.sp)
                 Button(onClick={onAction("max_balance")},modifier=Modifier.fillMaxWidth(),colors=ButtonDefaults.buttonColors(containerColor=Red)) { Text("SET SALDO £2 MILIAR") }
+            }
+        }
+        item {
+            GlassCard(Modifier.fillMaxWidth()) {
+                Text("INFLUENCE BALANCE",fontWeight=FontWeight.Bold)
+                Text("Saldo influence saat ini: ${influence?.asString ?: "—"}",color=Muted,fontSize=11.sp)
+                if(influence?.isJsonPrimitive==true && influence.asJsonPrimitive.isNumber) {
+                    OutlinedButton(
+                        onClick={onEdit("Game Data",listOf("influenceManager","m_Influence"),influence)},
+                        modifier=Modifier.fillMaxWidth()
+                    ) { Text("EDIT INFLUENCE") }
+                } else {
+                    Text("Field influenceManager.m_Influence tidak ditemukan pada save ini.",color=Red,fontSize=10.sp)
+                }
             }
         }
         item {
@@ -2379,6 +2411,7 @@ internal fun editorBounds(document:Mm4SaveCodec.Document?,root:String,path:List<
     return when {
         path.last() in setOf("m_Stat","m_Potential") -> "0" to "20"
         path==listOf("financeManager","m_Balance") -> "0" to "2000000000"
+        path==listOf("influenceManager","m_Influence") -> "0" to "2000000000"
         path.firstOrNull()=="headquarters" && path.lastOrNull()=="State" -> "0" to "2"
         path.firstOrNull()=="headquarters" && path.lastOrNull()=="pathType" -> "0" to "4"
         path.size==4 && path[0]=="headquarters" && path[1]=="m_CurrentTierInformation" && path[3]=="Value" -> {
@@ -2432,6 +2465,9 @@ private fun EditValueDialog(target: EditTarget, onClose: () -> Unit, onSave: (Js
                             Text("20 • Maksimum", color = Muted, fontSize = 9.sp)
                         }
                         Text("Skala atribut 0–20. Pilih nilai dengan menggeser slider.", color = Muted, fontSize = 10.sp)
+                    }
+                    isNumber && target.path==listOf("influenceManager","m_Influence") -> {
+                        OutlinedTextField(value=value,onValueChange={ typed -> if(typed.isEmpty()) value="0" else if(typed.all { it.isDigit() }) value=typed },modifier=Modifier.fillMaxWidth(),label={ Text("Influence") },supportingText={ Text("Masukkan 0 sampai 2.000.000.000") },singleLine=true)
                     }
                     isNumber && target.path==listOf("financeManager","m_Balance") -> {
                         OutlinedTextField(
