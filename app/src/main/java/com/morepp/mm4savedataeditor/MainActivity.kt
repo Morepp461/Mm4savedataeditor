@@ -1313,7 +1313,7 @@ private fun EditValueDialog(target: EditTarget, onClose: () -> Unit, onSave: (Js
         },
         confirmButton = {
             Button(onClick = {
-                val result = when { isBoolean -> JsonPrimitive(value.toBoolean()); isNumber -> JsonPrimitive(value.toDouble()); else -> JsonPrimitive(value) }
+                val result = when { isBoolean -> com.google.gson.JsonPrimitive(value.toBoolean()); isNumber -> com.google.gson.JsonPrimitive(value.toDouble()); else -> com.google.gson.JsonPrimitive(value) }
                 onSave(result)
             }, colors = ButtonDefaults.buttonColors(containerColor = Red)) { Text("SAVE CHANGES") }
         },
