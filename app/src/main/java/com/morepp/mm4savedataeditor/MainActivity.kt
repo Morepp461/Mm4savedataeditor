@@ -572,8 +572,11 @@ private fun DriverPage(doc: Mm4SaveCodec.Document, selected: String?, onSelect: 
                         Text("${value?.asString ?: "—"} / 20",color=Gold,fontWeight=FontWeight.Bold)
                         IconButton(onClick={if(value!=null) onEdit("Game Data",profilePath+listOf("m_Stats","m_Stats","[$n]","m_Stat"),value)}) { Icon(Icons.Default.Edit,null,tint=Muted) }
                     }
-                    val modifier=stat.get("m_StatModifier")
-                    if(modifier!=null) Text("Modifier: ${preview(modifier)}",color=Muted,fontSize=9.sp)
+                    Row(horizontalArrangement=Arrangement.spacedBy(8.dp)) {
+                        if(potential!=null) TextButton(onClick={onEdit("Game Data",profilePath+listOf("m_Stats","m_Stats","[$n]","m_Potential"),potential)}) { Text("Edit potential",fontSize=9.sp) }
+                        val modifier=stat.get("m_StatModifier")
+                        if(modifier!=null) TextButton(onClick={onEdit("Game Data",profilePath+listOf("m_Stats","m_Stats","[$n]","m_StatModifier"),modifier)}) { Text("Modifier ${preview(modifier)}",fontSize=9.sp) }
+                    }
                 }
             }
             item { Text("OTHER DRIVER SETTINGS",color=Gold,fontWeight=FontWeight.Bold,fontSize=11.sp) }
@@ -620,7 +623,7 @@ private fun TeamPage(doc: Mm4SaveCodec.Document, onEdit: (String,List<String>,Js
     val details = doc.data.getAsJsonObject("player")?.getAsJsonObject("m_TeamDetails")
     val colors = details?.getAsJsonObject("m_TeamColors")
     val teamName = doc.info.get("teamName")?.asString ?: "Career team"
-    val colorNames = listOf("primaryColor", "secondaryColor", "tertiaryColor", "trimColor", "carColor", "staffPrimaryColor", "staffSecondaryColor", "helmetColour")
+    val colorNames = listOf("primaryColor", "secondaryColor", "tertiaryColor", "trimColor", "carColor", "staffPrimaryColor", "staffSecondaryColor", "sponsorsColor", "sponsorsDarkColour", "sponsorsLightColour", "helmetColour")
     LazyColumn(contentPadding = PaddingValues(14.dp), verticalArrangement = Arrangement.spacedBy(9.dp)) {
         item { GlassCard(Modifier.fillMaxWidth()) {
             Text("TEAM PROFILE", color = Gold, fontWeight = FontWeight.Bold, fontSize = 10.sp)
