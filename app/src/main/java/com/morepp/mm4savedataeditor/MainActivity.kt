@@ -698,7 +698,7 @@ private fun EntityCatalogPage(doc: Mm4SaveCodec.Document, category: String, onEd
                     if(id in driverIds) return@mapNotNull null
                     val person=obj.getAsJsonObject("m_PersonDetails") ?: return@mapNotNull null
                     val personName=person.get("name")?.asString?.trim().orEmpty()
-                    if(personName.isBlank() || personName=="Morepp Del Rey") return@mapNotNull null
+                    val displayName=personName.ifBlank { "Unnamed staff • " + (obj.get("\\$id")?.asString ?: "Unknown ID") }
                     val joined=path.joinToString("/")
                     val type=when {
                         joined.contains("m_EngineerContractController") || obj.get("\$type")?.asString=="Engineer" -> "Engineer"
@@ -707,7 +707,7 @@ private fun EntityCatalogPage(doc: Mm4SaveCodec.Document, category: String, onEd
                         joined.contains("m_Applicants") -> "Staff Applicant"
                         else -> obj.get("\$type")?.asString ?: "Staff"
                     }
-                    CatalogRecord(path,obj,personName,type)
+                    CatalogRecord(path,obj,displayName,type)
                 }.distinctBy { it.data.get("\$id")?.asString }.sortedWith(compareBy({it.type},{it.name}))
             }
         }
