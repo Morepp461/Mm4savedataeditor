@@ -742,7 +742,7 @@ private fun HqPage(doc: Mm4SaveCodec.Document,onEdit:(String,List<String>,JsonEl
     val hq=doc.data.getAsJsonObject("headquarters") ?: JsonObject()
     val upgrades=hq.get("m_Upgrades")
     val completed=hq.get("m_CompletedUpgrades")
-    val entries:List<Pair<String,JsonElement>>=when {
+    val entries: List<Pair<String, JsonElement>> = when {
         upgrades==null -> emptyList()
         upgrades.isJsonObject -> upgrades.asJsonObject.entrySet().map { it.key to it.value }.sortedBy { it.first.toIntOrNull() ?: Int.MAX_VALUE }
         upgrades.isJsonArray -> upgrades.asJsonArray.mapIndexed { i,v -> i.toString() to v }
@@ -753,7 +753,7 @@ private fun HqPage(doc: Mm4SaveCodec.Document,onEdit:(String,List<String>,JsonEl
             Text("HEADQUARTERS",color=Gold,fontWeight=FontWeight.Bold,fontSize=11.sp)
             val count=completed?.let { if(it.isJsonArray) it.asJsonArray.size() else if(it.isJsonObject) it.asJsonObject.size() else 0 } ?: 0
             Text("$"+"count completed upgrades",fontSize=22.sp,fontWeight=FontWeight.Black)
-            Text("$"+"{entries.size} facility records",color=Muted,fontSize=11.sp)
+            Text("${entries.size} facility records",color=Muted,fontSize=11.sp)
             Text("Status fasilitas ditampilkan sebagai kontrol yang bisa dipahami.",color=Muted,fontSize=10.sp)
         } }
         items(entries,key={it.first}) { (key,value) ->
@@ -763,7 +763,7 @@ private fun HqPage(doc: Mm4SaveCodec.Document,onEdit:(String,List<String>,JsonEl
             val weeks=obj?.get("WeeksToUnlock")
             val pathType=obj?.get("PathType")
             GlassCard(Modifier.fillMaxWidth()) {
-                Text("Facility $"+"{key.toIntOrNull()?.plus(1) ?: key}",fontWeight=FontWeight.Bold)
+                Text("Facility ${key.toIntOrNull()?.plus(1) ?: key}",fontWeight=FontWeight.Bold)
                 Text(when(state?.takeIf { it.isJsonPrimitive }?.asInt) { 1 -> "Unlocked / Active"; 2 -> "In progress"; 0 -> "Locked"; else -> "Status not identified" },color=if(state?.takeIf { it.isJsonPrimitive }?.asInt==1) Color(0xFF82D7A2) else Gold,fontSize=11.sp)
                 if(weeks!=null) InfoLine("Weeks to unlock",preview(weeks))
                 if(pathType!=null) InfoLine("Upgrade path",preview(pathType))
