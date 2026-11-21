@@ -451,68 +451,200 @@ private fun JsonBrowser(
     moduleFilter: String?,
     onEdit: (List<String>, JsonElement) -> Unit
 ) {
-    val entries = remember(root, query, moduleFilter) {
-        flatten(root).filter { (path, value) ->
+    var expanded by remember(root, moduleFilter) { mutableStateOf(setOf<String>()) }
+    val allNodes = remember(root) { flatten(root) }
+    val matches = remember(allNodes, query, moduleFilter) {
+        allNodes.filter { (path, value) ->
             (moduleFilter == null || path.firstOrNull() == moduleFilter) &&
                 (query.isBlank() ||
                     path.joinToString(".").contains(query, ignoreCase = true) ||
-                    ((value.isJsonPrimitive || value.isJsonNull) &&
-                        value.toString().contains(query, ignoreCase = true)))
+                    value.toString().contains(query, ignoreCase = true))
         }
     }
+    val categories = remember(root, moduleFilter) {
+        root.entrySet().filter { moduleFilter == null || it.key == moduleFilter }
+            .sortedBy { it.key.lowercase() }
+    }
     Column(Modifier.fillMaxSize()) {
-        Text(
-            "$rootName • ${entries.size} NODE",
-            color = Gold,
-            fontSize = 10.sp,
-            fontWeight = FontWeight.Bold,
-            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
-        )
+        Row(
+            Modifier.fillMaxWidth().padding(horizontal = 18.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column(Modifier.weight(1f)) {
+                Text(if (query.isBlank()) "WORKSPACE / $rootName" else "HASIL PENCARIAN",
+                    color = Gold, fontSize = 10.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.sp)
+                Text(
+                    if (query.isBlank()) "${categories.size} kelompok data • ${allNodes.size} field"
+                    else "${matches.size} hasil ditemukan",
+                    color = Muted, fontSize = 11.sp
+                )
+            }
+            if (query.isBlank()) {
+                TextButton(onClick = { expanded = if (expanded.size == categories.size) emptySet() else categories.map { it.key }.toSet() }) {
+                    Text(if (expanded.size == categories.size) "TUTUP SEMUA" else "BUKA SEMUA",
+                        color = Gold, fontSize = 9.sp)
+                }
+            }
+        }
         LazyColumn(
             Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp)
+            contentPadding = PaddingValues(start = 14.dp, end = 14.dp, top = 2.dp, bottom = 28.dp),
+            verticalArrangement = Arrangement.spacedBy(9.dp)
         ) {
-            items(entries, key = { it.first.joinToString("/") }) { (path, value) ->
-                Row(
-                    Modifier.fillMaxWidth()
-                        .padding(vertical = 3.dp)
-                        .clip(RoundedCornerShape(12.dp))
-                        .background(Panel)
-                        .clickable { onEdit(path, value) }
-                        .padding(horizontal = 12.dp, vertical = 11.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Column(Modifier.weight(1f)) {
-                        Text(
-                            path.lastOrNull() ?: rootName,
-                            fontWeight = FontWeight.SemiBold,
-                            fontSize = 13.sp
-                        )
-                        Text(
-                            path.dropLast(1).joinToString(" › "),
-                            color = Muted,
-                            fontSize = 9.sp,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
-                        Text(
-                            preview(value),
-                            color = Gold,
-                            fontSize = 11.sp,
-                            maxLines = 2,
-                            overflow = TextOverflow.Ellipsis
-                        )
+            if (query.isNotBlank()) {
+                items(matches, key = { it.first.joinToString("/") }) { (path, value) ->
+                    FieldRow(path, value, 0, onEdit)
+                }
+            } else {
+                items(categories, key = { it.key }) { entry ->
+                    val path = listOf(entry.key)
+                    val isOpen = entry.key in expanded
+                    val count = flatten(entry.value).size + 1
+                    Column(
+                        Modifier.fillMaxWidth().clip(RoundedCornerShape(18.dp))
+                            .background(Brush.linearGradient(listOf(Color(0xFF242B34), Color(0xFF1A2027))))
+                            .padding(1.dp)
+                    ) {
+                        Row(
+                            Modifier.fillMaxWidth().clip(RoundedCornerShape(17.dp))
+                                .background(Panel).clickable {
+                                    if (entry.value.isJsonObject || entry.value.isJsonArray) {
+                                        expanded = if (isOpen) expanded - entry.key else expanded + entry.key
+                                    } else onEdit(path, entry.value)
+                                }.padding(horizontal = 15.dp, vertical = 15.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Box(
+                                Modifier.size(40.dp).clip(RoundedCornerShape(12.dp))
+                                    .background(Color(0xFF30313A)),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(categoryIcon(entry.key), contentDescription = null, tint = Gold, modifier = Modifier.size(20.dp))
+                            }
+                            Spacer(Modifier.width(12.dp))
+                            Column(Modifier.weight(1f)) {
+                                Text(humanLabel(entry.key), fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                                Text(categoryDescription(entry.value, count), color = Muted, fontSize = 10.sp)
+                            }
+                            Text(count.toString(), color = Gold, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                            Spacer(Modifier.width(8.dp))
+                            Icon(
+                                if (isOpen) Icons.Default.ExpandLess else if (entry.value.isJsonObject || entry.value.isJsonArray) Icons.Default.ExpandMore else Icons.Default.Edit,
+                                contentDescription = if (isOpen) "Tutup kelompok" else "Buka kelompok",
+                                tint = Muted, modifier = Modifier.size(20.dp)
+                            )
+                        }
+                        if (isOpen) {
+                            val children = if (entry.value.isJsonObject)
+                                entry.value.asJsonObject.entrySet().sortedBy { it.key.lowercase() }.map { it.key to it.value }
+                            else if (entry.value.isJsonArray)
+                                entry.value.asJsonArray.mapIndexed { index, item -> "[$index]" to item }
+                            else emptyList()
+                            children.forEach { (key, value) ->
+                                TreeField(
+                                    label = key,
+                                    value = value,
+                                    path = path + key,
+                                    depth = 1,
+                                    expanded = expanded,
+                                    onToggle = { childPath ->
+                                        val id = childPath.joinToString("/")
+                                        expanded = if (id in expanded) expanded - id else expanded + id
+                                    },
+                                    onEdit = onEdit
+                                )
+                            }
+                        }
                     }
-                    Icon(
-                        Icons.Default.Edit,
-                        contentDescription = "Edit field",
-                        tint = Muted,
-                        modifier = Modifier.size(16.dp)
-                    )
                 }
             }
         }
     }
+}
+
+@Composable
+private fun TreeField(
+    label: String,
+    value: JsonElement,
+    path: List<String>,
+    depth: Int,
+    expanded: Set<String>,
+    onToggle: (List<String>) -> Unit,
+    onEdit: (List<String>, JsonElement) -> Unit
+) {
+    val id = path.joinToString("/")
+    val isContainer = value.isJsonObject || value.isJsonArray
+    val isOpen = id in expanded
+    Column {
+        Row(
+            Modifier.fillMaxWidth().padding(start = (depth * 13).dp, end = 9.dp)
+                .clickable { if (isContainer) onToggle(path) else onEdit(path, value) }
+                .padding(start = 12.dp, end = 8.dp, top = 11.dp, bottom = 11.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Box(Modifier.width(3.dp).height(28.dp).clip(RoundedCornerShape(4.dp)).background(if (isContainer) Gold else Red))
+            Spacer(Modifier.width(11.dp))
+            Column(Modifier.weight(1f)) {
+                Text(humanLabel(label), fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                Text(preview(value), color = if (isContainer) Muted else Gold, fontSize = 10.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            }
+            Icon(
+                if (isContainer) { if (isOpen) Icons.Default.ExpandLess else Icons.Default.ChevronRight } else Icons.Default.Edit,
+                contentDescription = null, tint = Muted, modifier = Modifier.size(17.dp)
+            )
+        }
+        if (isOpen && value.isJsonObject) {
+            value.asJsonObject.entrySet().sortedBy { it.key.lowercase() }.forEach { (key, child) ->
+                TreeField(key, child, path + key, depth + 1, expanded, onToggle, onEdit)
+            }
+        } else if (isOpen && value.isJsonArray) {
+            value.asJsonArray.forEachIndexed { index, child ->
+                TreeField("Item ${index + 1}", child, path + "[$index]", depth + 1, expanded, onToggle, onEdit)
+            }
+        }
+    }
+}
+
+@Composable
+private fun FieldRow(path: List<String>, value: JsonElement, depth: Int, onEdit: (List<String>, JsonElement) -> Unit) {
+    Row(
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(Panel)
+            .clickable { onEdit(path, value) }.padding(14.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Column(Modifier.weight(1f)) {
+            Text(humanLabel(path.lastOrNull() ?: "Field"), fontWeight = FontWeight.Bold, fontSize = 13.sp)
+            Text(path.dropLast(1).joinToString(" / "), color = Muted, fontSize = 9.sp)
+            Text(preview(value), color = Gold, fontSize = 11.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
+        }
+        Icon(Icons.Default.Edit, contentDescription = "Edit", tint = Muted)
+    }
+}
+
+private fun humanLabel(raw: String): String {
+    val spaced = raw.replace(Regex("([a-z0-9])([A-Z])"), "$1 $2")
+        .replace('_', ' ').replace('-', ' ')
+        .replace(Regex("\\[(\\d+)]"), " $1")
+    return spaced.split(' ').filter { it.isNotBlank() }
+        .joinToString(" ") { word -> word.replaceFirstChar { it.uppercase() } }
+}
+
+private fun categoryDescription(value: JsonElement, count: Int): String = when {
+    value.isJsonObject -> "${value.asJsonObject.size()} data di dalam kelompok"
+    value.isJsonArray -> "${value.asJsonArray.size()} item tersimpan"
+    else -> "Nilai: ${preview(value).take(48)}"
+}
+
+@Composable
+private fun categoryIcon(key: String) = when {
+    key.contains("team", true) || key.contains("club", true) -> Icons.Default.Groups
+    key.contains("driver", true) || key.contains("staff", true) -> Icons.Default.Person
+    key.contains("race", true) || key.contains("event", true) -> Icons.Default.Flag
+    key.contains("car", true) || key.contains("vehicle", true) -> Icons.Default.DirectionsCar
+    key.contains("money", true) || key.contains("finance", true) || key.contains("budget", true) -> Icons.Default.AccountBalance
+    key.contains("date", true) || key.contains("season", true) -> Icons.Default.CalendarMonth
+    key.contains("color", true) || key.contains("visual", true) -> Icons.Default.Palette
+    else -> Icons.Default.Folder
 }
 
 private fun preview(value: JsonElement): String = when {
