@@ -145,6 +145,36 @@ private fun EditorApp() {
         }
     }
 
+    val templateFile = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri:Uri? ->
+        val latest=document
+        if(uri!=null && latest!=null) scope.launch {
+            busy=true
+            try {
+                val templateDocument=withContext(Dispatchers.IO) {
+                    val input=context.contentResolver.openInputStream(uri) ?: error("Tidak bisa membaca file template.")
+                    val bytes=input.use { readSaveBytes(it) }
+                    Mm4SaveCodec.decode(bytes,uri.lastPathSegment ?: "F1-F4-template.msv")
+                }
+                val changed=withContext(Dispatchers.Default) {
+                    applyGodModeAction(latest,"official_f1_2026",templateDocument.data)
+                }
+                if(changed!=null) {
+                    document=changed
+                    hasChanges=true
+                    undoStack=emptyList()
+                    redoStack=emptyList()
+                    snackbarHostState.showSnackbar("Template diterapkan: 40 tim dan 80 profil pembalap beserta atributnya. Kontrak dan riwayat career dipertahankan.")
+                } else {
+                    snackbarHostState.showSnackbar("Template tidak cocok. Dibutuhkan 4 divisi, masing-masing 10 tim dan 2 pembalap per tim. Tidak ada perubahan diterapkan.")
+                }
+            } catch(failure:Exception) {
+                snackbarHostState.showSnackbar("Gagal membaca atau menerapkan template: ${failure.message ?: "file tidak valid"}")
+            } finally {
+                busy=false
+            }
+        }
+    }
+
     val requestOpen = {
         if (hasChanges) confirmDiscardOpen = true
         else openFile.launch(arrayOf("*/*"))
@@ -309,6 +339,11 @@ private fun EditorApp() {
                             scope.launch {
                                 busy = true
                                 try {
+                                    if(action=="official_f1_2026") {
+                                        templateFile.launch(arrayOf("*/*"))
+                                        busy=false
+                                        return@launch
+                                    }
                                     val changed = withContext(Dispatchers.Default) {
                                         applyGodModeAction(latest, action)
                                     }
@@ -318,7 +353,7 @@ private fun EditorApp() {
                                         undoStack = emptyList()
                                         redoStack = emptyList()
                                         val successText = when {
-                                            action == "official_f1_2026" -> "40 nama tim F1–F4 berhasil diterapkan dari template SlotTwo.msv. Data karier lainnya dipertahankan."
+                                            action == "official_f1_2026" -> "Template tim dan 80 profil pembalap berhasil diterapkan."
                                             action == "rename_divisions" -> "Label divisi berhasil diperbarui."
                                             action.startsWith("swap_teams|") -> "Tim berhasil ditukar antar divisi."
                                             action.startsWith("move_driver|") -> "Pembalap berhasil dipindahkan."
@@ -332,7 +367,7 @@ private fun EditorApp() {
                                         snackbarHostState.showSnackbar(successText)
                                     } else {
                                         val failureText = when {
-                                            action == "official_f1_2026" -> "Template gagal: empat championship harus memiliki 10 tim dan semua nama tim harus tersedia."
+                                            action == "official_f1_2026" -> "Template tidak cocok: dibutuhkan 4 divisi, 10 tim dan 2 pembalap per tim."
                                             action == "rename_divisions" -> "Nama divisi tidak tersimpan sebagai teks di format save ini."
                                             action == "unlock_suppliers" -> "Supplier tidak diubah: struktur node tidak ditemukan atau sudah terbuka."
                                             else -> "Operasi gagal. Data save tidak diubah."
@@ -2003,9 +2038,9 @@ private fun GodModePage(doc:Mm4SaveCodec.Document,onAction:(String)->Unit,onEdit
         item {
             GlassCard(Modifier.fillMaxWidth()) {
                 Text("F1–F4 SAVE TEMPLATE",color=Gold,fontWeight=FontWeight.Bold)
-                Text("Menggunakan 40 nama tim dan short name persis dari template SlotTwo.msv, sesuai urutan tim pada championship ID 0–3.",color=Muted,fontSize=10.sp)
-                Text("Hanya nama tim dan short name yang diganti. Identitas tim, pembalap, kontrak, roster, mobil, sponsor, staff dan divisi tetap dipertahankan.",color=Gold,fontSize=10.sp)
-                Button(onClick={onAction("official_f1_2026")},modifier=Modifier.fillMaxWidth(),colors=ButtonDefaults.buttonColors(containerColor=Red)) { Text("TERAPKAN TEMPLATE TIM F1–F4") }
+                Text("Pilih save template F1–F4 (contoh: SlotTwo.msv). Editor membaca nama tim, roster, profil, portrait, kewarganegaraan, atribut dan potential pembalap langsung dari file tersebut.",color=Muted,fontSize=10.sp)
+                Text("Data tim dan 80 pembalap diterapkan berdasarkan urutan divisi, tim, dan slot roster. ID internal, kontrak, dan riwayat career dari save tujuan tetap dijaga.",color=Gold,fontSize=10.sp)
+                Button(onClick={onAction("official_f1_2026")},modifier=Modifier.fillMaxWidth(),colors=ButtonDefaults.buttonColors(containerColor=Red)) { Text("PILIH & TERAPKAN SAVE TEMPLATE F1–F4") }
             }
         }
         item {
