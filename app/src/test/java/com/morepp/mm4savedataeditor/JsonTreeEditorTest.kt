@@ -308,7 +308,7 @@ class JsonTreeEditorTest {
         assertEquals("Template Team 31",byId["team-31"]!!.get("name").asString)
         assertEquals("Template Driver 1-0",byId["driver-1-0"]!!.getAsJsonObject("m_PersonDetails").get("name").asString)
         assertEquals(91,byId["driver-1-0"]!!.getAsJsonObject("m_PersonDetails").getAsJsonObject("nationality").get("mNationalityID").asInt)
-        assertEquals(100,byId["driver-10-1"]!!.getAsJsonObject("m_PersonDetails").getAsJsonObject("nationality").get("mNationalityID").asInt)
+        assertEquals(101,byId["driver-10-1"]!!.getAsJsonObject("m_PersonDetails").getAsJsonObject("nationality").get("mNationalityID").asInt)
         assertEquals(99,byId["driver-1-0"]!!.getAsJsonObject("m_Stats").getAsJsonArray("m_Stats")[0].asJsonObject.get("m_Stat").asInt)
         assertEquals("team-1",byId["driver-1-0"]!!.getAsJsonObject("contract").getAsJsonObject("m_Team").get("\$ref").asString)
         assertEquals("driver-1-0",byId["driver-1-0"]!!.getAsJsonObject("improvement").getAsJsonObject("m_Driver").get("\$ref").asString)
