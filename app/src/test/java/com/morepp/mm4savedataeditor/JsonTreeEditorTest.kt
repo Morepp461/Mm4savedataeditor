@@ -265,6 +265,7 @@ class JsonTreeEditorTest {
                     addProperty("\$id",teamEntityId)
                     addProperty("m_TeamID",numericTeamId)
                     addProperty("name","Template Team $numericTeamId")
+                    addProperty("shortName","Template")
                     add("m_TeamDriverData",JsonObject().apply { add("m_Data",driverRows) })
                     add("m_Championship",JsonObject().apply { addProperty("\$ref",championshipId) })
                 })
