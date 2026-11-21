@@ -522,7 +522,7 @@ private fun preview(value: JsonElement): String = when {
     else -> value.toString()
 }
 
-private fun flatten(root: JsonElement): List<Pair<List<String>, JsonElement>> {
+internal fun flatten(root: JsonElement): List<Pair<List<String>, JsonElement>> {
     val result = mutableListOf<Pair<List<String>, JsonElement>>()
     fun visit(node: JsonElement, path: List<String>) {
         if (path.isNotEmpty()) result += path to node
@@ -682,7 +682,7 @@ private fun EditJsonDialog(
     }
 }
 
-private fun resolvePath(root: JsonElement, path: List<String>): JsonElement? {
+internal fun resolvePath(root: JsonElement, path: List<String>): JsonElement? {
     var node = root
     for (part in path) {
         node = when {
@@ -698,7 +698,7 @@ private fun resolvePath(root: JsonElement, path: List<String>): JsonElement? {
     return node
 }
 
-private fun setPath(root: JsonObject, path: List<String>, value: JsonElement): Boolean {
+internal fun setPath(root: JsonObject, path: List<String>, value: JsonElement): Boolean {
     if (path.isEmpty()) return false
     val parent = resolvePath(root, path.dropLast(1)) ?: return false
     val key = path.last()
@@ -716,7 +716,7 @@ private fun setPath(root: JsonObject, path: List<String>, value: JsonElement): B
     }
 }
 
-private fun appendChild(
+internal fun appendChild(
     root: JsonObject,
     path: List<String>,
     key: String?,
@@ -737,7 +737,7 @@ private fun appendChild(
     }
 }
 
-private fun removePath(root: JsonObject, path: List<String>): Boolean {
+internal fun removePath(root: JsonObject, path: List<String>): Boolean {
     if (path.isEmpty()) return false
     val parent = resolvePath(root, path.dropLast(1)) ?: return false
     val key = path.last()
@@ -768,7 +768,7 @@ private fun readSaveBytes(input: java.io.InputStream): ByteArray {
 }
 
 
-private fun mutateDocument(
+internal fun mutateDocument(
     current: Mm4SaveCodec.Document,
     rootName: String,
     mutation: (JsonObject) -> Boolean
