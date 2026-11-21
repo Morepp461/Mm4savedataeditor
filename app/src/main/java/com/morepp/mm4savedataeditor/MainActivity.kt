@@ -571,7 +571,7 @@ private fun TeamPage(doc: Mm4SaveCodec.Document, onEdit: (String,List<String>,Js
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Text(channel.uppercase(), Modifier.weight(1f), color = Muted, fontSize = 10.sp)
-                        Text(value.asStringOrValue(), color = Gold, fontWeight = FontWeight.Bold, fontSize = 11.sp)
+                        Text((if (value.isJsonPrimitive && value.asJsonPrimitive.isString) value.asString else value.toString()), color = Gold, fontWeight = FontWeight.Bold, fontSize = 11.sp)
                         Icon(Icons.Default.Edit, null, tint = Muted, modifier = Modifier.size(15.dp))
                     }
                 }
