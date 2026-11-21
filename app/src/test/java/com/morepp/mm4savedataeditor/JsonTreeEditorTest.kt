@@ -64,4 +64,29 @@ class JsonTreeEditorTest {
         assertEquals(250, edited!!.data.get("balance").asInt)
         assertEquals("original", original.info.get("career").asString)
     }
+
+    @Test
+    fun teamCatalogOnlyAllowsIdentityReputationAndFinancialFields() {
+        assertTrue(isCatalogPrimitiveEditable("team", listOf("name")))
+        assertTrue(isCatalogPrimitiveEditable("team", listOf("shortName")))
+        assertTrue(isCatalogPrimitiveEditable("team", listOf("m_Reputation")))
+        assertTrue(isCatalogPrimitiveEditable("team", listOf("m_Financials", "m_Balance")))
+        assertFalse(isCatalogPrimitiveEditable("team", listOf("aggression")))
+        assertFalse(isCatalogPrimitiveEditable("team", listOf("m_EngineerRacePerformanceModifier")))
+    }
+
+    @Test
+    fun staffCatalogOnlyAllowsProfileContractAndCompensationFields() {
+        assertTrue(isCatalogPrimitiveEditable("staff", listOf("m_PersonDetails", "name")))
+        assertTrue(isCatalogPrimitiveEditable("staff", listOf("contract", "m_PerRaceCost")))
+        assertTrue(isCatalogPrimitiveEditable("staff", listOf("m_Salary")))
+        assertFalse(isCatalogPrimitiveEditable("staff", listOf("m_ExperiencePoints")))
+        assertFalse(isCatalogPrimitiveEditable("staff", listOf("stats", "m_Stats", "[0]", "m_Stat")))
+    }
+
+    @Test
+    fun carCatalogOnlyExposesItsDedicatedAttributeCards() {
+        assertFalse(isCatalogPrimitiveEditable("car", listOf("m_Stats", "[0]")))
+        assertFalse(isCatalogPrimitiveEditable("car", listOf("m_EngineLevel")))
+    }
 }
