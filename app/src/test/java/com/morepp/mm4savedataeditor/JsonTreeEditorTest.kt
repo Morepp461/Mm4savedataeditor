@@ -254,7 +254,10 @@ class JsonTreeEditorTest {
                             add("contract",JsonObject().apply {
                                 add("m_Team",JsonObject().apply { addProperty("\$ref",teamEntityId) })
                             })
-                            add("m_PersonDetails",JsonObject().apply { addProperty("name","Original Driver $numericTeamId-$driverIndex") })
+                            add("m_PersonDetails",JsonObject().apply {
+                                addProperty("name","Original Driver $numericTeamId-$driverIndex")
+                                add("nationality",JsonObject().apply { addProperty("mNationalityID",1) })
+                            })
                             add("m_Stats",JsonObject().apply { add("m_Stats",JsonArray().apply { add(JsonObject().apply { addProperty("m_Stat",1) }) }) })
                             add("improvement",JsonObject().apply { add("m_Driver",JsonObject().apply { addProperty("\$ref",driverEntityId) }) })
                         })
@@ -291,6 +294,7 @@ class JsonTreeEditorTest {
                 repeat(2) { driverIndex ->
                     val sourceDriver=sourceById["driver-$teamId-$driverIndex"]!!
                     sourceDriver.getAsJsonObject("m_PersonDetails").addProperty("name","Template Driver $teamId-$driverIndex")
+                    sourceDriver.getAsJsonObject("m_PersonDetails").getAsJsonObject("nationality").addProperty("mNationalityID",90+teamId+driverIndex)
                     sourceDriver.getAsJsonObject("m_Stats").getAsJsonArray("m_Stats")[0].asJsonObject.addProperty("m_Stat",99)
                 }
             }
@@ -303,6 +307,8 @@ class JsonTreeEditorTest {
         assertEquals("Template Team 21",byId["team-21"]!!.get("name").asString)
         assertEquals("Template Team 31",byId["team-31"]!!.get("name").asString)
         assertEquals("Template Driver 1-0",byId["driver-1-0"]!!.getAsJsonObject("m_PersonDetails").get("name").asString)
+        assertEquals(91,byId["driver-1-0"]!!.getAsJsonObject("m_PersonDetails").getAsJsonObject("nationality").get("mNationalityID").asInt)
+        assertEquals(101,byId["driver-10-1"]!!.getAsJsonObject("m_PersonDetails").getAsJsonObject("nationality").get("mNationalityID").asInt)
         assertEquals(99,byId["driver-1-0"]!!.getAsJsonObject("m_Stats").getAsJsonArray("m_Stats")[0].asJsonObject.get("m_Stat").asInt)
         assertEquals("team-1",byId["driver-1-0"]!!.getAsJsonObject("contract").getAsJsonObject("m_Team").get("\$ref").asString)
         assertEquals("driver-1-0",byId["driver-1-0"]!!.getAsJsonObject("improvement").getAsJsonObject("m_Driver").get("\$ref").asString)
