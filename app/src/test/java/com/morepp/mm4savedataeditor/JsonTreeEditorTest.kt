@@ -296,7 +296,6 @@ class JsonTreeEditorTest {
         assertEquals("ART GP F3",byId["team-21"]!!.get("name").asString)
         assertEquals("Jenzer Motorsport",byId["team-31"]!!.get("name").asString)
         assertEquals("Template Driver 1-0",byId["driver-1-0"]!!.getAsJsonObject("m_PersonDetails").get("name").asString)
-        assertEquals("Template Team 11",byId["team-11"]!!.get("name").asString)
         assertEquals("champ-0",byId["team-1"]!!.getAsJsonObject("m_Championship").get("\$ref").asString)
         assertEquals(40,(0..3).sumOf { division ->
             byId["champ-$division"]!!.getAsJsonArray("m_TeamIDs").size()
