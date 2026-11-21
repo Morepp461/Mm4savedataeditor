@@ -1635,6 +1635,35 @@ internal fun swapTeamsBetweenDivisions(data:JsonObject,teamA:String,teamB:String
     return true
 }
 
+
+internal fun renameCareerDivisions(data:JsonObject):Int {
+    val names=mapOf(
+        "World Motorsport" to "F1",
+        "Asia Pacific Super Cup" to "F2",
+        "European Racing" to "F3",
+        "Open Wheel Sprint" to "F4"
+    )
+    var changed=0
+    fun visit(node:JsonElement) {
+        when {
+            node.isJsonObject -> {
+                val obj=node.asJsonObject
+                listOf("name","m_Name","displayName","m_DisplayName","seriesName","m_SeriesName").forEach { key ->
+                    val value=obj.get(key)
+                    if(value!=null && value.isJsonPrimitive && value.asJsonPrimitive.isString) {
+                        val replacement=names[value.asString]
+                        if(replacement!=null) { obj.addProperty(key,replacement); changed++ }
+                    }
+                }
+                obj.entrySet().forEach { (_,value) -> visit(value) }
+            }
+            node.isJsonArray -> node.asJsonArray.forEach { visit(it) }
+        }
+    }
+    visit(data.get("championshipManager") ?: return 0)
+    return changed
+}
+
 private fun applyGodModeAction(current:Mm4SaveCodec.Document,action:String):Mm4SaveCodec.Document? {
     val data=current.data.deepCopy().asJsonObject
     when {
@@ -1660,6 +1689,9 @@ private fun applyGodModeAction(current:Mm4SaveCodec.Document,action:String):Mm4S
         action=="debug_unlock" -> {
             val research=data.getAsJsonObject("researchManager") ?: return null
             research.addProperty("m_IsDebugUnlocked",true)
+        }
+        action=="rename_divisions" -> {
+            if(renameCareerDivisions(data)==0) return null
         }
         action.startsWith("swap_teams|") -> {
             val parts=action.split("|")
@@ -1711,6 +1743,13 @@ private fun GodModePage(doc:Mm4SaveCodec.Document,onAction:(String)->Unit) {
             GlassCard(Modifier.fillMaxWidth()) {
                 Text("GOD MODE",color=Gold,fontWeight=FontWeight.Black,fontSize=13.sp)
                 Text("Kontrol khusus untuk mengubah karier secara ekstrem. Setiap tombol mengubah data save dan bisa dibatalkan dengan membuka file asli lagi.",color=Muted,fontSize=11.sp)
+            }
+        }
+        item {
+            GlassCard(Modifier.fillMaxWidth()) {
+                Text("NAMA DIVISI RESMI",color=Gold,fontWeight=FontWeight.Bold)
+                Text("Ubah nama divisi bawaan menjadi F1, F2, F3, dan F4. Hanya nama yang cocok persis yang akan diganti.",color=Muted,fontSize=10.sp)
+                Button(onClick={onAction("rename_divisions")},modifier=Modifier.fillMaxWidth(),colors=ButtonDefaults.buttonColors(containerColor=Blue)) { Text("UBAH NAMA DIVISI F1–F4") }
             }
         }
         item {
