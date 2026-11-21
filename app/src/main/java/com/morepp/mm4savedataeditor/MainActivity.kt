@@ -1636,6 +1636,80 @@ internal fun swapTeamsBetweenDivisions(data:JsonObject,teamA:String,teamB:String
 }
 
 
+
+private data class OfficialF1Team(val name:String,val shortName:String,val drivers:List<Pair<String,String>>)
+
+private val OfficialF1Lineup2026=listOf(
+    OfficialF1Team("McLaren Mastercard F1 Team","McLaren",listOf("Oscar" to "Piastri","Lando" to "Norris")),
+    OfficialF1Team("Scuderia Ferrari HP","Ferrari",listOf("Charles" to "Leclerc","Lewis" to "Hamilton")),
+    OfficialF1Team("Oracle Red Bull Racing","Red Bull",listOf("Max" to "Verstappen","Isack" to "Hadjar")),
+    OfficialF1Team("Mercedes-AMG Petronas Formula One Team","Mercedes",listOf("George" to "Russell","Kimi" to "Antonelli")),
+    OfficialF1Team("Aston Martin Aramco Formula One Team","Aston Martin",listOf("Lance" to "Stroll","Fernando" to "Alonso")),
+    OfficialF1Team("BWT Alpine Formula One Team","Alpine",listOf("Pierre" to "Gasly","Franco" to "Colapinto")),
+    OfficialF1Team("TGR Haas F1 Team","Haas",listOf("Esteban" to "Ocon","Oliver" to "Bearman")),
+    OfficialF1Team("Visa Cash App Racing Bulls Formula One Team","Racing Bulls",listOf("Arvid" to "Lindblad","Liam" to "Lawson")),
+    OfficialF1Team("Atlassian Williams F1 Racing","Williams",listOf("Alexander" to "Albon","Carlos" to "Sainz")),
+    OfficialF1Team("Audi Revolut F1 Team","Audi",listOf("Nico" to "Hülkenberg","Gabriel" to "Bortoleto")),
+    OfficialF1Team("Cadillac Formula 1 Team","Cadillac",listOf("Sergio" to "Pérez","Valtteri" to "Bottas"))
+)
+
+private fun divisionTeamIds(data:JsonObject,divisionNames:Set<String>):List<String> {
+    val candidates=mutableListOf<List<String>>()
+    fun visit(node:JsonElement,inheritedName:String?) {
+        if(node.isJsonObject) {
+            val obj=node.asJsonObject
+            val localName=listOf("name","m_Name","displayName","m_DisplayName","seriesName","m_SeriesName")
+                .firstNotNullOfOrNull { key -> obj.get(key)?.takeIf { it.isJsonPrimitive && it.asJsonPrimitive.isString }?.asString }
+                ?: inheritedName
+            obj.entrySet().forEach { (key,value) ->
+                if(key.contains("team",true) && value.isJsonArray && localName!=null && localName in divisionNames) {
+                    val refs=value.asJsonArray.mapNotNull { item ->
+                        item.takeIf { it.isJsonObject }?.asJsonObject?.get("\$ref")?.asString
+                    }
+                    if(refs.isNotEmpty()) candidates.add(refs)
+                }
+                visit(value,localName)
+            }
+        } else if(node.isJsonArray) node.asJsonArray.forEach { visit(it,inheritedName) }
+    }
+    data.get("championshipManager")?.let { visit(it,null) }
+    return candidates.firstOrNull().orEmpty()
+}
+
+internal fun applyOfficialF1Preset2026(data:JsonObject):Boolean {
+    val teamIds=divisionTeamIds(data,setOf("F1","World Motorsport"))
+    if(teamIds.size!=OfficialF1Lineup2026.size || teamIds.distinct().size!=teamIds.size) return false
+    val all=collectObjectsWithId(data).associateBy { it.second.get("\$id")?.asString }
+    val driverRefs=data.getAsJsonObject("driverManager")?.getAsJsonArray("m_Drivers") ?: return false
+    val drivers=driverRefs.mapNotNull { it.takeIf { v -> v.isJsonObject }?.asJsonObject?.get("\$ref")?.asString }
+        .mapNotNull { id -> all[id]?.second?.let { id to it } }
+    val teamObjects=teamIds.map { id -> all[id]?.second ?: return false }
+    val driverGroups=teamIds.map { teamId ->
+        drivers.filter { (_,driver) ->
+            safeObject(driver,"contract")?.let { safeObject(it,"m_Team") }?.get("\$ref")?.asString==teamId
+        }
+    }
+    if(driverGroups.any { it.size!=2 }) return false
+    teamObjects.forEachIndexed { index,team ->
+        val preset=OfficialF1Lineup2026[index]
+        if(!team.has("name")) return false
+        team.addProperty("name",preset.name)
+        if(team.has("shortName")) team.addProperty("shortName",preset.shortName)
+        driverGroups[index].forEachIndexed { driverIndex,(_,driver) ->
+            val details=safeObject(driver,"m_PersonDetails") ?: return false
+            val (first,last)=preset.drivers[driverIndex]
+            val full=first+" "+last
+            if(!details.has("name")) return false
+            details.addProperty("name",full)
+            if(details.has("firstName")) details.addProperty("firstName",first)
+            if(details.has("lastName")) details.addProperty("lastName",last)
+            if(details.has("shortName")) details.addProperty("shortName",first.substring(0,1)+". "+last)
+            if(details.has("threeLetterName")) details.addProperty("threeLetterName",last.filter { it.isLetter() }.take(3).uppercase())
+        }
+    }
+    return true
+}
+
 internal fun renameCareerDivisions(data:JsonObject):Int {
     val names=mapOf(
         "World Motorsport" to "F1",
@@ -1693,6 +1767,9 @@ private fun applyGodModeAction(current:Mm4SaveCodec.Document,action:String):Mm4S
         action=="rename_divisions" -> {
             if(renameCareerDivisions(data)==0) return null
         }
+        action=="official_f1_2026" -> {
+            if(!applyOfficialF1Preset2026(data)) return null
+        }
         action.startsWith("swap_teams|") -> {
             val parts=action.split("|")
             if(parts.size!=3 || !swapTeamsBetweenDivisions(data,parts[1],parts[2])) return null
@@ -1743,6 +1820,14 @@ private fun GodModePage(doc:Mm4SaveCodec.Document,onAction:(String)->Unit) {
             GlassCard(Modifier.fillMaxWidth()) {
                 Text("GOD MODE",color=Gold,fontWeight=FontWeight.Black,fontSize=13.sp)
                 Text("Kontrol khusus untuk mengubah karier secara ekstrem. Setiap tombol mengubah data save dan bisa dibatalkan dengan membuka file asli lagi.",color=Muted,fontSize=11.sp)
+            }
+        }
+        item {
+            GlassCard(Modifier.fillMaxWidth()) {
+                Text("OFFICIAL F1 TEAMS AND DRIVER",color=Gold,fontWeight=FontWeight.Bold)
+                Text("Mengganti 11 nama tim dan 22 pembalap pada divisi F1 menggunakan susunan resmi 2026. Urutan tim mengikuti urutan yang tersimpan pada championship.",color=Muted,fontSize=10.sp)
+                Text("Syarat: divisi F1/World Motorsport berisi tepat 11 tim dan setiap tim memiliki tepat 2 pembalap dengan kontrak yang terbaca.",color=Gold,fontSize=10.sp)
+                Button(onClick={onAction("official_f1_2026")},modifier=Modifier.fillMaxWidth(),colors=ButtonDefaults.buttonColors(containerColor=Red)) { Text("TERAPKAN LINEUP F1 2026") }
             }
         }
         item {
