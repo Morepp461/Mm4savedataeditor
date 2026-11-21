@@ -479,18 +479,26 @@ private fun OverviewPage(doc: Mm4SaveCodec.Document, go: (String) -> Unit) {
 
 @Composable
 private fun DriverPage(doc: Mm4SaveCodec.Document, selected: String?, onSelect: (String?) -> Unit, onEdit: (String,List<String>,JsonElement)->Unit) {
-    data class DriverRecord(val path:List<String>,val data:JsonObject,val id:String,val name:String)
+    data class DriverRecord(val path:List<String>,val data:JsonObject,val id:String,val name:String,val team:String)
     val drivers=remember(doc.data) {
         val all=collectObjectsWithId(doc.data).associateBy { it.second.get("\$id")?.asString }
+        val teamNames=doc.data.getAsJsonObject("teamManager")?.getAsJsonArray("m_Teams")
+            ?.mapNotNull { teamRef ->
+                val teamId=teamRef.asJsonObject.get("\$ref")?.asString ?: return@mapNotNull null
+                val team=all[teamId]?.second ?: return@mapNotNull null
+                teamId to (team.get("name")?.asString?.takeIf { it.isNotBlank() } ?: "Free Agent")
+            }?.toMap().orEmpty()
         val roster=doc.data.getAsJsonObject("driverManager")?.getAsJsonArray("m_Drivers")
         roster?.mapNotNull { ref ->
             val id=ref.asJsonObject.get("\$ref")?.asString ?: return@mapNotNull null
             val pair=all[id] ?: return@mapNotNull null
             val (path,obj)=pair
             val details=obj.getAsJsonObject("m_PersonDetails") ?: return@mapNotNull null
-            val name=details.get("name")?.asString?.trim().orEmpty().ifBlank { "Unnamed driver" }
-            DriverRecord(path,obj,id,name)
-        }?.distinctBy { it.id }?.sortedBy { it.name.lowercase() }.orEmpty()
+            val name=details.get("name")?.asString?.trim().orEmpty().ifBlank { "Unnamed driver • " + id }
+            val teamId=obj.getAsJsonObject("contract")?.getAsJsonObject("m_Team")?.get("\$ref")?.asString
+            val team=teamId?.let { teamNames[it] } ?: "Free Agent"
+            DriverRecord(path,obj,id,name,team)
+        }?.distinctBy { it.id }?.sortedWith(compareBy({ it.team.lowercase() },{ it.name.lowercase() })).orEmpty()
     }
     val referenced=doc.data.getAsJsonObject("driverManager")?.getAsJsonArray("m_Drivers")?.size() ?: 0
     val chosen=drivers.firstOrNull { it.id==selected }
@@ -512,7 +520,7 @@ private fun DriverPage(doc: Mm4SaveCodec.Document, selected: String?, onSelect: 
                             Column(Modifier.weight(1f)) {
                                 Text(driver.name,fontWeight=FontWeight.Bold)
                                 val details=driver.data.getAsJsonObject("m_PersonDetails")
-                                Text("Age ${ageFromDate(details?.get("dateOfBirth")?.asString)} • Driver ID ${driver.data.get("m_DriverID")?.asString ?: "—"}",color=Muted,fontSize=10.sp)
+                                Text("${driver.team} • Age ${ageFromDate(details?.get("dateOfBirth")?.asString)} • Driver ID ${driver.data.get("m_DriverID")?.asString ?: "—"}",color=Muted,fontSize=10.sp)
                             }
                             Icon(Icons.Default.ChevronRight,null,tint=Muted)
                         }
