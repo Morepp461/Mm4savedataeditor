@@ -655,7 +655,7 @@ private fun CareerHeader(
 }
 
 
-private val Sections = listOf("Overview", "Drivers", "Driver Analytics", "Staff", "Teams", "Cars", "Finance", "HQ", "Supplier Network", "Championships", "Circuits", "Influence Actions", "World", "Diagnostics", "Save Info", "Advanced", "God Mode")
+private val Sections = listOf("Overview", "Drivers", "Driver Analytics", "Staff", "Teams", "Cars", "Finance", "Career Finance Analytics", "HQ", "Supplier Network", "Championships", "Circuits", "Influence Actions", "Sponsor Database", "Manager Progression", "World", "Diagnostics", "Save Info", "Advanced", "God Mode")
 
 @Composable
 private fun CareerWorkspace(
@@ -685,6 +685,11 @@ private fun CareerWorkspace(
                 "Drivers" -> DriverPage(document, selectedDriver, onDriver, onEdit)
                 "Driver Analytics" -> DriverAnalyticsPage(document)
                 "Championships" -> ChampionshipManagerPage(document)
+                "Circuits" -> CircuitExplorerPage(document)
+                "Influence Actions" -> InfluenceActionsPage(document)
+                "Sponsor Database" -> SponsorDatabasePage(document)
+                "Career Finance Analytics" -> CareerFinanceAnalyticsPage(document)
+                "Manager Progression" -> ManagerProgressionPage(document)
                 "Staff" -> EntityCatalogPage(document, "staff", onEdit, onApplyTeamColor)
                 "Teams" -> EntityCatalogPage(document, "team", onEdit, onApplyTeamColor)
                 "Cars" -> EntityCatalogPage(document, "car", onEdit, onApplyTeamColor)
@@ -1746,6 +1751,116 @@ private fun WorldSettingsPage(doc:Mm4SaveCodec.Document,onEdit:(String,List<Stri
             }
         }
         if(groups.isEmpty()) item { Text("Belum ditemukan grup Store/Rules/Unlock yang bisa dikenali di save ini. Data lain tetap dipertahankan di Advanced.",color=Muted) }
+    }
+}
+
+@Composable
+private fun SponsorDatabasePage(doc: Mm4SaveCodec.Document) {
+    val sponsors = remember(doc.data) { sponsorRecords(doc.data) }
+    var query by remember { mutableStateOf("") }
+    val filtered = sponsors.filter { query.isBlank() || (it.dataId + 1).toString().contains(query) }
+    LazyColumn(contentPadding = PaddingValues(14.dp), verticalArrangement = Arrangement.spacedBy(9.dp)) {
+        item {
+            GlassCard(Modifier.fillMaxWidth()) {
+                Text("SPONSOR DATABASE", color = Gold, fontWeight = FontWeight.Black, fontSize = 11.sp)
+                Text("Data sponsor dalam career", fontSize = 21.sp, fontWeight = FontWeight.Black)
+                Text("Informasi yang tersedia dari database sponsor save ini. Nama sponsor tidak ditebak jika tidak disimpan sebagai teks.", color = Muted, fontSize = 11.sp)
+                Spacer(Modifier.height(8.dp))
+                Text(sponsors.size.toString(), fontSize = 24.sp, fontWeight = FontWeight.Black)
+                Text("sponsor terdeteksi", color = Muted, fontSize = 9.sp)
+            }
+        }
+        item {
+            OutlinedTextField(value = query, onValueChange = { query = it.filter(Char::isDigit) },
+                modifier = Modifier.fillMaxWidth(), singleLine = true,
+                placeholder = { Text("Cari nomor sponsor…") },
+                leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) })
+        }
+        items(filtered, key = { it.recordKey }) { sponsor ->
+            GlassCard(Modifier.fillMaxWidth()) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f)) {
+                        Text("Sponsor ${sponsor.dataId + 1}", fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                        Text("Urutan penawaran ${sponsor.randomOfferOrder}", color = Muted, fontSize = 10.sp)
+                    }
+                    Text(if (sponsor.initialCooldownExpired) "Siap ditawarkan" else "Masa tunggu awal",
+                        color = if (sponsor.initialCooldownExpired) Color(0xFF9BE36A) else Gold,
+                        fontWeight = FontWeight.Bold, fontSize = 9.sp)
+                }
+                Divider(color = Color.White.copy(alpha = 0.12f))
+                InfoLine("Kontrak berjalan", sponsor.runningContracts.toString())
+            }
+        }
+        if (filtered.isEmpty()) item { Text("Sponsor tidak ditemukan pada pencarian ini.", color = Muted, fontSize = 11.sp) }
+        item { Text("Halaman ini hanya membaca data sponsor. Tidak ada kontrak, penawaran, atau urutan database yang diubah.", color = Muted, fontSize = 10.sp) }
+    }
+}
+
+@Composable
+private fun CareerFinanceAnalyticsPage(doc: Mm4SaveCodec.Document) {
+    val finance = doc.data.getAsJsonObject("financeManager")
+    val balance = finance?.get("m_Balance")?.takeIf { it.isJsonPrimitive && it.asJsonPrimitive.isNumber }?.asLong
+    val history = finance?.get("m_TransactionHistory")?.takeIf { it.isJsonArray }?.asJsonArray
+    val transactionCount = history?.size() ?: 0
+    val numericEntries = history?.count { entry ->
+        (entry.isJsonPrimitive && entry.asJsonPrimitive.isNumber) ||
+            (entry.isJsonObject && listOf("amount", "m_Amount", "value", "m_Value", "balance")
+                .any { key -> entry.asJsonObject.get(key)?.let { it.isJsonPrimitive && it.asJsonPrimitive.isNumber } == true })
+    } ?: 0
+    LazyColumn(contentPadding = PaddingValues(14.dp), verticalArrangement = Arrangement.spacedBy(9.dp)) {
+        item {
+            GlassCard(Modifier.fillMaxWidth()) {
+                Text("CAREER FINANCE ANALYTICS", color = Gold, fontWeight = FontWeight.Black, fontSize = 11.sp)
+                Text("Ringkasan keuangan career", fontSize = 21.sp, fontWeight = FontWeight.Black)
+                Text("Ringkasan saldo dan catatan transaksi yang benar-benar tersedia di save.", color = Muted, fontSize = 11.sp)
+                Spacer(Modifier.height(8.dp))
+                Text("SALDO SAAT INI", color = Muted, fontSize = 9.sp)
+                Text(balance?.let { formatMoney(it) } ?: "Tidak tersedia", color = Gold, fontSize = 24.sp, fontWeight = FontWeight.Black)
+                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Column(Modifier.weight(1f)) {
+                        Text("CATATAN TRANSAKSI", color = Muted, fontSize = 9.sp)
+                        Text(transactionCount.toString(), fontSize = 21.sp, fontWeight = FontWeight.Black)
+                    }
+                    Column(Modifier.weight(1f)) {
+                        Text("NILAI TERBACA", color = Muted, fontSize = 9.sp)
+                        Text(numericEntries.toString(), fontSize = 21.sp, fontWeight = FontWeight.Black)
+                    }
+                }
+            }
+        }
+        item { Text("RIWAYAT TRANSAKSI", color = Gold, fontWeight = FontWeight.Bold, fontSize = 10.sp) }
+        items(transactionCount) { index ->
+            GlassCard(Modifier.fillMaxWidth()) {
+                InfoLine("Transaksi ${index + 1}", history?.get(index)?.let { financeHistoryLabel(it) } ?: "Tidak tersedia")
+            }
+        }
+        if (transactionCount == 0) item { Text("Belum ada riwayat transaksi yang bisa dibaca pada save ini.", color = Muted, fontSize = 11.sp) }
+        item { Text("Aplikasi tidak menebak transaksi masuk atau keluar karena arah transaksi tidak dapat dipastikan dari struktur yang tersedia.", color = Muted, fontSize = 10.sp) }
+    }
+}
+
+@Composable
+private fun ManagerProgressionPage(doc: Mm4SaveCodec.Document) {
+    val info = doc.info
+    val candidates = listOf("playerAge" to "Usia manager", "gameDate" to "Tanggal career",
+        "championshipTier" to "Jenjang championship").mapNotNull { (key, label) ->
+        info.get(key)?.takeIf { it.isJsonPrimitive }?.let { label to preview(it) }
+    }
+    LazyColumn(contentPadding = PaddingValues(14.dp), verticalArrangement = Arrangement.spacedBy(9.dp)) {
+        item {
+            GlassCard(Modifier.fillMaxWidth()) {
+                Text("MANAGER PROGRESSION", color = Gold, fontWeight = FontWeight.Black, fontSize = 11.sp)
+                Text("Perkembangan manager", fontSize = 21.sp, fontWeight = FontWeight.Black)
+                Text("Pemetaan level dan experience manager belum tersedia pada profil save yang terverifikasi.", color = Muted, fontSize = 11.sp)
+            }
+        }
+        if (candidates.isNotEmpty()) item {
+            GlassCard(Modifier.fillMaxWidth()) {
+                Text("INFORMASI CAREER TERKAIT", color = Gold, fontWeight = FontWeight.Bold, fontSize = 10.sp)
+                candidates.forEach { (label, value) -> InfoLine(label, value) }
+            }
+        }
+        item { Text("Tidak ada level atau experience yang diedit. Fitur ini akan diaktifkan setelah field dan aturan progresinya dapat dipastikan dari save asli, agar tidak merusak career.", color = Muted, fontSize = 10.sp) }
     }
 }
 
