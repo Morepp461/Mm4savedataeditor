@@ -1465,7 +1465,7 @@ private fun ChampionshipManagerPage(doc: Mm4SaveCodec.Document) {
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Column(Modifier.weight(1f)) {
-                        Text("Championship ${championship.id + 1}", fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                        Text(championship.displayName, fontWeight = FontWeight.Bold, fontSize = 14.sp)
                         Text("Tier ${championship.tier + 1} • Series ${championship.series + 1}", color = Muted, fontSize = 10.sp)
                         Text("${championship.teamCount} tim • ${championship.driverCount} pembalap • ${championship.raceCount} event", color = Muted, fontSize = 10.sp)
                     }
@@ -1477,7 +1477,7 @@ private fun ChampionshipManagerPage(doc: Mm4SaveCodec.Document) {
             item {
                 GlassCard(Modifier.fillMaxWidth()) {
                     Text("DETAIL KEJUARAAN", color = Gold, fontWeight = FontWeight.Bold, fontSize = 10.sp)
-                    Text("Championship ${championship.id + 1}", fontSize = 20.sp, fontWeight = FontWeight.Black)
+                    Text(championship.displayName, fontSize = 20.sp, fontWeight = FontWeight.Black)
                     Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                         Column(Modifier.weight(1f)) {
                             Text("TIER", color = Muted, fontSize = 9.sp)
@@ -1525,6 +1525,7 @@ private fun DriverAnalyticsPage(doc: Mm4SaveCodec.Document) {
     }
     var query by remember { mutableStateOf("") }
     var selectedDriverKey by remember { mutableStateOf("") }
+    var showDriverDetails by remember { mutableStateOf(false) }
     LaunchedEffect(doc.data) {
         if (records.none { it.recordKey == selectedDriverKey }) selectedDriverKey = records.firstOrNull()?.recordKey.orEmpty()
     }
@@ -1565,7 +1566,7 @@ private fun DriverAnalyticsPage(doc: Mm4SaveCodec.Document) {
         item { Text("DATABASE PEMBALAP", color = Gold, fontWeight = FontWeight.Bold, fontSize = 10.sp) }
         items(filtered, key = { it.recordKey }) { driver ->
             GlassCard(
-                Modifier.fillMaxWidth().clickable { selectedDriverKey = driver.recordKey }
+                Modifier.fillMaxWidth().clickable { selectedDriverKey = driver.recordKey; showDriverDetails = true }
                     .then(if (selectedDriverKey == driver.recordKey) Modifier.border(1.dp, Gold, RoundedCornerShape(16.dp)) else Modifier)
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -1631,6 +1632,28 @@ private fun DriverAnalyticsPage(doc: Mm4SaveCodec.Document) {
         item {
             Text("Halaman ini hanya membaca data pembalap. Tidak ada statistik atau riwayat yang ditulis ulang ke save.", color = Muted, fontSize = 10.sp)
         }
+    }
+    if (showDriverDetails && selected != null) {
+        AlertDialog(
+            onDismissRequest = { showDriverDetails = false },
+            title = { Text(selected.name, fontWeight = FontWeight.Black) },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(7.dp)) {
+                    Text(selected.teamName, color = Gold, fontWeight = FontWeight.Bold)
+                    InfoLine("Usia", selected.age?.let { it.toString() + " tahun" } ?: "Tidak tersedia")
+                    InfoLine("Riwayat karier", selected.careerSeasons.toString() + " catatan musim")
+                    InfoLine("Trait", selected.traitCount.toString())
+                    Divider(color = Color.White.copy(alpha = 0.15f))
+                    Text("ATRIBUT & POTENSI", color = Gold, fontWeight = FontWeight.Bold)
+                    val count = maxOf(selected.attributes.size, selected.potentials.size)
+                    (0 until count).forEach { index ->
+                        InfoLine(statAttributeLabel("driver", "driver", index),
+                            (selected.attributes.getOrNull(index)?.toString() ?: "—") + " / 20  •  Potensi " + (selected.potentials.getOrNull(index)?.toString() ?: "—"))
+                    }
+                }
+            },
+            confirmButton = { TextButton(onClick = { showDriverDetails = false }) { Text("TUTUP") } }
+        )
     }
 }
 
