@@ -1,6 +1,13 @@
 package com.morepp.mm4savedataeditor
 
 import android.net.Uri
+import kotlin.math.sin
+import kotlin.math.cos
+import kotlin.math.PI
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.foundation.Canvas
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -36,6 +43,7 @@ import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
@@ -59,13 +67,15 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 
-private val Ink = Color(0xFF101A3A)
-private val Panel = Color(0xD91D2D58)
-private val PanelAlt = Color(0xE62A3F73)
-private val Red = Color(0xFFE53935)
-private val Gold = Color(0xFFB9E84F)
-private val Blue = Color(0xFF3488DC)
-private val Muted = Color(0xFF9CA6B2)
+private val Ink = Color(0xFF080B10)
+private val Panel = Color(0xB51A2029)
+private val PanelAlt = Color(0xE0202731)
+private val Red = Color(0xFFE10600)
+private val Gold = Color(0xFFD6B56D)
+private val Blue = Color(0xFF8C9AA8)
+private val Muted = Color(0xFF9AA4B0)
+private val GlassEdge = Color(0x38FFFFFF)
+private val Carbon = Color(0xFF11161D)
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -231,8 +241,14 @@ private fun EditorApp() {
             background = Ink,
             surface = Panel,
             surfaceVariant = PanelAlt,
-            primary = Gold,
-            secondary = Blue,
+            primary = Red,
+            onPrimary = Color.White,
+            secondary = Gold,
+            onSecondary = Ink,
+            tertiary = Blue,
+            onTertiary = Color.White,
+            surfaceTint = Red,
+            outline = GlassEdge,
             onSurface = Color.White,
             onBackground = Color.White,
             onSurfaceVariant = Muted
@@ -245,18 +261,13 @@ private fun EditorApp() {
                 TopAppBar(
                     title = {
                         Column {
-                            Text(
-                                "MM4 SAVE DATA EDITOR",
-                                fontSize = 15.sp,
-                                fontWeight = FontWeight.Black,
-                                letterSpacing = 1.sp
-                            )
-                            Text(
-                                "CAREER DATA WORKSHOP",
-                                color = Gold,
-                                fontSize = 9.sp,
-                                letterSpacing = 1.3.sp
-                            )
+                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(7.dp)) {
+                                Box(Modifier.width(3.dp).height(25.dp).clip(RoundedCornerShape(3.dp)).background(Red))
+                                Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                                    Text("MM4 SAVE DATA EDITOR", fontSize = 14.sp, fontWeight = FontWeight.Black, letterSpacing = 1.15.sp)
+                                    Text("PADDOCK CONTROL  •  CAREER ENGINEERING", color = Gold, fontSize = 8.sp, letterSpacing = 1.05.sp)
+                                }
+                            }
                         }
                     },
                     actions = {
@@ -303,14 +314,18 @@ private fun EditorApp() {
                         }
                     },
                     colors = TopAppBarDefaults.topAppBarColors(
-                        containerColor = Ink,
+                        containerColor = Color(0xFF090D12),
                         titleContentColor = Color.White
                     )
                 )
             },
             bottomBar = { WatermarkFooter() }
         ) { padding ->
-            Column(Modifier.fillMaxSize().padding(padding)) {
+            Column(
+                Modifier.fillMaxSize()
+                    .background(Brush.verticalGradient(listOf(Color(0xFF0B1017), Ink, Color(0xFF10151C))))
+                    .padding(padding)
+            ) {
                 val current = document
                 if (current == null) {
                     WelcomePanel(busy, requestOpen)
@@ -400,6 +415,34 @@ private fun EditorApp() {
                             } else {
                                 scope.launch { snackbarHostState.showSnackbar("Gagal menerapkan warna tim.") }
                             }
+                        },
+                        onApplyExperience = { experience ->
+                            val latest = document ?: return@CareerWorkspace
+                            val updatedData = applyManagerExperience(latest.data, experience)
+                            if (updatedData == null) {
+                                scope.launch { snackbarHostState.showSnackbar("Experience di luar rentang level yang tersimpan. Save tidak diubah.") }
+                            } else {
+                                document = latest.copy(data = updatedData)
+                                hasChanges = true
+                                undoStack = emptyList()
+                                redoStack = emptyList()
+                                scope.launch { snackbarHostState.showSnackbar("Experience manager diperbarui mengikuti tabel level career.") }
+                            }
+                        },
+                        onResetInfluenceCooldown = { position ->
+                            val latest = document ?: return@CareerWorkspace
+                            val path = listOf("influenceManager", "m_Influences", "[$position]", "m_CurrentCooldown")
+                            val before = resolvePath(latest.data, path)?.deepCopy()
+                            val updatedData = resetInfluenceCooldown(latest.data, position)
+                            if (before != null && updatedData != null) {
+                                val changed = latest.copy(data = updatedData)
+                                document = changed
+                                val after = resolvePath(updatedData, path)?.deepCopy()
+                                if (after != null) undoStack = (undoStack + EditOperation("Game Data", path, before, after)).takeLast(50)
+                                redoStack = emptyList()
+                                hasChanges = true
+                                scope.launch { snackbarHostState.showSnackbar("Cooldown aksi berhasil diatur menjadi siap digunakan.") }
+                            }
                         }
                     )
                 }
@@ -467,29 +510,84 @@ private fun EditorApp() {
             )
         }
         if (showIntro) IntroSplash()
-        if (showTutorial) AlertDialog(
-            onDismissRequest = {
-                showTutorial = false
-                context.getSharedPreferences("mm4_editor", android.content.Context.MODE_PRIVATE).edit().putBoolean("tutorial_seen", true).apply()
-            },
-            title = { Text("Selamat datang di MM4 Save Data Editor") },
-            text = {
-                Column(verticalArrangement = Arrangement.spacedBy(9.dp)) {
-                    Text("Panduan singkat sebelum mulai:")
-                    InfoLine("1. Buka save", "Pilih file career .msv dari penyimpanan")
-                    InfoLine("2. Edit data", "Gunakan Drivers, Staff, Teams, Cars, Finance, dan HQ")
-                    InfoLine("3. Undo / Redo", "Batalkan perubahan sebelum export")
-                    InfoLine("4. Export", "Simpan sebagai file baru, jangan timpa save asli")
-                    Text("Beberapa data lanjutan bergantung pada struktur career yang sedang dibuka.", color = Muted, fontSize = 11.sp)
-                }
-            },
-            confirmButton = {
-                Button(onClick = {
+        if (showTutorial) {
+            var tutorialPage by remember { mutableIntStateOf(0) }
+            val pages = listOf(
+                Triple("01", "BUKA CAREER SAVE", "Pilih file career .msv dari penyimpanan perangkat. File asli tidak akan ditimpa."),
+                Triple("02", "EDIT DATA CAREER", "Pilih kategori Drivers, Staff, Teams, Cars, Finance, HQ, atau God Mode. Periksa perubahan sebelum melanjutkan."),
+                Triple("03", "UNDO / REDO", "Gunakan tombol kembali dan ulangi untuk membatalkan atau memulihkan perubahan selama sesi edit."),
+                Triple("04", "EXPORT SAVE BARU", "Simpan hasil sebagai file baru. Editor akan memeriksa hasil encode dan decode sebelum file ditulis.")
+            )
+            val page = pages[tutorialPage]
+            Dialog(
+                onDismissRequest = {
                     showTutorial = false
                     context.getSharedPreferences("mm4_editor", android.content.Context.MODE_PRIVATE).edit().putBoolean("tutorial_seen", true).apply()
-                }) { Text("MULAI") }
+                },
+                properties = DialogProperties(usePlatformDefaultWidth = false)
+            ) {
+                Column(
+                    Modifier.fillMaxWidth().padding(horizontal = 22.dp)
+                        .clip(RoundedCornerShape(28.dp))
+                        .background(Brush.linearGradient(listOf(Color(0xF0252B33), Color(0xF0131921), Color(0xF02A1517))))
+                        .border(1.dp, Color.White.copy(alpha = 0.12f), RoundedCornerShape(28.dp))
+                        .padding(22.dp),
+                    verticalArrangement = Arrangement.spacedBy(18.dp)
+                ) {
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                            Text("MM4 • CAREER WORKSHOP", color = Gold, fontSize = 10.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.8.sp)
+                            Text("QUICK START GUIDE", color = Color.White, fontSize = 21.sp, fontWeight = FontWeight.Black)
+                        }
+                        TextButton(onClick = {
+                            showTutorial = false
+                            context.getSharedPreferences("mm4_editor", android.content.Context.MODE_PRIVATE).edit().putBoolean("tutorial_seen", true).apply()
+                        }) { Text("LEWATI", color = Muted, fontSize = 10.sp) }
+                    }
+                    Box(
+                        Modifier.fillMaxWidth().height(116.dp).clip(RoundedCornerShape(20.dp))
+                            .background(Brush.horizontalGradient(listOf(Color(0xFF171D25), Color(0xFF32191B)))),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(page.first, color = Color.White.copy(alpha = 0.10f), fontSize = 84.sp, fontWeight = FontWeight.Black)
+                        Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                            Icon(Icons.Default.Flag, contentDescription = null, tint = Red, modifier = Modifier.size(30.dp))
+                            Text("RACE CONTROL", color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Black, letterSpacing = 2.sp)
+                        }
+                    }
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        repeat(pages.size) { index ->
+                            Box(Modifier.weight(1f).height(4.dp).clip(RoundedCornerShape(4.dp)).background(if (index <= tutorialPage) Red else Color.White.copy(alpha = 0.16f)))
+                        }
+                    }
+                    AnimatedContent(
+                        targetState = tutorialPage,
+                        transitionSpec = {
+                            (fadeIn(tween(220)) + slideInVertically(tween(220)) { it / 6 }) togetherWith fadeOut(tween(160))
+                        },
+                        label = "tutorial-step-motion"
+                    ) { step ->
+                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Text(pages[step].second, color = Gold, fontSize = 12.sp, fontWeight = FontWeight.Black, letterSpacing = 1.1.sp)
+                            Text(pages[step].third, color = Color.White.copy(alpha = 0.82f), fontSize = 14.sp, lineHeight = 21.sp)
+                        }
+                    }
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                        Text("LANGKAH ${tutorialPage + 1} DARI ${pages.size}", color = Muted, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                        Button(
+                            onClick = {
+                                if (tutorialPage < pages.lastIndex) tutorialPage++
+                                else {
+                                    showTutorial = false
+                                    context.getSharedPreferences("mm4_editor", android.content.Context.MODE_PRIVATE).edit().putBoolean("tutorial_seen", true).apply()
+                                }
+                            },
+                            colors = ButtonDefaults.buttonColors(containerColor = Gold, contentColor = Color(0xFF10131D))
+                        ) { Text(if (tutorialPage == pages.lastIndex) "MULAI EDIT" else "LANJUT", fontWeight = FontWeight.Black) }
+                    }
+                }
             }
-        )
+        }
 
     }
 }
@@ -507,7 +605,7 @@ private fun IntroSplash() {
     LaunchedEffect(Unit) { delay(1900); showEndingMark = true }
     Dialog(onDismissRequest = {}, properties = DialogProperties(usePlatformDefaultWidth = false)) {
         Box(
-            Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(Color(0xFF0B1430), Color(0xFF182B54), Color(0xFF0B1430)))),
+            Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(Color(0xFF080B10), Color(0xFF171D25), Color(0xFF080B10)))),
             contentAlignment = Alignment.Center
         ) {
             Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(16.dp)) {
@@ -521,7 +619,7 @@ private fun IntroSplash() {
                     }
                 )
                 Text("MM4 SAVE DATA EDITOR", color = Color.White, fontSize = 19.sp, fontWeight = FontWeight.Black, letterSpacing = 1.8.sp)
-                Text("CAREER DATA WORKSHOP", color = Gold, fontSize = 10.sp, letterSpacing = 2.4.sp)
+                Text("F1 MOTORSPORT  •  CAREER ENGINEERING", color = Gold, fontSize = 9.sp, letterSpacing = 1.8.sp)
                 LinearProgressIndicator(
                     Modifier.width(176.dp).padding(top = 8.dp),
                     color = Red,
@@ -531,7 +629,7 @@ private fun IntroSplash() {
                     Text("Created by : Morepp", color = Muted, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
                 }
             }
-            Text("VERSION 1.5 • PERSONAL BUILD", Modifier.align(Alignment.BottomCenter).padding(bottom = 28.dp), color = Muted.copy(alpha = 0.7f), fontSize = 9.sp, letterSpacing = 1.2.sp)
+            Text("MM4 CAREER CONTROL  •  PERSONAL BUILD", Modifier.align(Alignment.BottomCenter).padding(bottom = 28.dp), color = Muted.copy(alpha = 0.7f), fontSize = 9.sp, letterSpacing = 1.2.sp)
         }
     }
 }
@@ -545,13 +643,17 @@ private fun WelcomePanel(busy: Boolean, onOpen: () -> Unit) {
         Column(
             Modifier.fillMaxWidth()
                 .clip(RoundedCornerShape(26.dp))
-                .background(
-                    Brush.linearGradient(
-                        listOf(PanelAlt, Panel, Color(0xFF3A2024))
-                    )
-                )
+                .background(Brush.linearGradient(listOf(Color(0xE0252C35), Color(0xD9182029), Color(0xE02A1718))))
+                .border(1.dp, GlassEdge, RoundedCornerShape(26.dp))
                 .padding(24.dp)
         ) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(9.dp)) {
+                Box(Modifier.width(4.dp).height(30.dp).clip(RoundedCornerShape(3.dp)).background(Red))
+                Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                    Text("MM4 / RACE CONTROL", color = Gold, fontSize = 9.sp, fontWeight = FontWeight.Black, letterSpacing = 1.5.sp)
+                    Text("CAREER ENGINEERING SUITE", color = Muted, fontSize = 8.sp, letterSpacing = 1.1.sp)
+                }
+            }
             Icon(
                 Icons.Default.DirectionsCar,
                 contentDescription = null,
@@ -560,7 +662,7 @@ private fun WelcomePanel(busy: Boolean, onOpen: () -> Unit) {
             )
             Spacer(Modifier.height(22.dp))
             Text(
-                "YOUR CAREER.\nYOUR RULES.",
+                "TAKE CONTROL.\nOWN THE PADDOCK.",
                 fontSize = 30.sp,
                 lineHeight = 33.sp,
                 fontWeight = FontWeight.Black
@@ -575,8 +677,8 @@ private fun WelcomePanel(busy: Boolean, onOpen: () -> Unit) {
                 onClick = onOpen,
                 enabled = !busy,
                 modifier = Modifier.fillMaxWidth(),
-                colors = ButtonDefaults.buttonColors(containerColor = Gold),
-                shape = RoundedCornerShape(14.dp)
+                colors = ButtonDefaults.buttonColors(containerColor = Red, contentColor = Color.White),
+                shape = RoundedCornerShape(12.dp)
             ) {
                 Icon(Icons.Default.FolderOpen, contentDescription = null)
                 Spacer(Modifier.width(8.dp))
@@ -584,7 +686,7 @@ private fun WelcomePanel(busy: Boolean, onOpen: () -> Unit) {
             }
             Spacer(Modifier.height(16.dp))
             Text(
-                "CAREER EDITOR • KONTROL TERARAH • LZ4 EXPORT",
+                "MM4 CAREER EDITOR  •  SAFE SAVE EXPORT",
                 color = Gold,
                 fontSize = 9.sp
             )
@@ -606,43 +708,38 @@ private fun CareerHeader(
         ?: "CAREER LOADED"
     Row(
         Modifier.fillMaxWidth()
-            .padding(14.dp)
+            .padding(horizontal = 12.dp, vertical = 8.dp)
             .clip(RoundedCornerShape(18.dp))
-            .background(
-                Brush.horizontalGradient(
-                    listOf(PanelAlt, Panel, Color(0xFF382326))
-                )
-            )
+            .background(Brush.horizontalGradient(listOf(Color(0xE0252C35), Color(0xD9182029), Color(0xE02A1718))))
+            .border(1.dp, GlassEdge, RoundedCornerShape(18.dp))
             .padding(14.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Column(Modifier.weight(1f)) {
-            Text(label.uppercase(), fontWeight = FontWeight.Black)
-            Text(
-                fileName,
-                color = Muted,
-                fontSize = 10.sp,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
-            Text(
-                if (hasChanges) "UNSAVED CHANGES" else "SAVE DATA READY",
-                color = if (hasChanges) Gold else Color(0xFF82D7A2),
-                fontSize = 9.sp,
-                fontWeight = FontWeight.Bold
-            )
+        Box(Modifier.width(4.dp).height(48.dp).clip(RoundedCornerShape(4.dp)).background(Red))
+        Spacer(Modifier.width(12.dp))
+        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+            Text("CAREER CONTROL  /  ${label.uppercase()}", color = Gold, fontSize = 8.sp, fontWeight = FontWeight.Black, letterSpacing = 1.0.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(fileName, color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(5.dp)) {
+                Box(Modifier.size(6.dp).clip(CircleShape).background(if (hasChanges) Gold else Color(0xFF66C58A)))
+                Text(if (hasChanges) "CHANGES PENDING EXPORT" else "CAREER LOADED • ORIGINAL PRESERVED", color = if (hasChanges) Gold else Color(0xFF82D7A2), fontSize = 8.sp, fontWeight = FontWeight.Bold, letterSpacing = 0.45.sp)
+            }
         }
         Button(
             onClick = onExport,
-            colors = ButtonDefaults.buttonColors(containerColor = Red)
+            colors = ButtonDefaults.buttonColors(containerColor = Red, contentColor = Color.White),
+            shape = RoundedCornerShape(10.dp),
+            contentPadding = PaddingValues(horizontal = 13.dp, vertical = 10.dp)
         ) {
-            Text("EXPORT")
+            Icon(Icons.Default.FileUpload, contentDescription = null, modifier = Modifier.size(14.dp))
+            Spacer(Modifier.width(5.dp))
+            Text("EXPORT", fontSize = 9.sp, fontWeight = FontWeight.Black, letterSpacing = 0.7.sp)
         }
     }
 }
 
 
-private val Sections = listOf("Overview", "Drivers", "Staff", "Teams", "Cars", "Finance", "HQ", "World", "Diagnostics", "Save Info", "Advanced", "God Mode")
+private val Sections = listOf("Overview", "Drivers", "Driver Analytics", "Staff", "Teams", "Cars", "Finance", "Career Finance Analytics", "HQ", "Championships", "Influence Actions", "Manager Progression", "World", "Diagnostics", "Save Info", "Advanced", "God Mode")
 
 @Composable
 private fun CareerWorkspace(
@@ -650,11 +747,36 @@ private fun CareerWorkspace(
     selectedDriver: String?, onDriver: (String?) -> Unit,
     onEdit: (String, List<String>, JsonElement) -> Unit,
     onGodAction: (String) -> Unit,
-    onApplyTeamColor: (List<String>, JsonObject) -> Unit
+    onApplyTeamColor: (List<String>, JsonObject) -> Unit,
+    onApplyExperience: (Int) -> Unit,
+    onResetInfluenceCooldown: (Int) -> Unit
 ) {
     Column(Modifier.fillMaxSize()) {
-        LazyRow(Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 4.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            items(Sections) { s -> FilterChip(selected = section == s, onClick = { onSection(s) }, label = { Text(s, fontSize = 11.sp) }) }
+        LazyRow(
+            Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 7.dp),
+            horizontalArrangement = Arrangement.spacedBy(7.dp),
+            contentPadding = PaddingValues(horizontal = 2.dp)
+        ) {
+            items(Sections) { s ->
+                FilterChip(
+                    selected = section == s,
+                    onClick = { onSection(s) },
+                    label = { Text(s.uppercase(), fontSize = 9.sp, fontWeight = FontWeight.Bold, letterSpacing = 0.45.sp) },
+                    shape = RoundedCornerShape(10.dp),
+                    colors = FilterChipDefaults.filterChipColors(
+                        selectedContainerColor = Red,
+                        selectedLabelColor = Color.White,
+                        containerColor = Color(0x661C242E),
+                        labelColor = Muted
+                    ),
+                    border = FilterChipDefaults.filterChipBorder(
+                        enabled = true,
+                        selected = section == s,
+                        borderColor = GlassEdge,
+                        selectedBorderColor = Red
+                    )
+                )
+            }
         }
         AnimatedContent(
             targetState = section,
@@ -669,6 +791,11 @@ private fun CareerWorkspace(
             when (targetSection) {
                 "Overview" -> OverviewPage(document, onSection)
                 "Drivers" -> DriverPage(document, selectedDriver, onDriver, onEdit)
+                "Driver Analytics" -> DriverAnalyticsPage(document)
+                "Championships" -> ChampionshipManagerPage(document)
+                "Influence Actions" -> InfluenceActionsPage(document, onResetInfluenceCooldown)
+                "Career Finance Analytics" -> CareerFinanceAnalyticsPage(document)
+                "Manager Progression" -> ManagerProgressionPage(document, onApplyExperience)
                 "Staff" -> EntityCatalogPage(document, "staff", onEdit, onApplyTeamColor)
                 "Teams" -> EntityCatalogPage(document, "team", onEdit, onApplyTeamColor)
                 "Cars" -> EntityCatalogPage(document, "car", onEdit, onApplyTeamColor)
@@ -748,6 +875,12 @@ private fun DriverPage(doc: Mm4SaveCodec.Document, selected: String?, onSelect: 
             DriverRecord(path,obj,id,name,team)
         }?.distinctBy { it.id }?.sortedWith(compareBy({ it.team.lowercase() },{ it.name.lowercase() })).orEmpty()
     }
+    val analyticsById = remember(doc.data, doc.info) {
+        driverAnalyticsRecords(
+            doc.data,
+            doc.info.get("gameDate")?.takeIf { it.isJsonPrimitive }?.asString
+        ).associateBy { it.recordKey }
+    }
     val referenced=doc.data.getAsJsonObject("driverManager")?.getAsJsonArray("m_Drivers")?.size() ?: 0
     val chosen=drivers.firstOrNull { it.id==selected }
     if(chosen==null) {
@@ -778,6 +911,7 @@ private fun DriverPage(doc: Mm4SaveCodec.Document, selected: String?, onSelect: 
         }
     } else {
         val d=chosen.data
+        val careerAnalytics=analyticsById[chosen.id]
         val details=d.getAsJsonObject("m_PersonDetails")
         val contract=d.getAsJsonObject("contract")
         val stats=d.getAsJsonObject("m_Stats")?.getAsJsonArray("m_Stats")
@@ -846,6 +980,38 @@ private fun DriverPage(doc: Mm4SaveCodec.Document, selected: String?, onSelect: 
                     }
                 }
             }
+            item {
+                GlassCard(Modifier.fillMaxWidth()) {
+                    Text("RIWAYAT KARIER", color=Gold, fontWeight=FontWeight.Bold, fontSize=11.sp)
+                    val history = careerAnalytics?.careerHistory.orEmpty()
+                    if (history.isEmpty()) {
+                        Text("Belum ada riwayat musim yang tersimpan untuk pembalap ini.", color=Muted, fontSize=10.sp)
+                    } else {
+                        val totalWins = history.sumOf { it.wins }
+                        val totalPodiums = history.sumOf { it.podiums }
+                        val totalRaces = history.sumOf { it.races }
+                        val totalPoints = history.sumOf { it.points }
+                        Row(horizontalArrangement=Arrangement.spacedBy(8.dp)) {
+                            listOf("MENANG" to totalWins, "PODIUM" to totalPodiums, "BALAPAN" to totalRaces, "POIN" to totalPoints).forEach { (label,value) ->
+                                Column(Modifier.weight(1f)) {
+                                    Text(label, color=Muted, fontSize=8.sp)
+                                    Text(value.toString(), color=Gold, fontWeight=FontWeight.Black, fontSize=14.sp)
+                                }
+                            }
+                        }
+                        Divider(color=Color.White.copy(alpha=0.12f))
+                        history.forEach { season ->
+                            Column(Modifier.fillMaxWidth().padding(vertical=5.dp), verticalArrangement=Arrangement.spacedBy(2.dp)) {
+                                Row(Modifier.fillMaxWidth(), horizontalArrangement=Arrangement.SpaceBetween) {
+                                    Text("${season.year} • ${season.teamName}", fontWeight=FontWeight.SemiBold, fontSize=11.sp)
+                                    Text("${season.points} poin", color=Gold, fontWeight=FontWeight.Bold, fontSize=10.sp)
+                                }
+                                Text("Menang ${season.wins} • Podium ${season.podiums} • Balapan ${season.races} • DNF ${season.dnfs}", color=Muted, fontSize=9.sp)
+                            }
+                        }
+                    }
+                }
+            }
 
         }
     }
@@ -905,7 +1071,7 @@ private fun TeamPage(doc: Mm4SaveCodec.Document, onEdit: (String,List<String>,Js
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Text(channel.uppercase(), Modifier.weight(1f), color = Muted, fontSize = 10.sp)
-                        Text((if (value.isJsonPrimitive && value.asJsonPrimitive.isString) value.asString else value.toString()), color = Gold, fontWeight = FontWeight.Bold, fontSize = 11.sp)
+                        Text(preview(value), color = Gold, fontWeight = FontWeight.Bold, fontSize = 11.sp)
                         Icon(Icons.Default.Edit, null, tint = Muted, modifier = Modifier.size(15.dp))
                     }
                 }
@@ -1084,7 +1250,7 @@ private fun EntityCatalogPage(doc: Mm4SaveCodec.Document, category: String, onEd
                     Row(verticalAlignment=Alignment.CenterVertically) {
                         Column(Modifier.weight(1f)) {
                             Text(label,fontWeight=FontWeight.SemiBold,fontSize=12.sp)
-                            Text(path.dropLast(1).joinToString(" / "),color=Muted,fontSize=9.sp,maxLines=1,overflow=TextOverflow.Ellipsis)
+                            Text(path.dropLast(1).joinToString(" / ") { humanizeField(it) },color=Muted,fontSize=9.sp,maxLines=1,overflow=TextOverflow.Ellipsis)
                         }
                         Text(preview(value),color=Gold,fontWeight=FontWeight.Bold,fontSize=12.sp)
                         Icon(Icons.Default.Edit,null,tint=Muted,modifier=Modifier.size(16.dp))
@@ -1215,6 +1381,333 @@ private fun statAttributeLabel(category:String,type:String,index:Int):String {
     return labels.getOrNull(index) ?: "Attribute "+(index+1)
 }
 
+
+
+
+
+
+@Composable
+private fun InfluenceActionsPage(doc: Mm4SaveCodec.Document, onResetCooldown: (Int) -> Unit) {
+    val actions = remember(doc.data) { influenceActionRecords(doc.data) }
+    val influence = doc.data.getAsJsonObject("influenceManager")?.get("m_Influence")
+    val readyCount = actions.count { it.cooldown <= 0 }
+
+    LazyColumn(contentPadding = PaddingValues(14.dp), verticalArrangement = Arrangement.spacedBy(9.dp)) {
+        item {
+            GlassCard(Modifier.fillMaxWidth()) {
+                Text("INFLUENCE ACTION EDITOR", color = Gold, fontWeight = FontWeight.Black, fontSize = 11.sp)
+                Text("Kelola kesiapan aksi influence", fontSize = 21.sp, fontWeight = FontWeight.Black)
+                Text("Status aksi yang tercatat dalam career, termasuk waktu tunggu penggunaannya.", color = Muted, fontSize = 11.sp)
+                Spacer(Modifier.height(8.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Column(Modifier.weight(1f)) {
+                        Text("SALDO INFLUENCE", color = Muted, fontSize = 9.sp)
+                        Text(influence?.let { preview(it) } ?: "—", color = Gold, fontSize = 22.sp, fontWeight = FontWeight.Black)
+                    }
+                    Column(Modifier.weight(1f)) {
+                        Text("AKSI SIAP", color = Muted, fontSize = 9.sp)
+                        Text("$readyCount / ${actions.size}", fontSize = 22.sp, fontWeight = FontWeight.Black)
+                    }
+                }
+            }
+        }
+        item { Text("DAFTAR AKSI", color = Gold, fontWeight = FontWeight.Bold, fontSize = 10.sp) }
+        items(actions, key = { it.index }) { action ->
+            GlassCard(Modifier.fillMaxWidth()) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f)) {
+                        Text(action.label, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                        Text("Aksi ${action.index + 1}", color = Muted, fontSize = 9.sp)
+                    }
+                    Column(horizontalAlignment = Alignment.End) {
+                        Text(
+                            action.status,
+                            color = if (action.cooldown <= 0) Color(0xFF9BE36A) else Gold,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 10.sp
+                        )
+                        if (action.cooldown > 0) {
+                            TextButton(
+                                onClick = { onResetCooldown(action.position) },
+                                contentPadding = PaddingValues(horizontal = 4.dp, vertical = 0.dp)
+                            ) { Text("Siapkan aksi", color = Gold, fontSize = 9.sp) }
+                        }
+                    }
+                }
+            }
+        }
+        if (actions.isEmpty()) item { Text("Data aksi influence tidak ditemukan pada save ini.", color = Muted, fontSize = 11.sp) }
+        item { Text("Aksi dengan cooldown aktif dapat disiapkan kembali. Data lain pada setiap aksi tetap dipertahankan.", color = Muted, fontSize = 10.sp) }
+    }
+}
+
+@Composable
+private fun ChampionshipManagerPage(doc: Mm4SaveCodec.Document) {
+    val championships = remember(doc.data) { championshipSummaries(doc.data) }
+    var selectedKey by remember { mutableStateOf("") }
+    var showChampionshipDetails by remember { mutableStateOf(false) }
+    LaunchedEffect(doc.data) {
+        if (championships.none { it.recordKey == selectedKey }) selectedKey = championships.firstOrNull()?.recordKey.orEmpty()
+    }
+    val selected = championships.firstOrNull { it.recordKey == selectedKey }
+
+    LazyColumn(contentPadding = PaddingValues(14.dp), verticalArrangement = Arrangement.spacedBy(9.dp)) {
+        item {
+            GlassCard(Modifier.fillMaxWidth()) {
+                Text("CHAMPIONSHIP MANAGER", color = Gold, fontWeight = FontWeight.Black, fontSize = 11.sp)
+                Text("Kejuaraan dan klasemen tim", fontSize = 21.sp, fontWeight = FontWeight.Black)
+                Text("Jelajahi struktur kejuaraan, jumlah peserta, event berjalan, dan klasemen yang tersimpan.", color = Muted, fontSize = 11.sp)
+                Spacer(Modifier.height(8.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Column(Modifier.weight(1f)) {
+                        Text("KEJUARAAN", color = Muted, fontSize = 9.sp)
+                        Text(championships.size.toString(), fontSize = 22.sp, fontWeight = FontWeight.Black)
+                    }
+                    Column(Modifier.weight(1f)) {
+                        Text("TOTAL TIM", color = Muted, fontSize = 9.sp)
+                        Text(championships.sumOf { it.teamCount }.toString(), fontSize = 22.sp, fontWeight = FontWeight.Black)
+                    }
+                    Column(Modifier.weight(1f)) {
+                        Text("TOTAL EVENT", color = Muted, fontSize = 9.sp)
+                        Text(championships.sumOf { it.raceCount }.toString(), fontSize = 22.sp, fontWeight = FontWeight.Black)
+                    }
+                }
+            }
+        }
+        item { Text("DAFTAR KEJUARAAN", color = Gold, fontWeight = FontWeight.Bold, fontSize = 10.sp) }
+        items(championships, key = { it.recordKey }) { championship ->
+            GlassCard(
+                Modifier.fillMaxWidth().clickable { selectedKey = championship.recordKey; showChampionshipDetails = true }
+                    .then(if (selectedKey == championship.recordKey) Modifier.border(1.dp, Gold, RoundedCornerShape(16.dp)) else Modifier)
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f)) {
+                        Text(championship.displayName, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                        Text("Tier ${championship.tier + 1} • Series ${championship.series + 1}", color = Muted, fontSize = 10.sp)
+                        Text("${championship.teamCount} tim • ${championship.driverCount} pembalap • ${championship.raceCount} event", color = Muted, fontSize = 10.sp)
+                    }
+                    Icon(Icons.Default.ChevronRight, contentDescription = "Lihat klasemen", tint = Gold)
+                }
+            }
+        }
+        selected?.let { championship ->
+            item {
+                GlassCard(Modifier.fillMaxWidth()) {
+                    Text("DETAIL KEJUARAAN", color = Gold, fontWeight = FontWeight.Bold, fontSize = 10.sp)
+                    Text(championship.displayName, fontSize = 20.sp, fontWeight = FontWeight.Black)
+                    Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                        Column(Modifier.weight(1f)) {
+                            Text("TIER", color = Muted, fontSize = 9.sp)
+                            Text((championship.tier + 1).toString(), fontWeight = FontWeight.Bold)
+                        }
+                        Column(Modifier.weight(1f)) {
+                            Text("SERIES", color = Muted, fontSize = 9.sp)
+                            Text((championship.series + 1).toString(), fontWeight = FontWeight.Bold)
+                        }
+                        Column(Modifier.weight(1f)) {
+                            Text("EVENT BERJALAN", color = Muted, fontSize = 9.sp)
+                            Text(championship.eventNumber.toString(), fontWeight = FontWeight.Bold)
+                        }
+                    }
+                }
+            }
+            item { Text("KLASEMEN TIM", color = Gold, fontWeight = FontWeight.Bold, fontSize = 10.sp) }
+            items(championship.standings, key = { "${championship.recordKey}-${it.position}" }) { standing ->
+                GlassCard(Modifier.fillMaxWidth()) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text("P${standing.position}", color = Gold, fontWeight = FontWeight.Black, fontSize = 16.sp, modifier = Modifier.width(38.dp))
+                        Column(Modifier.weight(1f)) {
+                            Text(standing.teamName, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                            Text("${standing.wins} menang • ${standing.podiums} podium • ${standing.races} balapan • ${standing.dnfs} DNF", color = Muted, fontSize = 9.sp)
+                        }
+                        Column(horizontalAlignment = Alignment.End) {
+                            Text(standing.points.toString(), color = Gold, fontWeight = FontWeight.Black, fontSize = 17.sp)
+                            Text("POIN", color = Muted, fontSize = 8.sp)
+                        }
+                    }
+                }
+            }
+            if (championship.standings.isEmpty()) {
+                item { Text("Klasemen tim belum tersedia pada kejuaraan ini.", color = Muted, fontSize = 11.sp) }
+            }
+        }
+        item { Text("Klasemen ditampilkan dari catatan hasil yang tersimpan. Halaman ini tidak mengubah posisi, poin, atau hasil balapan.", color = Muted, fontSize = 10.sp) }
+    }
+    if (showChampionshipDetails && selected != null) {
+        AlertDialog(
+            onDismissRequest = { showChampionshipDetails = false },
+            title = { Text(selected.displayName, fontWeight = FontWeight.Black) },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(7.dp)) {
+                    InfoLine("Tier", (selected.tier + 1).toString())
+                    InfoLine("Series", (selected.series + 1).toString())
+                    InfoLine("Event berjalan", selected.eventNumber.toString())
+                    InfoLine("Tim", selected.teamCount.toString())
+                    InfoLine("Pembalap", selected.driverCount.toString())
+                    InfoLine("Event tersimpan", selected.raceCount.toString())
+                    Divider(color = Color.White.copy(alpha = 0.15f))
+                    Text("KLASEMEN TIM", color = Gold, fontWeight = FontWeight.Bold)
+                    selected.standings.take(8).forEach { row ->
+                        InfoLine("P" + row.position + "  " + row.teamName, row.points.toString() + " poin")
+                    }
+                }
+            },
+            confirmButton = { TextButton(onClick = { showChampionshipDetails = false }) { Text("TUTUP") } }
+        )
+    }
+}
+
+@Composable
+private fun DriverAnalyticsPage(doc: Mm4SaveCodec.Document) {
+    val records = remember(doc.data, doc.info) {
+        driverAnalyticsRecords(doc.data, doc.info.get("gameDate")?.takeIf { it.isJsonPrimitive }?.asString)
+    }
+    var query by remember { mutableStateOf("") }
+    var selectedDriverKey by remember { mutableStateOf("") }
+    var showDriverDetails by remember { mutableStateOf(false) }
+    LaunchedEffect(doc.data) {
+        if (records.none { it.recordKey == selectedDriverKey }) selectedDriverKey = records.firstOrNull()?.recordKey.orEmpty()
+    }
+    val filtered = records.filter {
+        query.isBlank() || it.name.contains(query, true) || it.teamName.contains(query, true)
+    }
+    val selected = records.firstOrNull { it.recordKey == selectedDriverKey }
+
+    LazyColumn(contentPadding = PaddingValues(14.dp), verticalArrangement = Arrangement.spacedBy(9.dp)) {
+        item {
+            GlassCard(Modifier.fillMaxWidth()) {
+                Text("DRIVER ANALYTICS", color = Gold, fontWeight = FontWeight.Black, fontSize = 11.sp)
+                Text("Statistik dan perjalanan pembalap", fontSize = 21.sp, fontWeight = FontWeight.Black)
+                Text("Ringkasan profil, performa, potensi, pengalaman, dan trait berdasarkan data career.", color = Muted, fontSize = 11.sp)
+                Spacer(Modifier.height(8.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Column(Modifier.weight(1f)) {
+                        Text("TOTAL PEMBALAP", color = Muted, fontSize = 9.sp)
+                        Text(records.size.toString(), fontSize = 22.sp, fontWeight = FontWeight.Black)
+                    }
+                    Column(Modifier.weight(1f)) {
+                        Text("PUNYA RIWAYAT", color = Muted, fontSize = 9.sp)
+                        Text(records.count { it.careerSeasons > 0 }.toString(), fontSize = 22.sp, fontWeight = FontWeight.Black)
+                    }
+                }
+            }
+        }
+        item {
+            OutlinedTextField(
+                value = query,
+                onValueChange = { query = it },
+                modifier = Modifier.fillMaxWidth(),
+                singleLine = true,
+                placeholder = { Text("Cari nama pembalap atau tim…") },
+                leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) }
+            )
+        }
+        item { Text("DATABASE PEMBALAP", color = Gold, fontWeight = FontWeight.Bold, fontSize = 10.sp) }
+        items(filtered, key = { it.recordKey }) { driver ->
+            GlassCard(
+                Modifier.fillMaxWidth().clickable { selectedDriverKey = driver.recordKey; showDriverDetails = true }
+                    .then(if (selectedDriverKey == driver.recordKey) Modifier.border(1.dp, Gold, RoundedCornerShape(16.dp)) else Modifier)
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f)) {
+                        Text(driver.name, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                        Text(driver.teamName, color = Muted, fontSize = 10.sp)
+                        Text(
+                            (driver.age?.let { "Usia $it tahun" } ?: "Usia tidak tersedia") +
+                                " • ${driver.careerSeasons} musim karier",
+                            color = Muted,
+                            fontSize = 10.sp
+                        )
+                    }
+                    Icon(Icons.Default.ChevronRight, contentDescription = "Lihat statistik", tint = Gold)
+                }
+            }
+        }
+        if (filtered.isEmpty()) {
+            item { Text("Tidak ada pembalap yang cocok dengan pencarian.", color = Muted, fontSize = 11.sp) }
+        }
+        selected?.let { driver ->
+            item {
+                GlassCard(Modifier.fillMaxWidth()) {
+                    Text("PROFIL ANALITIK", color = Gold, fontWeight = FontWeight.Bold, fontSize = 10.sp)
+                    Text(driver.name, fontSize = 20.sp, fontWeight = FontWeight.Black)
+                    Text(driver.teamName, color = Muted, fontSize = 11.sp)
+                    Divider(color = Color.White.copy(alpha = 0.12f))
+                    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                        Column(Modifier.weight(1f)) {
+                            Text("USIA", color = Muted, fontSize = 9.sp)
+                            Text(driver.age?.let { "$it tahun" } ?: "—", fontWeight = FontWeight.Bold, fontSize = 15.sp)
+                        }
+                        Column(Modifier.weight(1f)) {
+                            Text("RIWAYAT KARIER", color = Muted, fontSize = 9.sp)
+                            Text("${driver.careerSeasons} musim", fontWeight = FontWeight.Bold, fontSize = 15.sp)
+                        }
+                        Column(Modifier.weight(1f)) {
+                            Text("TRAIT", color = Muted, fontSize = 9.sp)
+                            Text(driver.traitCount.toString(), fontWeight = FontWeight.Bold, fontSize = 15.sp)
+                        }
+                    }
+                    Text("ID pembalap ${driver.driverId}", color = Muted, fontSize = 9.sp)
+                }
+            }
+            if (driver.attributes.isNotEmpty() || driver.potentials.isNotEmpty()) {
+                item {
+                    GlassCard(Modifier.fillMaxWidth()) {
+                        Text("ATRIBUT DAN POTENSI", color = Gold, fontWeight = FontWeight.Bold, fontSize = 10.sp)
+                        val count = maxOf(driver.attributes.size, driver.potentials.size)
+                        (0 until count).forEach { index ->
+                            Row(Modifier.fillMaxWidth().padding(vertical = 5.dp), verticalAlignment = Alignment.CenterVertically) {
+                                Text(statAttributeLabel("driver", "driver", index), Modifier.weight(1f), fontSize = 11.sp)
+                                Column(horizontalAlignment = Alignment.End) {
+                                    Text("${driver.attributes.getOrNull(index) ?: "—"} / 20", color = Gold, fontWeight = FontWeight.Bold, fontSize = 11.sp)
+                                    Text("Potensi ${driver.potentials.getOrNull(index) ?: "—"}", color = Muted, fontSize = 9.sp)
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        item {
+            Text("Halaman ini hanya membaca data pembalap. Tidak ada statistik atau riwayat yang ditulis ulang ke save.", color = Muted, fontSize = 10.sp)
+        }
+    }
+    if (showDriverDetails && selected != null) {
+        AlertDialog(
+            onDismissRequest = { showDriverDetails = false },
+            title = { Text(selected.name, fontWeight = FontWeight.Black) },
+            text = {
+                Column(
+                    Modifier.heightIn(max = 520.dp).verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(7.dp)
+                ) {
+                    Text(selected.teamName, color = Gold, fontWeight = FontWeight.Bold)
+                    InfoLine("Usia", selected.age?.let { it.toString() + " tahun" } ?: "Tidak tersedia")
+                    InfoLine("Riwayat karier", selected.careerSeasons.toString() + " musim")
+                    selected.careerHistory.take(10).forEach { season ->
+                        Column(verticalArrangement = Arrangement.spacedBy(2.dp), modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
+                            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                                Text(season.year.toString() + " • " + season.teamName, color = Color.White, fontWeight = FontWeight.SemiBold, fontSize = 11.sp)
+                                Text(season.points.toString() + " poin", color = Gold, fontWeight = FontWeight.Bold, fontSize = 11.sp)
+                            }
+                            Text("Menang ${season.wins}  •  Podium ${season.podiums}  •  Balapan ${season.races}  •  DNF ${season.dnfs}", color = Muted, fontSize = 9.sp)
+                        }
+                    }
+                    InfoLine("Trait", selected.traitCount.toString())
+                    Divider(color = Color.White.copy(alpha = 0.15f))
+                    Text("ATRIBUT & POTENSI", color = Gold, fontWeight = FontWeight.Bold)
+                    val count = maxOf(selected.attributes.size, selected.potentials.size)
+                    (0 until count).forEach { index ->
+                        InfoLine(statAttributeLabel("driver", "driver", index),
+                            (selected.attributes.getOrNull(index)?.toString() ?: "—") + " / 20  •  Potensi " + (selected.potentials.getOrNull(index)?.toString() ?: "—"))
+                    }
+                }
+            },
+            confirmButton = { TextButton(onClick = { showDriverDetails = false }) { Text("TUTUP") } }
+        )
+    }
+}
+
 @Composable
 private fun WorldSettingsPage(doc:Mm4SaveCodec.Document,onEdit:(String,List<String>,JsonElement)->Unit) {
     val keywords=listOf("store","shop","unlock","rule","regulation","gameplay","league","championship","race","calendar","difficulty","option","setting")
@@ -1229,7 +1722,7 @@ private fun WorldSettingsPage(doc:Mm4SaveCodec.Document,onEdit:(String,List<Stri
             GlassCard(Modifier.fillMaxWidth()) {
                 Text(worldGroupLabel(group.key),fontWeight=FontWeight.Bold)
                 Text(categoryDescription(group.value,flatten(group.value).size),color=Muted,fontSize=10.sp)
-                flatten(group.value).filter { (path,value) -> path.none { it == "\$ref" || it == "\$version" } && value.isJsonPrimitive }.forEach { (path,value) ->
+                flatten(group.value).filter { (path,value) -> path.none { it.startsWith("\$") } && value.isJsonPrimitive }.forEach { (path,value) ->
                     Row(Modifier.fillMaxWidth().clickable { onEdit("Game Data",listOf(group.key)+path,value) }.padding(vertical=6.dp),verticalAlignment=Alignment.CenterVertically) {
                         Text(humanLabel(path.last()),Modifier.weight(1f),fontSize=11.sp)
                         Text(preview(value),color=Gold,fontSize=11.sp)
@@ -1239,6 +1732,129 @@ private fun WorldSettingsPage(doc:Mm4SaveCodec.Document,onEdit:(String,List<Stri
             }
         }
         if(groups.isEmpty()) item { Text("Belum ditemukan grup Store/Rules/Unlock yang bisa dikenali di save ini. Data lain tetap dipertahankan di Advanced.",color=Muted) }
+    }
+}
+
+@Composable
+private fun CareerFinanceAnalyticsPage(doc: Mm4SaveCodec.Document) {
+    val summary = remember(doc.data) { careerFinanceSummary(doc.data) }
+    val transactions = remember(doc.data) {
+        doc.data.getAsJsonObject("financeManager")?.get("m_TransactionHistory")
+            ?.takeIf { it.isJsonArray }?.asJsonArray
+            ?.mapNotNull { value ->
+                value.takeIf { it.isJsonPrimitive && it.asJsonPrimitive.isNumber }?.asLong
+            }.orEmpty()
+    }
+    LazyColumn(contentPadding = PaddingValues(14.dp), verticalArrangement = Arrangement.spacedBy(9.dp)) {
+        item {
+            GlassCard(Modifier.fillMaxWidth()) {
+                Text("CAREER FINANCE ANALYTICS", color = Gold, fontWeight = FontWeight.Black, fontSize = 11.sp)
+                Text("Ringkasan keuangan career", fontSize = 21.sp, fontWeight = FontWeight.Black)
+                Text("Analisis memakai saldo, riwayat transaksi, dan biaya per balapan yang tersimpan.", color = Muted, fontSize = 11.sp)
+                Spacer(Modifier.height(8.dp))
+                Text("SALDO SAAT INI", color = Muted, fontSize = 9.sp)
+                Text(summary?.let { formatMoney(it.balance) } ?: "Tidak tersedia", color = Gold, fontSize = 24.sp, fontWeight = FontWeight.Black)
+            }
+        }
+        if (summary != null) {
+            item {
+                GlassCard(Modifier.fillMaxWidth()) {
+                    Text("RINGKASAN TRANSAKSI", color = Gold, fontWeight = FontWeight.Bold, fontSize = 10.sp)
+                    InfoLine("Total catatan", summary.transactionCount.toString())
+                    InfoLine("Nilai positif", formatMoney(summary.incomingTotal))
+                    InfoLine("Nilai negatif", formatMoney(summary.outgoingTotal))
+                    InfoLine("Tidak mengubah saldo", summary.unchangedCount.toString())
+                }
+            }
+            item {
+                GlassCard(Modifier.fillMaxWidth()) {
+                    Text("BIAYA PER BALAPAN", color = Gold, fontWeight = FontWeight.Bold, fontSize = 10.sp)
+                    InfoLine("Catatan biaya", summary.perRaceCostCount.toString())
+                    InfoLine("Total nilai biaya", formatMoney(summary.perRaceCostTotal))
+                }
+            }
+        }
+        item { Text("RIWAYAT TRANSAKSI", color = Gold, fontWeight = FontWeight.Bold, fontSize = 10.sp) }
+        items(transactions.size) { index ->
+            val amount = transactions[index]
+            GlassCard(Modifier.fillMaxWidth()) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f)) {
+                        Text("Transaksi " + (index + 1), fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                        Text(
+                            when {
+                                amount > 0 -> "Nilai positif"
+                                amount < 0 -> "Nilai negatif"
+                                else -> "Tidak ada perubahan nilai"
+                            },
+                            color = Muted,
+                            fontSize = 9.sp
+                        )
+                    }
+                    Text(formatMoney(amount), color = if (amount >= 0) Color(0xFF9BE36A) else Gold, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                }
+            }
+        }
+        if (transactions.isEmpty()) item { Text("Belum ada catatan transaksi numerik pada save ini.", color = Muted, fontSize = 11.sp) }
+        item { Text("Jenis transaksi tidak ditebak karena riwayat pada save hanya menyimpan nilai. Semua angka ditampilkan tanpa pecahan.", color = Muted, fontSize = 10.sp) }
+    }
+}
+
+@Composable
+private fun ManagerProgressionPage(doc: Mm4SaveCodec.Document, onApplyExperience: (Int) -> Unit) {
+    val summary = remember(doc.data) { managerProgressionSummary(doc.data) }
+    var experienceInput by remember(summary) { mutableStateOf(summary?.experience?.toString().orEmpty()) }
+    val parsedExperience = experienceInput.toIntOrNull()
+    val canApply = summary != null && parsedExperience != null && parsedExperience >= 0
+    LazyColumn(contentPadding = PaddingValues(14.dp), verticalArrangement = Arrangement.spacedBy(9.dp)) {
+        item {
+            GlassCard(Modifier.fillMaxWidth()) {
+                Text("MANAGER PROGRESSION", color = Gold, fontWeight = FontWeight.Black, fontSize = 11.sp)
+                Text("Perkembangan manager", fontSize = 21.sp, fontWeight = FontWeight.Black)
+                Text("Level dan experience dibaca dari data career serta tabel level yang tersimpan di save.", color = Muted, fontSize = 11.sp)
+            }
+        }
+        if (summary != null) {
+            item {
+                GlassCard(Modifier.fillMaxWidth()) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                        Column(Modifier.weight(1f)) {
+                            Text("LEVEL SAAT INI", color = Muted, fontSize = 9.sp)
+                            Text(summary.level.toString() + " / " + summary.maximumLevel, color = Gold, fontSize = 24.sp, fontWeight = FontWeight.Black)
+                        }
+                        Column(Modifier.weight(1f)) {
+                            Text("EXPERIENCE", color = Muted, fontSize = 9.sp)
+                            Text(summary.experience.toString(), fontSize = 24.sp, fontWeight = FontWeight.Black)
+                        }
+                    }
+                    Divider(color = Color.White.copy(alpha = 0.12f))
+                    InfoLine("Awal rentang level", summary.baseExperience.toString())
+                    InfoLine("Batas level berikutnya", summary.maxExperience.toString())
+                    Text("Experience baru otomatis menentukan level dan batas level dari tabel career. Nilai di luar rentang tidak akan diterapkan.", color = Muted, fontSize = 10.sp)
+                }
+            }
+            item {
+                GlassCard(Modifier.fillMaxWidth()) {
+                    Text("UBAH EXPERIENCE", color = Gold, fontWeight = FontWeight.Bold, fontSize = 10.sp)
+                    OutlinedTextField(
+                        value = experienceInput,
+                        onValueChange = { value -> experienceInput = value.filter(Char::isDigit).take(10) },
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true,
+                        label = { Text("Total experience") },
+                        keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = androidx.compose.ui.text.input.KeyboardType.Number)
+                    )
+                    Button(
+                        onClick = { parsedExperience?.let(onApplyExperience) },
+                        enabled = canApply && parsedExperience != summary.experience,
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = ButtonDefaults.buttonColors(containerColor = Red)
+                    ) { Text("TERAPKAN EXPERIENCE") }
+                }
+            }
+        } else {
+            item { Text("Data progresi manager tidak lengkap pada save ini. Tidak ada perubahan yang bisa diterapkan.", color = Muted, fontSize = 11.sp) }
+        }
     }
 }
 
@@ -1270,7 +1886,7 @@ internal fun financeHistoryLabel(value: JsonElement): String {
             .firstNotNullOfOrNull { key -> obj.get(key)?.takeIf { it.isJsonPrimitive && it.asJsonPrimitive.isNumber } }
         if (amount != null) return runCatching { formatMoney(amount.asLong) }.getOrDefault(preview(value))
     }
-    return preview(value)
+    return "Detail transaksi tersimpan"
 }
 
 @Composable
@@ -1340,9 +1956,9 @@ private val HqFacilityCatalog = listOf(
  HqFacilityInfo("Factory",0,"+2 Mechanical Bonus to Both Cars"),
  HqFacilityInfo("Telemetry Department",0,"New Setup Card available in Qualifying"),
  HqFacilityInfo("Simulator",0,"+2 Part Build Limit"),
- HqFacilityInfo("Staff Gym",1,"+0.25 Driver Improvement Points Per Race"),
+ HqFacilityInfo("Staff Gym",1,"+1 Driver Improvement Point Every 4 Races"),
  HqFacilityInfo("Publicity",1,"Drivers receive +1 Sponsor Appeal"),
- HqFacilityInfo("Education",1,"+0.25 Driver Improvement Points Per Race"),
+ HqFacilityInfo("Education",1,"+1 Driver Improvement Point Every 4 Races"),
  HqFacilityInfo("Sporting Psychology Center",1,"Can Give Focus to 2 Young Drivers"),
  HqFacilityInfo("Forecasting Center",2,"Forecasting Center Unlocked"),
  HqFacilityInfo("Outsourced Logistics",2,"Can Target 1 Additional Node in the Supplier Network"),
@@ -1391,7 +2007,7 @@ private fun HqPage(doc: Mm4SaveCodec.Document, onEdit: (String,List<String>,Json
       val group=HqGroupNames.getOrNull(key) ?: "HQ Category #"+key
       Row(Modifier.fillMaxWidth().padding(vertical=4.dp),verticalAlignment=Alignment.CenterVertically) {
        Text(group,Modifier.weight(1f),color=Color.White,fontSize=12.sp)
-       Text(value?.asString ?: "—",color=Gold,fontWeight=FontWeight.Bold)
+       Text(value?.let { preview(it) } ?: "—",color=Gold,fontWeight=FontWeight.Bold)
        if(value!=null) IconButton(onClick={onEdit("Game Data",listOf("headquarters","m_CurrentTierInformation","["+index+"]","Value"),value)}) {
         Icon(Icons.Default.Edit,contentDescription="Edit "+group+" level",tint=Muted)
        }
@@ -1443,11 +2059,11 @@ private fun HqPage(doc: Mm4SaveCodec.Document, onEdit: (String,List<String>,Json
       if(state!=null) TextButton(onClick={onEdit("Game Data",listOf("headquarters","m_Upgrades","["+listIndex+"]","Value","State"),state)}){Text("STATE")}
      }
      if(weeks!=null) {
-      InfoLine("Weeks to unlock",weeks.asString)
+      InfoLine("Weeks to unlock",preview(weeks))
       TextButton(onClick={onEdit("Game Data",listOf("headquarters","m_Upgrades","["+listIndex+"]","Value","weeksToUnlock"),weeks)}){Text("EDIT TIMER")}
      }
      if(path!=null) {
-      InfoLine("Upgrade path",HqGroupNames.getOrNull(path.asInt) ?: path.asString)
+      InfoLine("Upgrade path",HqGroupNames.getOrNull(path.asInt) ?: preview(path))
       TextButton(onClick={onEdit("Game Data",listOf("headquarters","m_Upgrades","["+listIndex+"]","Value","pathType"),path)}){Text("EDIT PATH")}
      }
     }
@@ -1561,7 +2177,7 @@ private fun MarketplaceComponentCard(element:JsonElement,arrayKey:String,compone
      val statValue=statObject.get("Value")
      Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically) {
       Text(componentStatName(statId),Modifier.weight(1f),fontSize=11.sp)
-      Text(statValue?.asString ?: "—",color=Gold,fontWeight=FontWeight.Bold,fontSize=11.sp)
+      Text(statValue?.let { preview(it) } ?: "—",color=Gold,fontWeight=FontWeight.Bold,fontSize=11.sp)
       if(statValue!=null)TextButton(onClick={onEdit("Game Data",prefix+listOf("m_Stats","["+statIndex+"]","Value"),statValue)}){Text("EDIT")}
       statObject.get("Stat")?.let{statField->IconButton(onClick={onEdit("Game Data",prefix+listOf("m_Stats","["+statIndex+"]","Stat"),statField)}){Icon(Icons.Default.Edit,contentDescription="Edit stat type",tint=Muted)}}
      }
@@ -1577,7 +2193,7 @@ private fun InfoPage(doc: Mm4SaveCodec.Document, onEdit: (String,List<String>,Js
         items(fields) { (key,label) ->
             val v = doc.info.get(key)
             if (v != null) GlassCard(Modifier.fillMaxWidth().clickable { onEdit("Save Info", listOf(key), v) }) {
-                InfoLine(label, if (v.isJsonPrimitive && v.asJsonPrimitive.isString) v.asString else v.toString())
+                InfoLine(label, preview(v))
                 Text("Tap to edit", color = Muted, fontSize = 9.sp)
             }
         }
@@ -1589,7 +2205,7 @@ private fun AdvancedPage(doc: Mm4SaveCodec.Document, onEdit: (String,List<String
     var query by remember { mutableStateOf("") }
     val fields=remember(doc.data,query) {
         flatten(doc.data).filter { (path,value) ->
-            path.none { it == "\$ref" || it == "\$version" } && value.isJsonPrimitive && (query.isBlank() ||
+            path.none { it.startsWith("\$") } && value.isJsonPrimitive && (query.isBlank() ||
                 humanizeField(path.last()).contains(query,true) ||
                 path.joinToString(" ").contains(query,true))
         }
@@ -1701,35 +2317,45 @@ internal fun moveDriverToTeam(data:JsonObject,driverId:String,targetTeamId:Strin
 
 internal fun swapTeamsBetweenDivisions(data:JsonObject,teamA:String,teamB:String):Boolean {
     if(teamA==teamB) return false
-    val valid=teamOptions(data).map { it.id }.toSet()
-    if(teamA !in valid || teamB !in valid) return false
-    data.get("championshipManager")?.takeIf { it.isJsonObject } ?: return false
-    data class Location(val array:JsonArray,val index:Int)
-    val locations=mutableMapOf<String,MutableList<Location>>()
-    fun visit(node:JsonElement,path:List<String>) {
-        when {
-            node.isJsonObject -> node.asJsonObject.entrySet().forEach { (key,value) -> visit(value,path+key) }
-            node.isJsonArray -> {
-                if(path.any { it.contains("team",true) }) {
-                    node.asJsonArray.forEachIndexed { index,value ->
-                        val id=value.takeIf { it.isJsonObject }?.asJsonObject?.get("\$ref")?.asString
-                        if(id!=null && id in valid) locations.getOrPut(id) { mutableListOf() }.add(Location(node.asJsonArray,index))
-                    }
-                }
-                node.asJsonArray.forEachIndexed { index,value -> visit(value,path+"[$index]") }
+    val objects=collectObjectsWithId(data).mapNotNull { (_,obj) -> obj.get("\$id")?.asString?.let { it to obj } }.toMap()
+    val teamAObject=objects[teamA] ?: return false
+    val teamBObject=objects[teamB] ?: return false
+    val teamAId=teamAObject.get("m_TeamID")?.takeIf { it.isJsonPrimitive && it.asJsonPrimitive.isNumber }?.asInt ?: return false
+    val teamBId=teamBObject.get("m_TeamID")?.takeIf { it.isJsonPrimitive && it.asJsonPrimitive.isNumber }?.asInt ?: return false
+    if(teamAId==teamBId) return false
+    val championshipRefs=data.getAsJsonObject("championshipManager")?.getAsJsonArray("championships") ?: return false
+    val championships=championshipRefs.mapNotNull { ref ->
+        val id=ref.takeIf { it.isJsonObject }?.asJsonObject?.get("\$ref")?.asString ?: return@mapNotNull null
+        objects[id]
+    }
+    data class Slot(val championship:JsonObject,val index:Int)
+    fun findSlot(teamId:Int):Slot? {
+        val matches=championships.flatMap { championship ->
+            val ids=championship.get("m_TeamIDs")?.takeIf { it.isJsonArray }?.asJsonArray ?: return@flatMap emptyList()
+            ids.mapIndexedNotNull { index,value ->
+                if(value.isJsonPrimitive && value.asJsonPrimitive.isNumber && value.asInt==teamId) Slot(championship,index) else null
             }
         }
+        return matches.singleOrNull()
     }
-    visit(data.getAsJsonObject("championshipManager"),listOf("championshipManager"))
-    val a=locations[teamA]?.firstOrNull() ?: return false
-    val b=locations[teamB]?.firstOrNull() ?: return false
-    val aRef=a.array[a.index].asJsonObject
-    val bRef=b.array[b.index].asJsonObject
-    aRef.addProperty("\$ref",teamB)
-    bRef.addProperty("\$ref",teamA)
+    val slotA=findSlot(teamAId) ?: return false
+    val slotB=findSlot(teamBId) ?: return false
+    if(slotA.championship===slotB.championship) return false
+    val teamAChamp=teamAObject.get("m_Championship")?.takeIf { it.isJsonObject }?.asJsonObject ?: return false
+    val teamBChamp=teamBObject.get("m_Championship")?.takeIf { it.isJsonObject }?.asJsonObject ?: return false
+    val champAId=slotA.championship.get("\$id")?.asString ?: return false
+    val champBId=slotB.championship.get("\$id")?.asString ?: return false
+    val oldA=teamAChamp.get("\$ref")?.asString ?: return false
+    val oldB=teamBChamp.get("\$ref")?.asString ?: return false
+    if(oldA!=champAId || oldB!=champBId) return false
+    val idsA=slotA.championship.getAsJsonArray("m_TeamIDs")
+    val idsB=slotB.championship.getAsJsonArray("m_TeamIDs")
+    idsA.set(slotA.index,com.google.gson.JsonPrimitive(teamBId))
+    idsB.set(slotB.index,com.google.gson.JsonPrimitive(teamAId))
+    teamAChamp.addProperty("\$ref",champBId)
+    teamBChamp.addProperty("\$ref",champAId)
     return true
 }
-
 
 
 private fun championshipEntityById(data:JsonObject, championshipId:Int):JsonObject? {
@@ -1742,10 +2368,10 @@ private fun championshipEntityById(data:JsonObject, championshipId:Int):JsonObje
 }
 
 internal fun careerDivisionLabel(championshipId:Int):String = when(championshipId) {
-    0 -> "F1"
-    1 -> "F2"
-    2 -> "F3"
-    3 -> "F4"
+    0 -> "World Motorsport"
+    1 -> "Asia Pacific Super Cup"
+    2 -> "European Racing"
+    3 -> "Open Wheel Sprint"
     else -> "Divisi $championshipId"
 }
 
@@ -2089,7 +2715,7 @@ private fun GodModePage(doc:Mm4SaveCodec.Document,onAction:(String)->Unit,onEdit
         item {
             GlassCard(Modifier.fillMaxWidth()) {
                 Text("INFLUENCE BALANCE",fontWeight=FontWeight.Bold)
-                Text("Saldo influence saat ini: ${influence?.asString ?: "—"}",color=Muted,fontSize=11.sp)
+                Text("Saldo influence saat ini: ${influence?.let { preview(it) } ?: "—"}",color=Muted,fontSize=11.sp)
                 if(influence?.isJsonPrimitive==true && influence.asJsonPrimitive.isNumber) {
                     OutlinedButton(
                         onClick={onEdit("Game Data",listOf("influenceManager","m_Influence"),influence)},
@@ -2110,7 +2736,7 @@ private fun GodModePage(doc:Mm4SaveCodec.Document,onAction:(String)->Unit,onEdit
         item {
             GlassCard(Modifier.fillMaxWidth()) {
                 Text("RISET MAKSIMUM",fontWeight=FontWeight.Bold)
-                Text("Riset saat ini ${research?.get("m_SeasonResearchPointsMM4")?.asString ?: "—"} / ${research?.get("m_ResearchCap")?.asString ?: "—"}",color=Muted,fontSize=11.sp)
+                Text("Riset saat ini ${research?.get("m_SeasonResearchPointsMM4")?.let { preview(it) } ?: "—"} / ${research?.get("m_ResearchCap")?.let { preview(it) } ?: "—"}",color=Muted,fontSize=11.sp)
                 Button(onClick={onAction("max_research")},modifier=Modifier.fillMaxWidth(),colors=ButtonDefaults.buttonColors(containerColor=Blue)) { Text("MAKSIMALKAN RISET & DEBUG") }
             }
         }
@@ -2136,9 +2762,6 @@ private fun GodModePage(doc:Mm4SaveCodec.Document,onAction:(String)->Unit,onEdit
                     colors=ButtonDefaults.buttonColors(containerColor=Blue,disabledContainerColor=PanelAlt)
                 ) { Text(if(supplierNodeCount>0) "BUKA SEMUA SUPPLIER" else "JARINGAN BELUM TERSEDIA") }
             }
-        }
-        item {
-            Text("Pemindahan tim antar divisi dan transfer pembalap belum diaktifkan pada build ini. Keduanya harus menjaga referensi roster, kontrak, klasemen, dan kejuaraan secara serentak. Tidak akan dibuat tombol yang berisiko merusak save.",color=Muted,fontSize=10.sp)
         }
     }
     if(picker!=null) AlertDialog(
@@ -2178,22 +2801,35 @@ private fun GlassCard(modifier: Modifier = Modifier, content: @Composable Column
             scaleY = entrance
             alpha = entrance
         }.animateContentSize(animationSpec = tween(260)).clip(shape)
-            .border(1.dp, Color.White.copy(alpha = 0.16f), shape)
-            .background(Brush.linearGradient(listOf(Color(0xC936568A), Color(0xB91B2D58), Color(0xA51A2445))))
+            .border(1.dp, GlassEdge, shape)
+            .background(Brush.linearGradient(listOf(Color(0xE02A3039), Color(0xC91A212A), Color(0xE0141A22))))
             .padding(1.dp)
             .clip(RoundedCornerShape(17.dp))
-            .background(Brush.linearGradient(listOf(Color(0xD82B416B), Color(0xC51B2A50), Color(0xB9152344))))
-            .padding(14.dp),
-        content = content
-    )
+            .background(Brush.linearGradient(listOf(Color(0xD51B222B), Color(0xC9151B23), Color(0xE010151C)))),
+    ) {
+        Box(Modifier.padding(start = 14.dp, top = 12.dp).width(28.dp).height(2.dp).clip(RoundedCornerShape(2.dp)).background(Red))
+        Column(Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 11.dp), content = content)
+    }
 }
 
 @Composable
 private fun QuickLink(title: String, desc: String, icon: androidx.compose.ui.graphics.vector.ImageVector, click: () -> Unit) {
-    Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(Panel).clickable(onClick = click).padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
-        Icon(icon, null, tint = Gold); Spacer(Modifier.width(12.dp))
-        Column(Modifier.weight(1f)) { Text(title, fontWeight = FontWeight.Bold); Text(desc, color = Muted, fontSize = 10.sp) }
-        Icon(Icons.Default.ChevronRight, null, tint = Muted)
+    Row(
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp))
+            .background(Brush.horizontalGradient(listOf(Color(0xD51D242D), Color(0xB5151B23))))
+            .border(1.dp, GlassEdge, RoundedCornerShape(14.dp))
+            .clickable(onClick = click).padding(14.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Box(Modifier.size(38.dp).clip(RoundedCornerShape(11.dp)).background(Color(0x22E10600)), contentAlignment = Alignment.Center) {
+            Icon(icon, null, tint = Red)
+        }
+        Spacer(Modifier.width(12.dp))
+        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+            Text(title, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+            Text(desc, color = Muted, fontSize = 10.sp)
+        }
+        Icon(Icons.Default.ChevronRight, null, tint = Gold)
     }
 }
 
@@ -2221,7 +2857,7 @@ private fun JsonBrowser(
     onEdit: (List<String>, JsonElement) -> Unit
 ) {
     var expanded by remember(root, moduleFilter) { mutableStateOf(setOf<String>()) }
-    val allNodes = remember(root) { flatten(root) }
+    val allNodes = remember(root) { flatten(root).filterNot { entry -> entry.first.lastOrNull()?.let(::isMetadataKey) == true } }
     val matches = remember(allNodes, query, moduleFilter) {
         allNodes.filter { (path, value) ->
             (moduleFilter == null || path.firstOrNull() == moduleFilter) &&
@@ -2231,7 +2867,7 @@ private fun JsonBrowser(
         }
     }
     val categories = remember(root, moduleFilter) {
-        root.entrySet().filter { moduleFilter == null || it.key == moduleFilter }
+        root.entrySet().filter { !isMetadataKey(it.key) && (moduleFilter == null || it.key == moduleFilter) }
             .sortedBy { it.key.lowercase() }
     }
     Column(Modifier.fillMaxSize()) {
@@ -2363,7 +2999,7 @@ private fun TreeField(
             )
         }
         if (isOpen && value.isJsonObject) {
-            value.asJsonObject.entrySet().sortedBy { it.key.lowercase() }.forEach { (key, child) ->
+            value.asJsonObject.entrySet().filterNot { isMetadataKey(it.key) }.sortedBy { it.key.lowercase() }.forEach { (key, child) ->
                 TreeField(key, child, path + key, depth + 1, expanded, onToggle, onEdit)
             }
         } else if (isOpen && value.isJsonArray) {
@@ -2389,6 +3025,8 @@ private fun FieldRow(path: List<String>, value: JsonElement, depth: Int, onEdit:
         Icon(Icons.Default.Edit, contentDescription = "Edit", tint = Muted)
     }
 }
+
+private fun isMetadataKey(key: String): Boolean = key.firstOrNull() == 36.toChar()
 
 private fun humanLabel(raw: String): String {
     val spaced = raw.replace(Regex("([a-z0-9])([A-Z])"), "$1 $2")
@@ -2416,11 +3054,20 @@ private fun categoryIcon(key: String) = when {
     else -> Icons.Default.Folder
 }
 
+private fun displayInteger(value: String): String = runCatching {
+    java.math.BigDecimal(value).setScale(0, java.math.RoundingMode.HALF_UP).toPlainString()
+}.getOrDefault(value)
+
 private fun preview(value: JsonElement): String = when {
-    value.isJsonNull -> "null"
-    value.isJsonObject -> "{ ${value.asJsonObject.size()} properties }"
-    value.isJsonArray -> "[ ${value.asJsonArray.size()} items ]"
-    else -> value.toString()
+    value.isJsonNull -> "Tidak tersedia"
+    value.isJsonObject -> "${value.asJsonObject.size()} data terkait"
+    value.isJsonArray -> "${value.asJsonArray.size()} item"
+    value.isJsonPrimitive && value.asJsonPrimitive.isBoolean -> if (value.asBoolean) "Aktif" else "Nonaktif"
+    value.isJsonPrimitive && value.asJsonPrimitive.isNumber -> runCatching {
+        java.math.BigDecimal(value.asString).setScale(0, java.math.RoundingMode.HALF_UP).toPlainString()
+    }.getOrDefault("0")
+    value.isJsonPrimitive && value.asJsonPrimitive.isString -> value.asString
+    else -> "Data tersedia"
 }
 
 internal fun flatten(root: JsonElement): List<Pair<List<String>, JsonElement>> {
@@ -2428,7 +3075,7 @@ internal fun flatten(root: JsonElement): List<Pair<List<String>, JsonElement>> {
     fun visit(node: JsonElement, path: List<String>) {
         if (path.isNotEmpty()) result += path to node
         when {
-            node.isJsonObject -> node.asJsonObject.entrySet().forEach { (key, child) ->
+            node.isJsonObject -> node.asJsonObject.entrySet().filterNot { isMetadataKey(it.key) }.forEach { (key, child) ->
                 visit(child, path + key)
             }
             node.isJsonArray -> node.asJsonArray.forEachIndexed { index, child ->
@@ -2451,15 +3098,17 @@ internal fun stepNumericValue(current: String, step: Double, direction: Int): St
 private fun WatermarkFooter() {
     Row(
         Modifier.fillMaxWidth()
-            .background(Ink)
-            .border(width = 0.5.dp, color = Color.White.copy(alpha = 0.10f))
+            .background(Color(0xFF090D12))
+            .border(width = 0.5.dp, color = GlassEdge)
             .padding(horizontal = 16.dp, vertical = 9.dp),
         horizontalArrangement = Arrangement.Center,
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Text("Created by :", color = Muted, fontSize = 10.sp, letterSpacing = 0.4.sp)
-        Spacer(Modifier.width(4.dp))
-        Text("Morepp", color = Gold, fontSize = 10.sp, fontWeight = FontWeight.Black, letterSpacing = 0.8.sp)
+        Box(Modifier.width(18.dp).height(2.dp).background(Red))
+        Spacer(Modifier.width(8.dp))
+        Text("ENGINEERED FOR THE PADDOCK", color = Muted, fontSize = 8.sp, letterSpacing = 1.1.sp, fontWeight = FontWeight.Bold)
+        Spacer(Modifier.width(8.dp))
+        Text("MOREPP", color = Gold, fontSize = 9.sp, fontWeight = FontWeight.Black, letterSpacing = 1.2.sp)
     }
 }
 
@@ -2502,7 +3151,7 @@ private fun EditValueDialog(target: EditTarget, onClose: () -> Unit, onSave: (Js
         title = { Text(humanizeField(target.path.lastOrNull() ?: "Edit value")) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text(target.path.joinToString("  /  "), color = Muted, fontSize = 10.sp)
+                Text(target.path.joinToString("  /  ") { humanizeField(it) }, color = Muted, fontSize = 10.sp)
                 when {
                     isBoolean -> Row(verticalAlignment = Alignment.CenterVertically) {
                         Text("Nonaktif", Modifier.weight(1f))
@@ -2540,12 +3189,12 @@ private fun EditValueDialog(target: EditTarget, onClose: () -> Unit, onSave: (Js
                         val min = target.minValue.toFloat()
                         val max = target.maxValue.toFloat()
                         val selected = currentNumber.toFloat().coerceIn(min,max)
-                        Text(value + " • batas " + target.minValue + "–" + target.maxValue, fontSize = 18.sp, fontWeight = FontWeight.Bold, color = Gold)
+                        Text(displayInteger(value) + " • batas " + target.minValue + "–" + target.maxValue, fontSize = 18.sp, fontWeight = FontWeight.Bold, color = Gold)
                         Slider(value=selected,onValueChange={value=it.toInt().coerceIn(min.toInt(),max.toInt()).toString()},valueRange=min..max,steps=(max-min-1f).toInt().coerceAtLeast(0))
                         Text("Nilai dibatasi sesuai rentang yang dikenali dari struktur save.",color=Muted,fontSize=10.sp)
                     }
                     isNumber -> {
-                        Text(value, fontSize = 24.sp, fontWeight = FontWeight.Bold, color = Gold)
+                        Text(displayInteger(value), fontSize = 24.sp, fontWeight = FontWeight.Bold, color = Gold)
                         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                             OutlinedButton(onClick = { value = stepNumericValue(value, numberStep, -1) ?: value }) { Text("−") }
                             Text("Langkah " + numberStep.toLong(), color = Muted, fontSize = 10.sp)
