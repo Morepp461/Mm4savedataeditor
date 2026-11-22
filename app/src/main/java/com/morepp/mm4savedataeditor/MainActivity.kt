@@ -2343,6 +2343,14 @@ internal fun moveDriverToTeam(data:JsonObject,driverId:String,targetTeamId:Strin
     return oldTeamId!=targetTeamId
 }
 
+private fun championshipEntityById(data:JsonObject, championshipId:Int):JsonObject? {
+    val all=collectObjectsWithId(data).associateBy { it.second.get("\$id")?.asString }
+    val refs=data.getAsJsonObject("championshipManager")?.getAsJsonArray("championships") ?: return null
+    return refs.firstNotNullOfOrNull { ref ->
+        val id=ref.takeIf { it.isJsonObject }?.asJsonObject?.get("\$ref")?.asString ?: return@firstNotNullOfOrNull null
+        all[id]?.second?.takeIf { it.get("m_ID")?.asInt==championshipId }
+    }
+}
 internal fun careerDivisionLabel(championshipId:Int):String = when(championshipId) {
     0 -> "World Motorsport"
     1 -> "Asia Pacific Super Cup"
@@ -2748,12 +2756,12 @@ private fun GodModePage(doc:Mm4SaveCodec.Document,onAction:(String)->Unit,onEdit
     }
     if(picker!=null) AlertDialog(
         onDismissRequest={picker=null},
-        title={Text(when(picker) { "teamA"->"Pilih tim pertama"; "teamB"->"Pilih tim kedua"; "driver"->"Pilih pembalap"; else->"Pilih tim tujuan" })},
+        title={Text(if (picker == "driver") "Pilih pembalap" else "Pilih tim tujuan")},
         text={
             LazyColumn(Modifier.heightIn(max=420.dp)) {
                 items(pickerOptions,key={it.id}) { option ->
                     TextButton(onClick={
-                        when(picker) { "teamA"->teamA=option.id; "teamB"->teamB=option.id; "driver"->driverId=option.id; "targetTeam"->targetTeam=option.id }
+                        when(picker) { "driver"->driverId=option.id; "targetTeam"->targetTeam=option.id }
                         picker=null
                     },modifier=Modifier.fillMaxWidth()) {
                         Column(Modifier.fillMaxWidth()) {
