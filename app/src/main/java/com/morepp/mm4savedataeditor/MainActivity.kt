@@ -1464,7 +1464,11 @@ private fun ChampionshipManagerPage(doc: Mm4SaveCodec.Document, onEdit: (String,
                 Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                     Column(Modifier.weight(1f)) {
                         Text("KEJUARAAN", color = Muted, fontSize = 9.sp)
-                        Text(championships.size.toString(), fontSize = 22.sp, fontWeight = FontWeight.Black)
+                        AnimatedContent(
+                            targetState = championships.size,
+                            transitionSpec = { (slideInVertically { it / 2 } + fadeIn(tween(180))) togetherWith (slideOutVertically { -it / 2 } + fadeOut(tween(120))) },
+                            label = "championship-count"
+                        ) { count -> Text(count.toString(), fontSize = 22.sp, fontWeight = FontWeight.Black) }
                     }
                     Column(Modifier.weight(1f)) {
                         Text("TOTAL TIM", color = Muted, fontSize = 9.sp)
@@ -1544,7 +1548,11 @@ private fun ChampionshipManagerPage(doc: Mm4SaveCodec.Document, onEdit: (String,
                             Text("${standing.wins} menang • ${standing.podiums} podium • ${standing.races} balapan • ${standing.dnfs} DNF", color = Muted, fontSize = 9.sp)
                         }
                         Column(horizontalAlignment = Alignment.End) {
-                            Text(standing.points.toString(), color = Gold, fontWeight = FontWeight.Black, fontSize = 17.sp)
+                            AnimatedContent(
+                                targetState = standing.points,
+                                transitionSpec = { (slideInVertically { it / 2 } + fadeIn(tween(180))) togetherWith (slideOutVertically { -it / 2 } + fadeOut(tween(120))) },
+                                label = "standing-points"
+                            ) { points -> Text(points.toString(), color = Gold, fontWeight = FontWeight.Black, fontSize = 17.sp) }
                             Text("POIN", color = Muted, fontSize = 8.sp)
                         }
                     }
