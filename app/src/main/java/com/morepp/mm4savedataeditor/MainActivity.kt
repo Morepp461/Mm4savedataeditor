@@ -637,13 +637,17 @@ private fun WelcomePanel(busy: Boolean, onOpen: () -> Unit) {
         Column(
             Modifier.fillMaxWidth()
                 .clip(RoundedCornerShape(26.dp))
-                .background(
-                    Brush.linearGradient(
-                        listOf(Color(0xE0252C35), Color(0xD9182029), Color(0xE02A1718))
-                    )
-                )
+                .background(Brush.linearGradient(listOf(Color(0xE0252C35), Color(0xD9182029), Color(0xE02A1718))))
+                .border(1.dp, GlassEdge, RoundedCornerShape(26.dp))
                 .padding(24.dp)
         ) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(9.dp)) {
+                Box(Modifier.width(4.dp).height(30.dp).clip(RoundedCornerShape(3.dp)).background(Red))
+                Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                    Text("MM4 / RACE CONTROL", color = Gold, fontSize = 9.sp, fontWeight = FontWeight.Black, letterSpacing = 1.5.sp)
+                    Text("CAREER ENGINEERING SUITE", color = Muted, fontSize = 8.sp, letterSpacing = 1.1.sp)
+                }
+            }
             Icon(
                 Icons.Default.DirectionsCar,
                 contentDescription = null,
@@ -2798,10 +2802,11 @@ private fun GlassCard(modifier: Modifier = Modifier, content: @Composable Column
             .background(Brush.linearGradient(listOf(Color(0xE02A3039), Color(0xC91A212A), Color(0xE0141A22))))
             .padding(1.dp)
             .clip(RoundedCornerShape(17.dp))
-            .background(Brush.linearGradient(listOf(Color(0xD51B222B), Color(0xC9151B23), Color(0xE010151C))))
-            .padding(14.dp),
-        content = content
-    )
+            .background(Brush.linearGradient(listOf(Color(0xD51B222B), Color(0xC9151B23), Color(0xE010151C)))),
+    ) {
+        Box(Modifier.padding(start = 14.dp, top = 12.dp).width(28.dp).height(2.dp).clip(RoundedCornerShape(2.dp)).background(Red))
+        Column(Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 11.dp), content = content)
+    }
 }
 
 @Composable
