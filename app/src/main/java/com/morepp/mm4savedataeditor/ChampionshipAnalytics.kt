@@ -38,7 +38,7 @@ internal fun championshipSummaries(data: JsonObject): List<ChampionshipSummary> 
                 obj.get("\$id")?.takeIf { it.isJsonPrimitive }?.asString?.let { idMap[it] = obj; idPaths[it] = path }
                 obj.entrySet().forEach { (key, value) -> collect(value, path + key) }
             }
-            node.isJsonArray -> node.asJsonArray.forEachIndexed { index, value -> collect(value, path + index.toString()) }
+            node.isJsonArray -> node.asJsonArray.forEachIndexed { index, value -> collect(value, path + "[$index]") }
         }
     }
     collect(data)
