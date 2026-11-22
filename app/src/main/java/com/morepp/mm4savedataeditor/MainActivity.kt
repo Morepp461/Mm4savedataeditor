@@ -794,7 +794,7 @@ private fun CareerWorkspace(
             when (targetSection) {
                 "Overview" -> OverviewPage(document, onSection)
                 "Drivers" -> DriverPage(document, selectedDriver, onDriver, onEdit)
-                "Influence Actions" -> InfluenceActionsPage(document, onResetInfluenceCooldown)
+                "Influence Actions" -> InfluenceActionsPage(document, onResetInfluenceCooldown, onEdit)
                 "Career Finance Analytics" -> CareerFinanceAnalyticsPage(document)
                 "Manager Progression" -> ManagerProgressionPage(document, onApplyExperience)
                 "Staff" -> EntityCatalogPage(document, "staff", onEdit, onApplyTeamColor)
@@ -1387,7 +1387,7 @@ private fun statAttributeLabel(category:String,type:String,index:Int):String {
 
 
 @Composable
-private fun InfluenceActionsPage(doc: Mm4SaveCodec.Document, onResetCooldown: (Int) -> Unit) {
+private fun InfluenceActionsPage(doc: Mm4SaveCodec.Document, onResetCooldown: (Int) -> Unit, onEdit: (String, List<String>, JsonElement) -> Unit) {
     val actions = remember(doc.data) { influenceActionRecords(doc.data) }
     val influence = doc.data.getAsJsonObject("influenceManager")?.get("m_Influence")
     val readyCount = actions.count { it.cooldown <= 0 }
@@ -1395,20 +1395,18 @@ private fun InfluenceActionsPage(doc: Mm4SaveCodec.Document, onResetCooldown: (I
     LazyColumn(contentPadding = PaddingValues(14.dp), verticalArrangement = Arrangement.spacedBy(9.dp)) {
         item {
             GlassCard(Modifier.fillMaxWidth()) {
-                Text("INFLUENCE ACTION EDITOR", color = Gold, fontWeight = FontWeight.Black, fontSize = 11.sp)
-                Text("Kelola kesiapan aksi influence", fontSize = 21.sp, fontWeight = FontWeight.Black)
-                Text("Status aksi yang tercatat dalam career, termasuk waktu tunggu penggunaannya.", color = Muted, fontSize = 11.sp)
-                Spacer(Modifier.height(8.dp))
-                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Column(Modifier.weight(1f)) {
-                        Text("SALDO INFLUENCE", color = Muted, fontSize = 9.sp)
-                        Text(influence?.let { preview(it) } ?: "—", color = Gold, fontSize = 22.sp, fontWeight = FontWeight.Black)
-                    }
-                    Column(Modifier.weight(1f)) {
-                        Text("AKSI SIAP", color = Muted, fontSize = 9.sp)
-                        Text("$readyCount / ${actions.size}", fontSize = 22.sp, fontWeight = FontWeight.Black)
-                    }
-                }
+                Text("INFLUENCE BALANCE", color = Gold, fontWeight = FontWeight.Black, fontSize = 11.sp)
+                Text(influence?.let { preview(it) } ?: "—", color = Gold, fontSize = 26.sp, fontWeight = FontWeight.Black)
+                if (influence?.isJsonPrimitive == true && influence.asJsonPrimitive.isNumber) {
+                    Button(onClick = { onEdit("Game Data", listOf("influenceManager", "m_Influence"), influence) }, modifier = Modifier.fillMaxWidth(), colors = ButtonDefaults.buttonColors(containerColor = Red)) { Text("EDIT SALDO INFLUENCE") }
+                } else Text("Saldo influence tidak tersedia pada save ini.", color = Muted, fontSize = 10.sp)
+            }
+        }
+        item {
+            GlassCard(Modifier.fillMaxWidth()) {
+                Text("INFLUENCE ACTIONS", color = Gold, fontWeight = FontWeight.Black, fontSize = 11.sp)
+                Text("Aksi siap", color = Muted, fontSize = 9.sp)
+                Text("$readyCount / " + actions.size, fontSize = 22.sp, fontWeight = FontWeight.Black)
             }
         }
         item { Text("DAFTAR AKSI", color = Gold, fontWeight = FontWeight.Bold, fontSize = 10.sp) }
