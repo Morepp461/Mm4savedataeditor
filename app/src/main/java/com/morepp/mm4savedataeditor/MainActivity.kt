@@ -1498,6 +1498,26 @@ private fun ChampionshipManagerPage(doc: Mm4SaveCodec.Document, onEdit: (String,
                 GlassCard(Modifier.fillMaxWidth()) {
                     Text("DETAIL KEJUARAAN", color = Gold, fontWeight = FontWeight.Bold, fontSize = 10.sp)
                     Text(championship.displayName, fontSize = 20.sp, fontWeight = FontWeight.Black)
+                    val editableName = listOf("name", "m_Name", "displayName", "title").firstOrNull { key ->
+                        championship.path.isNotEmpty() && resolvePath(doc.data, championship.path + key)?.isJsonPrimitive == true
+                    }
+                    if (editableName != null) {
+                        OutlinedButton(
+                            onClick = { resolvePath(doc.data, championship.path + editableName)?.let { onEdit("Game Data", championship.path + editableName, it) } },
+                            modifier = Modifier.fillMaxWidth()
+                        ) { Text("EDIT NAMA KEJUARAAN", fontSize = 10.sp) }
+                    }
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        listOf("tier" to "TIER", "series" to "SERIES", "category" to "CATEGORY", "m_EventNumber" to "EVENT").forEach { (field, label) ->
+                            val fieldPath = championship.path + field
+                            val fieldValue = resolvePath(doc.data, fieldPath)
+                            OutlinedButton(
+                                onClick = { fieldValue?.let { onEdit("Game Data", fieldPath, it) } },
+                                modifier = Modifier.weight(1f),
+                                enabled = fieldValue?.isJsonPrimitive == true
+                            ) { Text(label, fontSize = 8.sp) }
+                        }
+                    }
                     Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                         Column(Modifier.weight(1f)) {
                             Text("TIER", color = Muted, fontSize = 9.sp)
@@ -1543,7 +1563,7 @@ private fun ChampionshipManagerPage(doc: Mm4SaveCodec.Document, onEdit: (String,
                 item { Text("Klasemen tim belum tersedia pada kejuaraan ini.", color = Muted, fontSize = 11.sp) }
             }
         }
-        item { Text("Klasemen ditampilkan dari catatan hasil yang tersimpan. Halaman ini tidak mengubah posisi, poin, atau hasil balapan.", color = Muted, fontSize = 10.sp) }
+        item { Text("Perubahan metadata dan statistik hanya tersedia untuk field yang benar-benar ada di save.", color = Muted, fontSize = 10.sp) }
     }
     if (showChampionshipDetails && selected != null) {
         AlertDialog(
