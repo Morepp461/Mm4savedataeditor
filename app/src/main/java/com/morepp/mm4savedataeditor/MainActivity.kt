@@ -2842,10 +2842,10 @@ private fun GlassCard(modifier: Modifier = Modifier, content: @Composable Column
             alpha = entrance
         }.animateContentSize(animationSpec = tween(260)).clip(shape)
             .border(1.dp, Color.White.copy(alpha = edgeAlpha), shape)
-            .background(Brush.linearGradient(listOf(Color(0xE02A3039), Color(0xC91A212A), Color(0xE0141A22))))
+            .background(Brush.linearGradient(listOf(Color(0xB84A3A58), Color(0x8C252E3B), Color(0xA83C2736))))
             .padding(1.dp)
             .clip(RoundedCornerShape(17.dp))
-            .background(Brush.linearGradient(listOf(Color(0xD51B222B), Color(0xC9151B23), Color(0xE010151C)))),
+            .background(Brush.linearGradient(listOf(Color(0xB5222935), Color(0x8E1A2431), Color(0xA82A202B)))),
     ) {
         Box(Modifier.padding(start = 14.dp, top = 12.dp).width(28.dp).height(2.dp).clip(RoundedCornerShape(2.dp)).background(Red))
         Column(Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 11.dp), content = content)
