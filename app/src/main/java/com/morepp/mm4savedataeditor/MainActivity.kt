@@ -1,6 +1,13 @@
 package com.morepp.mm4savedataeditor
 
 import android.net.Uri
+import kotlin.math.sin
+import kotlin.math.cos
+import kotlin.math.PI
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.foundation.Canvas
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -1610,6 +1617,15 @@ private fun SupplierNetworkPage(
     }
     val ownedCount = nodes.count { it.owned }
     val revealedCount = nodes.count { it.revealed }
+    val graphPositions = remember(nodes) {
+        nodes.mapIndexed { index, node ->
+            val angle = -PI / 2.0 + (2.0 * PI * index / nodes.size.coerceAtLeast(1))
+            node.key to Offset(
+                (0.5 + cos(angle) * 0.43).toFloat(),
+                (0.5 + sin(angle) * 0.43).toFloat()
+            )
+        }.toMap()
+    }
 
     LazyColumn(contentPadding = PaddingValues(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
         item {
@@ -1633,6 +1649,61 @@ private fun SupplierNetworkPage(
                     }
                 }
                 Text("${ownedCount} dimiliki • ${revealedCount} ditemukan", color = Gold, fontSize = 10.sp)
+            }
+        }
+        if (nodes.isNotEmpty()) {
+            item {
+                GlassCard(Modifier.fillMaxWidth()) {
+                    Text("PETA KONEKSI SUPPLIER", color = Gold, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                    Text("Pilih titik untuk membuka detail node", color = Muted, fontSize = 10.sp)
+                    Canvas(
+                        Modifier.fillMaxWidth().height(300.dp)
+                            .pointerInput(graphPositions, nodes) {
+                                detectTapGestures { tap ->
+                                    val nearest = graphPositions.entries.minByOrNull { (_, point) ->
+                                        (Offset(point.x * size.width, point.y * size.height) - tap).getDistance()
+                                    }
+                                    if (nearest != null) {
+                                        val distance = (Offset(nearest.value.x * size.width, nearest.value.y * size.height) - tap).getDistance()
+                                        if (distance <= 28.dp.toPx()) selectedKey = nearest.key
+                                    }
+                                }
+                            }
+                    ) {
+                        val byId = nodes.associate { it.id to graphPositions[it.key] }
+                        nodes.forEach { node ->
+                            val start = graphPositions[node.key] ?: return@forEach
+                            node.connections.forEach { connection ->
+                                val end = byId[connection.nodeId] ?: return@forEach
+                                drawLine(
+                                    color = Color(0xFF667085).copy(alpha = 0.72f),
+                                    start = Offset(start.x * size.width, start.y * size.height),
+                                    end = Offset(end.x * size.width, end.y * size.height),
+                                    strokeWidth = 1.5.dp.toPx()
+                                )
+                            }
+                        }
+                        nodes.forEach { node ->
+                            val point = graphPositions[node.key] ?: return@forEach
+                            val center = Offset(point.x * size.width, point.y * size.height)
+                            val fill = when {
+                                node.owned -> Color(0xFF9BE36A)
+                                node.revealed -> Gold
+                                else -> Color(0xFF697386)
+                            }
+                            drawCircle(fill, radius = if (node.key == selectedKey) 10.dp.toPx() else 6.dp.toPx(), center = center)
+                            if (node.key == selectedKey) {
+                                drawCircle(Color.White, radius = 14.dp.toPx(), center = center, style = androidx.compose.ui.graphics.drawscope.Stroke(width = 2.dp.toPx()))
+                            }
+                        }
+                    }
+                    Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Text("● Dimiliki", color = Color(0xFF9BE36A), fontSize = 9.sp)
+                        Text("● Ditemukan", color = Gold, fontSize = 9.sp)
+                        Text("● Tersembunyi", color = Muted, fontSize = 9.sp)
+                    }
+                    Text("Garis menunjukkan koneksi yang memiliki target node terpetakan. Koneksi yang belum memiliki pasangan tetap tersedia pada detail node.", color = Muted, fontSize = 9.sp)
+                }
             }
         }
         item {
