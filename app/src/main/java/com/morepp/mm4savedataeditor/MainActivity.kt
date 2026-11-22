@@ -655,7 +655,7 @@ private fun CareerHeader(
 }
 
 
-private val Sections = listOf("Overview", "Drivers", "Driver Analytics", "Staff", "Teams", "Cars", "Finance", "HQ", "Supplier Network", "World", "Diagnostics", "Save Info", "Advanced", "God Mode")
+private val Sections = listOf("Overview", "Drivers", "Driver Analytics", "Staff", "Teams", "Cars", "Finance", "HQ", "Supplier Network", "Championships", "World", "Diagnostics", "Save Info", "Advanced", "God Mode")
 
 @Composable
 private fun CareerWorkspace(
@@ -684,6 +684,7 @@ private fun CareerWorkspace(
                 "Overview" -> OverviewPage(document, onSection)
                 "Drivers" -> DriverPage(document, selectedDriver, onDriver, onEdit)
                 "Driver Analytics" -> DriverAnalyticsPage(document)
+                "Championships" -> ChampionshipManagerPage(document)
                 "Staff" -> EntityCatalogPage(document, "staff", onEdit, onApplyTeamColor)
                 "Teams" -> EntityCatalogPage(document, "team", onEdit, onApplyTeamColor)
                 "Cars" -> EntityCatalogPage(document, "car", onEdit, onApplyTeamColor)
@@ -1232,6 +1233,100 @@ private fun statAttributeLabel(category:String,type:String,index:Int):String {
 }
 
 
+
+
+@Composable
+private fun ChampionshipManagerPage(doc: Mm4SaveCodec.Document) {
+    val championships = remember(doc.data) { championshipSummaries(doc.data) }
+    var selectedKey by remember { mutableStateOf("") }
+    LaunchedEffect(doc.data) {
+        if (championships.none { it.recordKey == selectedKey }) selectedKey = championships.firstOrNull()?.recordKey.orEmpty()
+    }
+    val selected = championships.firstOrNull { it.recordKey == selectedKey }
+
+    LazyColumn(contentPadding = PaddingValues(14.dp), verticalArrangement = Arrangement.spacedBy(9.dp)) {
+        item {
+            GlassCard(Modifier.fillMaxWidth()) {
+                Text("CHAMPIONSHIP MANAGER", color = Gold, fontWeight = FontWeight.Black, fontSize = 11.sp)
+                Text("Kejuaraan dan klasemen tim", fontSize = 21.sp, fontWeight = FontWeight.Black)
+                Text("Jelajahi struktur kejuaraan, jumlah peserta, event berjalan, dan klasemen yang tersimpan.", color = Muted, fontSize = 11.sp)
+                Spacer(Modifier.height(8.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Column(Modifier.weight(1f)) {
+                        Text("KEJUARAAN", color = Muted, fontSize = 9.sp)
+                        Text(championships.size.toString(), fontSize = 22.sp, fontWeight = FontWeight.Black)
+                    }
+                    Column(Modifier.weight(1f)) {
+                        Text("TOTAL TIM", color = Muted, fontSize = 9.sp)
+                        Text(championships.sumOf { it.teamCount }.toString(), fontSize = 22.sp, fontWeight = FontWeight.Black)
+                    }
+                    Column(Modifier.weight(1f)) {
+                        Text("TOTAL EVENT", color = Muted, fontSize = 9.sp)
+                        Text(championships.sumOf { it.raceCount }.toString(), fontSize = 22.sp, fontWeight = FontWeight.Black)
+                    }
+                }
+            }
+        }
+        item { Text("DAFTAR KEJUARAAN", color = Gold, fontWeight = FontWeight.Bold, fontSize = 10.sp) }
+        items(championships, key = { it.recordKey }) { championship ->
+            GlassCard(
+                Modifier.fillMaxWidth().clickable { selectedKey = championship.recordKey }
+                    .then(if (selectedKey == championship.recordKey) Modifier.border(1.dp, Gold, RoundedCornerShape(16.dp)) else Modifier)
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f)) {
+                        Text("Championship ${championship.id + 1}", fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                        Text("Tier ${championship.tier + 1} • Series ${championship.series + 1}", color = Muted, fontSize = 10.sp)
+                        Text("${championship.teamCount} tim • ${championship.driverCount} pembalap • ${championship.raceCount} event", color = Muted, fontSize = 10.sp)
+                    }
+                    Icon(Icons.Default.ChevronRight, contentDescription = "Lihat klasemen", tint = Gold)
+                }
+            }
+        }
+        selected?.let { championship ->
+            item {
+                GlassCard(Modifier.fillMaxWidth()) {
+                    Text("DETAIL KEJUARAAN", color = Gold, fontWeight = FontWeight.Bold, fontSize = 10.sp)
+                    Text("Championship ${championship.id + 1}", fontSize = 20.sp, fontWeight = FontWeight.Black)
+                    Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                        Column(Modifier.weight(1f)) {
+                            Text("TIER", color = Muted, fontSize = 9.sp)
+                            Text((championship.tier + 1).toString(), fontWeight = FontWeight.Bold)
+                        }
+                        Column(Modifier.weight(1f)) {
+                            Text("SERIES", color = Muted, fontSize = 9.sp)
+                            Text((championship.series + 1).toString(), fontWeight = FontWeight.Bold)
+                        }
+                        Column(Modifier.weight(1f)) {
+                            Text("EVENT BERJALAN", color = Muted, fontSize = 9.sp)
+                            Text(championship.eventNumber.toString(), fontWeight = FontWeight.Bold)
+                        }
+                    }
+                }
+            }
+            item { Text("KLASEMEN TIM", color = Gold, fontWeight = FontWeight.Bold, fontSize = 10.sp) }
+            items(championship.standings, key = { "${championship.recordKey}-${it.position}" }) { standing ->
+                GlassCard(Modifier.fillMaxWidth()) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text("P${standing.position}", color = Gold, fontWeight = FontWeight.Black, fontSize = 16.sp, modifier = Modifier.width(38.dp))
+                        Column(Modifier.weight(1f)) {
+                            Text(standing.teamName, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                            Text("${standing.wins} menang • ${standing.podiums} podium • ${standing.races} balapan • ${standing.dnfs} DNF", color = Muted, fontSize = 9.sp)
+                        }
+                        Column(horizontalAlignment = Alignment.End) {
+                            Text(standing.points.toString(), color = Gold, fontWeight = FontWeight.Black, fontSize = 17.sp)
+                            Text("POIN", color = Muted, fontSize = 8.sp)
+                        }
+                    }
+                }
+            }
+            if (championship.standings.isEmpty()) {
+                item { Text("Klasemen tim belum tersedia pada kejuaraan ini.", color = Muted, fontSize = 11.sp) }
+            }
+        }
+        item { Text("Klasemen ditampilkan dari catatan hasil yang tersimpan. Halaman ini tidak mengubah posisi, poin, atau hasil balapan.", color = Muted, fontSize = 10.sp) }
+    }
+}
 
 @Composable
 private fun DriverAnalyticsPage(doc: Mm4SaveCodec.Document) {
