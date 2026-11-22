@@ -742,7 +742,7 @@ private fun CareerHeader(
 }
 
 
-private val Sections = listOf("Overview", "Drivers", "Driver Analytics", "Staff", "Teams", "Cars", "Finance", "Career Finance Analytics", "HQ", "Championships", "Influence Actions", "Manager Progression", "World", "Diagnostics", "Save Info", "Advanced", "God Mode")
+private val Sections = listOf("Overview", "Drivers", "Staff", "Teams", "Cars", "Finance", "Career Finance Analytics", "HQ", "Influence Actions", "Manager Progression", "Diagnostics", "Save Info", "God Mode")
 
 @Composable
 private fun CareerWorkspace(
@@ -794,8 +794,6 @@ private fun CareerWorkspace(
             when (targetSection) {
                 "Overview" -> OverviewPage(document, onSection)
                 "Drivers" -> DriverPage(document, selectedDriver, onDriver, onEdit)
-                "Driver Analytics" -> DriverAnalyticsPage(document)
-                "Championships" -> ChampionshipManagerPage(document, onEdit)
                 "Influence Actions" -> InfluenceActionsPage(document, onResetInfluenceCooldown)
                 "Career Finance Analytics" -> CareerFinanceAnalyticsPage(document)
                 "Manager Progression" -> ManagerProgressionPage(document, onApplyExperience)
@@ -804,11 +802,10 @@ private fun CareerWorkspace(
                 "Cars" -> EntityCatalogPage(document, "car", onEdit, onApplyTeamColor)
                 "Finance" -> FinancePage(document, onEdit)
                 "HQ" -> HqPage(document, onEdit)
-                "World" -> WorldSettingsPage(document, onEdit)
                 "Diagnostics" -> SaveDiagnosticsPage(document)
                 "Save Info" -> InfoPage(document, onEdit)
                 "God Mode" -> GodModePage(document, onGodAction, onEdit)
-                else -> AdvancedPage(document, onEdit)
+                else -> SaveDiagnosticsPage(document)
             }
         }
     }
