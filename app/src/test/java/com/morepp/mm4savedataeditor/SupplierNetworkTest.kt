@@ -2,6 +2,7 @@ package com.morepp.mm4savedataeditor
 
 import com.google.gson.JsonArray
 import com.google.gson.JsonObject
+import com.google.gson.JsonPrimitive
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -102,4 +103,21 @@ class SupplierNetworkTest {
             })
         assertEquals(1, supplierNetworkNodes(data).size)
     }
+    @Test
+    fun ownershipEditRoundTripsWithoutChangingOtherSupplierData() {
+        val original = fixture()
+        val node = supplierNetworkNodes(original).single()
+        val originalOwnership = resolvePath(original, node.path + "m_IsOwned")!!.deepCopy()
+        val edited = original.deepCopy().asJsonObject
+        assertTrue(setPath(edited, node.path + "m_IsOwned", JsonPrimitive(false)))
+
+        val encoded = Mm4SaveCodec.encode(Mm4SaveCodec.Document(JsonObject(), edited, "supplier-test.msv"))
+        val decoded = Mm4SaveCodec.decode(encoded)
+        assertFalse(resolvePath(decoded.data, node.path + "m_IsOwned")!!.asBoolean)
+
+        val restored = decoded.data.deepCopy().asJsonObject
+        assertTrue(setPath(restored, node.path + "m_IsOwned", originalOwnership))
+        assertEquals(original, restored)
+    }
+
 }
