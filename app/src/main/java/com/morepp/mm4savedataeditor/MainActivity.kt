@@ -3179,6 +3179,8 @@ private fun FieldRow(path: List<String>, value: JsonElement, depth: Int, onEdit:
 }
 
 private fun isMetadataKey(key: String): Boolean = key.firstOrNull() == 36.toChar()
+
+private fun humanLabel(raw: String): String {
     val spaced = raw.replace(Regex("([a-z0-9])([A-Z])"), "$1 $2")
         .replace('_', ' ').replace('-', ' ')
         .replace(Regex("\\[(\\d+)]"), " $1")
