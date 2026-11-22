@@ -15,7 +15,7 @@ Aplikasi Android untuk mengedit file career **Motorsport Manager 4 (MM4)**. Apli
 - **Component Marketplace:** daftar Open Market dan tujuh toko supplier: Micronix Racing, Shimizu, Polymat Group, Tectra Fibres, Norex, Mersault, dan Kitano. Nama komponen ditampilkan jika jenisnya sudah bisa dipastikan. ID yang belum diketahui tetap ditampilkan sebagai nomor, bukan ditebak.
 - **Championships:** nama kejuaraan sesuai nama in-game yang tersedia atau pemetaan resmi divisi, detail peserta, event, dan klasemen yang tersimpan.
 - **World:** data marketplace, supplier, research, sesi, sirkuit, dan cuaca yang ditemukan di save.
-- **God Mode:** Team Swap antar divisi, Move Driver, preset nama divisi F1–F4, dan preset lineup F1 2026. Preset F1 hanya diterapkan jika divisi berisi tepat 11 tim dengan dua pembalap per tim.
+- **God Mode:** Team Swap antar divisi, Move Driver, preset nama divisi F1–F4, preset template F1–F4, dan supplier unlock. Preset template hanya diterapkan jika keempat divisi masing-masing memiliki tepat 10 tim dan setiap tim memiliki dua pembalap. Supplier unlock mendukung dictionary object maupun Key/Value, menelusuri referensi node supplier, dan tidak mengubah objek career di luar graph supplier.
 - **Save Info / Advanced:** pengeditan nilai dasar dengan tipe data yang didukung.
 
 ## Fitur dan pengaman edit
