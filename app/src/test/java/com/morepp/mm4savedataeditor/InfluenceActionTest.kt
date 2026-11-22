@@ -27,6 +27,25 @@ class InfluenceActionTest {
     }
 
     @Test
+    fun resetsOnlyPositiveCooldownWithoutMutatingOriginalData() {
+        val data = JsonObject().apply {
+            add("influenceManager", JsonObject().apply {
+                add("m_Influences", JsonArray().apply {
+                    add(JsonObject().apply { addProperty("m_InfluenceActionDatabaseIndex", 4); addProperty("m_CurrentCooldown", 3); addProperty("extra", "preserve") })
+                    add(JsonObject().apply { addProperty("m_InfluenceActionDatabaseIndex", 9); addProperty("m_CurrentCooldown", 0) })
+                })
+            })
+        }
+        val before = data.toString()
+        val updated = resetInfluenceCooldown(data, 0)!!
+        assertEquals(0, updated.getAsJsonObject("influenceManager").getAsJsonArray("m_Influences")[0].asJsonObject.get("m_CurrentCooldown").asInt)
+        assertEquals("preserve", updated.getAsJsonObject("influenceManager").getAsJsonArray("m_Influences")[0].asJsonObject.get("extra").asString)
+        assertEquals(before, data.toString())
+        assertEquals(null, resetInfluenceCooldown(data, 1))
+        assertEquals(null, resetInfluenceCooldown(data, 8))
+    }
+
+    @Test
     fun readingInfluenceActionsDoesNotMutateSaveData() {
         val data = JsonObject().apply {
             add("influenceManager", JsonObject().apply {
