@@ -2569,6 +2569,10 @@ private fun categoryIcon(key: String) = when {
     else -> Icons.Default.Folder
 }
 
+private fun displayInteger(value: String): String = runCatching {
+    java.math.BigDecimal(value).setScale(0, java.math.RoundingMode.HALF_UP).toPlainString()
+}.getOrDefault(value)
+
 private fun preview(value: JsonElement): String = when {
     value.isJsonNull -> "Tidak tersedia"
     value.isJsonObject -> "${value.asJsonObject.size()} data terkait"
@@ -2698,12 +2702,12 @@ private fun EditValueDialog(target: EditTarget, onClose: () -> Unit, onSave: (Js
                         val min = target.minValue.toFloat()
                         val max = target.maxValue.toFloat()
                         val selected = currentNumber.toFloat().coerceIn(min,max)
-                        Text(value + " • batas " + target.minValue + "–" + target.maxValue, fontSize = 18.sp, fontWeight = FontWeight.Bold, color = Gold)
+                        Text(displayInteger(value) + " • batas " + target.minValue + "–" + target.maxValue, fontSize = 18.sp, fontWeight = FontWeight.Bold, color = Gold)
                         Slider(value=selected,onValueChange={value=it.toInt().coerceIn(min.toInt(),max.toInt()).toString()},valueRange=min..max,steps=(max-min-1f).toInt().coerceAtLeast(0))
                         Text("Nilai dibatasi sesuai rentang yang dikenali dari struktur save.",color=Muted,fontSize=10.sp)
                     }
                     isNumber -> {
-                        Text(value, fontSize = 24.sp, fontWeight = FontWeight.Bold, color = Gold)
+                        Text(displayInteger(value), fontSize = 24.sp, fontWeight = FontWeight.Bold, color = Gold)
                         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                             OutlinedButton(onClick = { value = stepNumericValue(value, numberStep, -1) ?: value }) { Text("−") }
                             Text("Langkah " + numberStep.toLong(), color = Muted, fontSize = 10.sp)
