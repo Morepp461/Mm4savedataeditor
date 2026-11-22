@@ -10,8 +10,8 @@ android {
         applicationId = "com.morepp.mm4savedataeditor"
         minSdk = 26
         targetSdk = 35
-        versionCode = 9
-        versionName = "1.8.0"
+        versionCode = 10
+        versionName = "1.8.1"
     }
     buildFeatures { compose = true }
     buildTypes {
