@@ -2532,35 +2532,45 @@ internal fun moveDriverToTeam(data:JsonObject,driverId:String,targetTeamId:Strin
 
 internal fun swapTeamsBetweenDivisions(data:JsonObject,teamA:String,teamB:String):Boolean {
     if(teamA==teamB) return false
-    val valid=teamOptions(data).map { it.id }.toSet()
-    if(teamA !in valid || teamB !in valid) return false
-    data.get("championshipManager")?.takeIf { it.isJsonObject } ?: return false
-    data class Location(val array:JsonArray,val index:Int)
-    val locations=mutableMapOf<String,MutableList<Location>>()
-    fun visit(node:JsonElement,path:List<String>) {
-        when {
-            node.isJsonObject -> node.asJsonObject.entrySet().forEach { (key,value) -> visit(value,path+key) }
-            node.isJsonArray -> {
-                if(path.any { it.contains("team",true) }) {
-                    node.asJsonArray.forEachIndexed { index,value ->
-                        val id=value.takeIf { it.isJsonObject }?.asJsonObject?.get("\$ref")?.asString
-                        if(id!=null && id in valid) locations.getOrPut(id) { mutableListOf() }.add(Location(node.asJsonArray,index))
-                    }
-                }
-                node.asJsonArray.forEachIndexed { index,value -> visit(value,path+"[$index]") }
+    val objects=collectObjectsWithId(data).mapNotNull { (_,obj) -> obj.get("\\$id")?.asString?.let { it to obj } }.toMap()
+    val teamAObject=objects[teamA] ?: return false
+    val teamBObject=objects[teamB] ?: return false
+    val teamAId=teamAObject.get("m_TeamID")?.takeIf { it.isJsonPrimitive && it.asJsonPrimitive.isNumber }?.asInt ?: return false
+    val teamBId=teamBObject.get("m_TeamID")?.takeIf { it.isJsonPrimitive && it.asJsonPrimitive.isNumber }?.asInt ?: return false
+    if(teamAId==teamBId) return false
+    val championshipRefs=data.getAsJsonObject("championshipManager")?.getAsJsonArray("championships") ?: return false
+    val championships=championshipRefs.mapNotNull { ref ->
+        val id=ref.takeIf { it.isJsonObject }?.asJsonObject?.get("\\$ref")?.asString ?: return@mapNotNull null
+        objects[id]
+    }
+    data class Slot(val championship:JsonObject,val index:Int)
+    fun findSlot(teamId:Int):Slot? {
+        val matches=championships.flatMap { championship ->
+            val ids=championship.get("m_TeamIDs")?.takeIf { it.isJsonArray }?.asJsonArray ?: return@flatMap emptyList()
+            ids.mapIndexedNotNull { index,value ->
+                if(value.isJsonPrimitive && value.asJsonPrimitive.isNumber && value.asInt==teamId) Slot(championship,index) else null
             }
         }
+        return matches.singleOrNull()
     }
-    visit(data.getAsJsonObject("championshipManager"),listOf("championshipManager"))
-    val a=locations[teamA]?.firstOrNull() ?: return false
-    val b=locations[teamB]?.firstOrNull() ?: return false
-    val aRef=a.array[a.index].asJsonObject
-    val bRef=b.array[b.index].asJsonObject
-    aRef.addProperty("\$ref",teamB)
-    bRef.addProperty("\$ref",teamA)
+    val slotA=findSlot(teamAId) ?: return false
+    val slotB=findSlot(teamBId) ?: return false
+    if(slotA.championship===slotB.championship) return false
+    val teamAChamp=teamAObject.get("m_Championship")?.takeIf { it.isJsonObject }?.asJsonObject ?: return false
+    val teamBChamp=teamBObject.get("m_Championship")?.takeIf { it.isJsonObject }?.asJsonObject ?: return false
+    val champAId=slotA.championship.get("\\$id")?.asString ?: return false
+    val champBId=slotB.championship.get("\\$id")?.asString ?: return false
+    val oldA=teamAChamp.get("\\$ref")?.asString ?: return false
+    val oldB=teamBChamp.get("\\$ref")?.asString ?: return false
+    if(oldA!=champAId || oldB!=champBId) return false
+    val idsA=slotA.championship.getAsJsonArray("m_TeamIDs")
+    val idsB=slotB.championship.getAsJsonArray("m_TeamIDs")
+    idsA.set(slotA.index,com.google.gson.JsonPrimitive(teamBId))
+    idsB.set(slotB.index,com.google.gson.JsonPrimitive(teamAId))
+    teamAChamp.addProperty("\\$ref",champBId)
+    teamBChamp.addProperty("\\$ref",champAId)
     return true
 }
-
 
 
 private fun championshipEntityById(data:JsonObject, championshipId:Int):JsonObject? {
