@@ -17,7 +17,6 @@ Aplikasi Android untuk mengedit file career **Motorsport Manager 4 (MM4)**. Apli
 - **World:** data marketplace, supplier, research, sesi, sirkuit, dan cuaca yang ditemukan di save.
 - **God Mode:** Team Swap antar divisi, Move Driver, preset nama divisi F1–F4, dan preset lineup F1 2026. Preset F1 hanya diterapkan jika divisi berisi tepat 11 tim dengan dua pembalap per tim.
 - **Save Info / Advanced:** pengeditan nilai dasar dengan tipe data yang didukung.
-- **God Mode:** beberapa perubahan langsung pada data save.
 
 ## Fitur dan pengaman edit
 
@@ -69,8 +68,8 @@ APK untuk penggunaan pribadi ditandatangani dengan debug key dari proses build A
 
 ## Informasi versi
 
-- Versi aplikasi: **1.7.0**
-- Version code: **8**
+- Versi aplikasi: **1.8.0**
+- Version code: **9**
 - Application ID: `com.morepp.mm4savedataeditor`
 - Minimum Android: **API 26**
 - Target Android: **API 35**
