@@ -11,18 +11,16 @@ Aplikasi Android untuk mengedit file career **Motorsport Manager 4 (MM4)**. Apli
 - **Cars:** atribut performa mobil untuk masing-masing tim.
 - **Shop:** stok komponen di Open Market dan toko supplier. Harga, diskon, rarity, status stok, tipe komponen, dan bonus statistik bisa diedit.
 - **Finance:** saldo tim dan riwayat transaksi.
-- **Supplier Network:** penjelajah 80 node jaringan (pemasok, manufaktur, dan perusahaan), cabang, koneksi jaringan, status kepemilikan, dan status ditemukan. Perubahan status menggunakan field boolean yang sudah ada pada node; struktur referensi dan koneksi tidak dibuat ulang.
 - **Headquarters (HQ):** daftar 19 fasilitas beserta efeknya sesuai video gameplay yang diberikan, level kategori HQ, serta data upgrade node. Status, waktu unlock, dan tipe jalur upgrade bisa diedit dari data aslinya.
 - **Component Marketplace:** daftar Open Market dan tujuh toko supplier: Micronix Racing, Shimizu, Polymat Group, Tectra Fibres, Norex, Mersault, dan Kitano. Nama komponen ditampilkan jika jenisnya sudah bisa dipastikan. ID yang belum diketahui tetap ditampilkan sebagai nomor, bukan ditebak.
-- **World:** data championship, marketplace, supplier, research, sesi, sirkuit, dan cuaca yang ditemukan di save.
+- **Championships:** nama kejuaraan sesuai nama in-game yang tersedia atau pemetaan resmi divisi, detail peserta, event, dan klasemen yang tersimpan.
+- **World:** data marketplace, supplier, research, sesi, sirkuit, dan cuaca yang ditemukan di save.
 - **God Mode:** Team Swap antar divisi, Move Driver, preset nama divisi F1–F4, dan preset lineup F1 2026. Preset F1 hanya diterapkan jika divisi berisi tepat 11 tim dengan dua pembalap per tim.
 - **Save Info / Advanced:** pengeditan nilai dasar dengan tipe data yang didukung.
 - **God Mode:** beberapa perubahan langsung pada data save.
 
 ## Fitur dan pengaman edit
 
-- Kategori Supplier Network berdiri sendiri dan tidak mengubah menu lama. Data referensi ditampilkan sebagai label yang mudah dipahami, bukan metadata internal atau JSON mentah.
-- Daftar node, cabang, dan koneksi dibaca secara hanya-baca. Hanya dua status boolean node yang dapat diubah melalui kontrol khusus.
 
 - Menu Teams dan Staff punya batasan field masing-masing. Atribut mobil, pembalap, atau staf yang berada di bagian lain tidak akan ikut muncul sebagai data keuangan tim.
 - Atribut mobil diedit lewat kartu atribut khusus.
@@ -71,8 +69,8 @@ APK untuk penggunaan pribadi ditandatangani dengan debug key dari proses build A
 
 ## Informasi versi
 
-- Versi aplikasi: **1.6.0**
-- Version code: **7**
+- Versi aplikasi: **1.7.0**
+- Version code: **8**
 - Application ID: `com.morepp.mm4savedataeditor`
 - Minimum Android: **API 26**
 - Target Android: **API 35**
