@@ -409,7 +409,7 @@ private fun EditorApp() {
                                 scope.launch { snackbarHostState.showSnackbar("Gagal menerapkan warna tim.") }
                             }
                         },
-                                                onApplyExperience = { experience ->
+                        onApplyExperience = { experience ->
                             val latest = document ?: return@CareerWorkspace
                             val updatedData = applyManagerExperience(latest.data, experience)
                             if (updatedData == null) {
@@ -421,8 +421,7 @@ private fun EditorApp() {
                                 redoStack = emptyList()
                                 scope.launch { snackbarHostState.showSnackbar("Experience manager diperbarui mengikuti tabel level career.") }
                             }
-                        }
-                        ,
+                        },
                         onResetInfluenceCooldown = { position ->
                             val latest = document ?: return@CareerWorkspace
                             val path = listOf("influenceManager", "m_Influences", "[$position]", "m_CurrentCooldown")
