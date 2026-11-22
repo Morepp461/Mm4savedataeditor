@@ -1609,7 +1609,10 @@ private fun DriverAnalyticsPage(doc: Mm4SaveCodec.Document) {
             onDismissRequest = { showDriverDetails = false },
             title = { Text(selected.name, fontWeight = FontWeight.Black) },
             text = {
-                Column(verticalArrangement = Arrangement.spacedBy(7.dp)) {
+                Column(
+                    Modifier.heightIn(max = 520.dp).verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(7.dp)
+                ) {
                     Text(selected.teamName, color = Gold, fontWeight = FontWeight.Bold)
                     InfoLine("Usia", selected.age?.let { it.toString() + " tahun" } ?: "Tidak tersedia")
                     InfoLine("Riwayat karier", selected.careerSeasons.toString() + " musim")
