@@ -527,7 +527,7 @@ private fun EditorApp() {
                 Column(verticalArrangement = Arrangement.spacedBy(9.dp)) {
                     Text("Panduan singkat sebelum mulai:")
                     InfoLine("1. Buka save", "Pilih file career .msv dari penyimpanan")
-                    InfoLine("2. Edit data", "Gunakan Drivers, Staff, Teams, Cars, Finance, HQ, dan Supplier Network")
+                    InfoLine("2. Edit data", "Gunakan Drivers, Staff, Teams, Cars, Finance, HQ, dan God Mode")
                     InfoLine("3. Undo / Redo", "Batalkan perubahan sebelum export")
                     InfoLine("4. Export", "Simpan sebagai file baru, jangan timpa save asli")
                     Text("Beberapa data lanjutan bergantung pada struktur career yang sedang dibuka.", color = Muted, fontSize = 11.sp)
@@ -692,7 +692,7 @@ private fun CareerHeader(
 }
 
 
-private val Sections = listOf("Overview", "Drivers", "Driver Analytics", "Staff", "Teams", "Cars", "Finance", "Career Finance Analytics", "HQ", "Supplier Network", "Championships", "Circuits", "Influence Actions", "Sponsor Database", "Manager Progression", "World", "Diagnostics", "Save Info", "Advanced", "God Mode")
+private val Sections = listOf("Overview", "Drivers", "Driver Analytics", "Staff", "Teams", "Cars", "Finance", "Career Finance Analytics", "HQ", "Championships", "Influence Actions", "Manager Progression", "World", "Diagnostics", "Save Info", "Advanced", "God Mode")
 
 @Composable
 private fun CareerWorkspace(
@@ -724,9 +724,7 @@ private fun CareerWorkspace(
                 "Drivers" -> DriverPage(document, selectedDriver, onDriver, onEdit)
                 "Driver Analytics" -> DriverAnalyticsPage(document)
                 "Championships" -> ChampionshipManagerPage(document)
-                "Circuits" -> CircuitExplorerPage(document)
                 "Influence Actions" -> InfluenceActionsPage(document, onResetInfluenceCooldown)
-                "Sponsor Database" -> SponsorDatabasePage(document)
                 "Career Finance Analytics" -> CareerFinanceAnalyticsPage(document)
                 "Manager Progression" -> ManagerProgressionPage(document, onApplyExperience)
                 "Staff" -> EntityCatalogPage(document, "staff", onEdit, onApplyTeamColor)
@@ -734,7 +732,6 @@ private fun CareerWorkspace(
                 "Cars" -> EntityCatalogPage(document, "car", onEdit, onApplyTeamColor)
                 "Finance" -> FinancePage(document, onEdit)
                 "HQ" -> HqPage(document, onEdit)
-                "Supplier Network" -> SupplierNetworkPage(document, onSupplierFieldChange)
                 "World" -> WorldSettingsPage(document, onEdit)
                 "Diagnostics" -> SaveDiagnosticsPage(document)
                 "Save Info" -> InfoPage(document, onEdit)
