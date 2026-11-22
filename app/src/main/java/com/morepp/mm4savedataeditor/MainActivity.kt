@@ -1429,6 +1429,7 @@ private fun CircuitExplorerPage(doc: Mm4SaveCodec.Document) {
 private fun ChampionshipManagerPage(doc: Mm4SaveCodec.Document) {
     val championships = remember(doc.data) { championshipSummaries(doc.data) }
     var selectedKey by remember { mutableStateOf("") }
+    var showChampionshipDetails by remember { mutableStateOf(false) }
     LaunchedEffect(doc.data) {
         if (championships.none { it.recordKey == selectedKey }) selectedKey = championships.firstOrNull()?.recordKey.orEmpty()
     }
@@ -1460,7 +1461,7 @@ private fun ChampionshipManagerPage(doc: Mm4SaveCodec.Document) {
         item { Text("DAFTAR KEJUARAAN", color = Gold, fontWeight = FontWeight.Bold, fontSize = 10.sp) }
         items(championships, key = { it.recordKey }) { championship ->
             GlassCard(
-                Modifier.fillMaxWidth().clickable { selectedKey = championship.recordKey }
+                Modifier.fillMaxWidth().clickable { selectedKey = championship.recordKey; showChampionshipDetails = true }
                     .then(if (selectedKey == championship.recordKey) Modifier.border(1.dp, Gold, RoundedCornerShape(16.dp)) else Modifier)
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -1515,6 +1516,28 @@ private fun ChampionshipManagerPage(doc: Mm4SaveCodec.Document) {
             }
         }
         item { Text("Klasemen ditampilkan dari catatan hasil yang tersimpan. Halaman ini tidak mengubah posisi, poin, atau hasil balapan.", color = Muted, fontSize = 10.sp) }
+    }
+    if (showChampionshipDetails && selected != null) {
+        AlertDialog(
+            onDismissRequest = { showChampionshipDetails = false },
+            title = { Text(selected.displayName, fontWeight = FontWeight.Black) },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(7.dp)) {
+                    InfoLine("Tier", (selected.tier + 1).toString())
+                    InfoLine("Series", (selected.series + 1).toString())
+                    InfoLine("Event berjalan", selected.eventNumber.toString())
+                    InfoLine("Tim", selected.teamCount.toString())
+                    InfoLine("Pembalap", selected.driverCount.toString())
+                    InfoLine("Event tersimpan", selected.raceCount.toString())
+                    Divider(color = Color.White.copy(alpha = 0.15f))
+                    Text("KLASEMEN TIM", color = Gold, fontWeight = FontWeight.Bold)
+                    selected.standings.take(8).forEach { row ->
+                        InfoLine("P" + row.position + "  " + row.teamName, row.points.toString() + " poin")
+                    }
+                }
+            },
+            confirmButton = { TextButton(onClick = { showChampionshipDetails = false }) { Text("TUTUP") } }
+        )
     }
 }
 
