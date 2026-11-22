@@ -1261,7 +1261,7 @@ private fun SupplierNetworkPage(
                 Spacer(Modifier.height(8.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     Column(Modifier.weight(1f)) {
-                        Text("NODE PEMASOK", color = Muted, fontSize = 9.sp)
+                        Text("TOTAL NODE", color = Muted, fontSize = 9.sp)
                         Text(nodes.size.toString(), color = Color.White, fontSize = 22.sp, fontWeight = FontWeight.Black)
                     }
                     Column(Modifier.weight(1f)) {
