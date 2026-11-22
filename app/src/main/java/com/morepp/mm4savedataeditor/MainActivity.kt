@@ -2839,14 +2839,10 @@ private fun GodModePage(doc:Mm4SaveCodec.Document,onAction:(String)->Unit,onEdit
 @Composable
 private fun GlassCard(modifier: Modifier = Modifier, content: @Composable ColumnScope.() -> Unit) {
     val shape = RoundedCornerShape(18.dp)
-    val motion = rememberInfiniteTransition(label = "glass-card-motion")
-    val edgePulse by motion.animateFloat(
-        initialValue = 0.10f,
-        targetValue = 0.28f,
-        animationSpec = infiniteRepeatable(tween(2600, easing = FastOutSlowInEasing), RepeatMode.Reverse),
-        label = "glass-edge-pulse"
-    )
     var entered by remember { mutableStateOf(false) }
+    val interactionSource = remember { MutableInteractionSource() }
+    val pressed by interactionSource.collectIsPressedAsState()
+    val edgeAlpha by animateFloatAsState(if (pressed) 0.42f else 0.18f, tween(180), label = "glass-card-edge")
     LaunchedEffect(Unit) { entered = true }
     val entrance by animateFloatAsState(
         targetValue = if (entered) 1f else 0.965f,
@@ -2855,11 +2851,12 @@ private fun GlassCard(modifier: Modifier = Modifier, content: @Composable Column
     )
     Column(
         modifier.graphicsLayer {
-            scaleX = entrance
-            scaleY = entrance
+            val pressScale = if (pressed) 0.992f else 1f
+            scaleX = entrance * pressScale
+            scaleY = entrance * pressScale
             alpha = entrance
-        }.animateContentSize(animationSpec = tween(260)).clip(shape)
-            .border(1.dp, Color.White.copy(alpha = edgePulse), shape)
+        }.clickable(interactionSource = interactionSource, indication = null) { }.animateContentSize(animationSpec = tween(260)).clip(shape)
+            .border(1.dp, Color.White.copy(alpha = edgeAlpha), shape)
             .background(Brush.linearGradient(listOf(Color(0xE02A3039), Color(0xC91A212A), Color(0xE0141A22))))
             .padding(1.dp)
             .clip(RoundedCornerShape(17.dp))
