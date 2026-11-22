@@ -846,6 +846,12 @@ private fun DriverPage(doc: Mm4SaveCodec.Document, selected: String?, onSelect: 
             DriverRecord(path,obj,id,name,team)
         }?.distinctBy { it.id }?.sortedWith(compareBy({ it.team.lowercase() },{ it.name.lowercase() })).orEmpty()
     }
+    val analyticsById = remember(doc.data, doc.info) {
+        driverAnalyticsRecords(
+            doc.data,
+            doc.info.get("gameDate")?.takeIf { it.isJsonPrimitive }?.asString
+        ).associateBy { it.recordKey }
+    }
     val referenced=doc.data.getAsJsonObject("driverManager")?.getAsJsonArray("m_Drivers")?.size() ?: 0
     val chosen=drivers.firstOrNull { it.id==selected }
     if(chosen==null) {
@@ -876,6 +882,7 @@ private fun DriverPage(doc: Mm4SaveCodec.Document, selected: String?, onSelect: 
         }
     } else {
         val d=chosen.data
+        val careerAnalytics=analyticsById[chosen.id]
         val details=d.getAsJsonObject("m_PersonDetails")
         val contract=d.getAsJsonObject("contract")
         val stats=d.getAsJsonObject("m_Stats")?.getAsJsonArray("m_Stats")
@@ -941,6 +948,38 @@ private fun DriverPage(doc: Mm4SaveCodec.Document, selected: String?, onSelect: 
                         if(potential!=null) TextButton(onClick={onEdit("Game Data",profilePath+listOf("m_Stats","m_Stats","[$n]","m_Potential"),potential)}) { Text("Edit potential",fontSize=9.sp) }
                         val modifier=stat.get("m_StatModifier")
                         if(modifier!=null) TextButton(onClick={onEdit("Game Data",profilePath+listOf("m_Stats","m_Stats","[$n]","m_StatModifier"),modifier)}) { Text("Modifier ${preview(modifier)}",fontSize=9.sp) }
+                    }
+                }
+            }
+            item {
+                GlassCard(Modifier.fillMaxWidth()) {
+                    Text("RIWAYAT KARIER", color=Gold, fontWeight=FontWeight.Bold, fontSize=11.sp)
+                    val history = careerAnalytics?.careerHistory.orEmpty()
+                    if (history.isEmpty()) {
+                        Text("Belum ada riwayat musim yang tersimpan untuk pembalap ini.", color=Muted, fontSize=10.sp)
+                    } else {
+                        val totalWins = history.sumOf { it.wins }
+                        val totalPodiums = history.sumOf { it.podiums }
+                        val totalRaces = history.sumOf { it.races }
+                        val totalPoints = history.sumOf { it.points }
+                        Row(horizontalArrangement=Arrangement.spacedBy(8.dp)) {
+                            listOf("MENANG" to totalWins, "PODIUM" to totalPodiums, "BALAPAN" to totalRaces, "POIN" to totalPoints).forEach { (label,value) ->
+                                Column(Modifier.weight(1f)) {
+                                    Text(label, color=Muted, fontSize=8.sp)
+                                    Text(value.toString(), color=Gold, fontWeight=FontWeight.Black, fontSize=14.sp)
+                                }
+                            }
+                        }
+                        Divider(color=Color.White.copy(alpha=0.12f))
+                        history.forEach { season ->
+                            Column(Modifier.fillMaxWidth().padding(vertical=5.dp), verticalArrangement=Arrangement.spacedBy(2.dp)) {
+                                Row(Modifier.fillMaxWidth(), horizontalArrangement=Arrangement.SpaceBetween) {
+                                    Text("${season.year} • ${season.teamName}", fontWeight=FontWeight.SemiBold, fontSize=11.sp)
+                                    Text("${season.points} poin", color=Gold, fontWeight=FontWeight.Bold, fontSize=10.sp)
+                                }
+                                Text("Menang ${season.wins} • Podium ${season.podiums} • Balapan ${season.races} • DNF ${season.dnfs}", color=Muted, fontSize=9.sp)
+                            }
+                        }
                     }
                 }
             }
