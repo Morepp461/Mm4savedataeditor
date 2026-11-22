@@ -1557,6 +1557,22 @@ private fun ChampionshipManagerPage(doc: Mm4SaveCodec.Document, onEdit: (String,
                             }
                         }
                     }
+                    if (standing.pointPaths.isNotEmpty()) {
+                        Text("POIN PER EVENT", color = Muted, fontSize = 8.sp, fontWeight = FontWeight.Bold)
+                        LazyRow(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                            items(standing.pointPaths.size) { scoreIndex ->
+                                val scorePath = standing.pointPaths[scoreIndex]
+                                val scoreValue = resolvePath(doc.data, scorePath)
+                                TextButton(
+                                    onClick = { scoreValue?.let { onEdit("Game Data", scorePath, it) } },
+                                    enabled = scoreValue?.isJsonPrimitive == true,
+                                    contentPadding = PaddingValues(horizontal = 5.dp, vertical = 0.dp)
+                                ) {
+                                    Text("R${scoreIndex + 1} • ${scoreValue?.takeIf { it.isJsonPrimitive }?.asInt ?: 0}", fontSize = 9.sp, color = Gold)
+                                }
+                            }
+                        }
+                    }
                 }
             }
             if (championship.standings.isEmpty()) {
