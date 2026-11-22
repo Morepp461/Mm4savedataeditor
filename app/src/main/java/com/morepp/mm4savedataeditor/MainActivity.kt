@@ -2535,16 +2535,15 @@ internal fun renameCareerDivisions(data:JsonObject):Int {
 
 internal fun unlockSupplierNetwork(data:JsonObject):Int {
     val supplier=data.get("supplierNetworkManager")?.takeIf { it.isJsonObject }?.asJsonObject ?: return 0
-    val dictionary=supplier.get("m_NodeDictionary")?.takeIf { it.isJsonObject }?.asJsonObject ?: return 0
+    val dictionary=supplier.get("m_NodeDictionary") ?: return 0
+    val entries:List<JsonElement> = when {
+        dictionary.isJsonArray -> dictionary.asJsonArray.toList()
+        dictionary.isJsonObject -> dictionary.asJsonObject.entrySet().map { it.value }
+        else -> return 0
+    }
+    if(entries.isEmpty()) return 0
 
-    // MM4 stores this dictionary as a JSON object keyed by node ID, not as an array.
-    // The uploaded SlotOne career has an empty dictionary and no start/target nodes.
-    if(dictionary.size()==0) return 0
-    val pending=java.util.ArrayDeque<JsonElement>()
-    dictionary.entrySet().forEach { (_,value) -> if(!value.isJsonNull) pending.add(value) }
-    supplier.get("m_StartNode")?.takeIf { !it.isJsonNull }?.let { pending.add(it) }
-    supplier.get("m_TargetNodes")?.takeIf { it.isJsonArray }?.asJsonArray?.forEach { if(!it.isJsonNull) pending.add(it) }
-
+    // Build a read-only ID index first. Only supplier graph edges are traversed below.
     val byId=mutableMapOf<String,JsonObject>()
     val scan=java.util.ArrayDeque<JsonElement>()
     scan.add(data)
@@ -2552,37 +2551,77 @@ internal fun unlockSupplierNetwork(data:JsonObject):Int {
         when(val element=scan.removeLast()) {
             is JsonObject -> {
                 element.get("\$id")?.takeIf { it.isJsonPrimitive }?.asString?.let { byId[it]=element }
-                element.entrySet().forEach { (_,v) -> if(!v.isJsonNull) scan.add(v) }
+                element.entrySet().forEach { (_,value) -> if(!value.isJsonNull) scan.add(value) }
             }
             is JsonArray -> element.forEach { if(!it.isJsonNull) scan.add(it) }
             else -> Unit
         }
     }
 
-    var changed=0
+    val pending=java.util.ArrayDeque<JsonElement>()
+    entries.forEach { entry ->
+        if(entry.isJsonObject) {
+            val value=entry.asJsonObject.get("Value")
+            if(value!=null && !value.isJsonNull) pending.add(value)
+            else if(entry.asJsonObject.has("\$ref") || entry.asJsonObject.has("m_Nodes") ||
+                entry.asJsonObject.has("m_IsOwned") || entry.asJsonObject.has("m_HasOwnedBeenRevealed")) {
+                pending.add(entry)
+            }
+        }
+    }
+    supplier.get("m_StartNode")?.takeIf { !it.isJsonNull }?.let { pending.add(it) }
+    supplier.get("m_TargetNodes")?.takeIf { it.isJsonArray }?.asJsonArray
+        ?.forEach { if(!it.isJsonNull) pending.add(it) }
+
+    var recognizedNodes=0
     val visited=java.util.Collections.newSetFromMap(java.util.IdentityHashMap<JsonObject,Boolean>())
     while(pending.isNotEmpty()) {
         when(val element=pending.removeLast()) {
             is JsonObject -> {
-                if(!visited.add(element)) continue
                 val ref=element.get("\$ref")?.takeIf { it.isJsonPrimitive }?.asString
-                if(ref!=null) byId[ref]?.let { pending.add(it) }
-                listOf("m_IsOwned","m_HasOwnedBeenRevealed").forEach { field ->
-                    val value=element.get(field)
-                    if(value!=null && value.isJsonPrimitive && value.asJsonPrimitive.isBoolean && !value.asBoolean) {
-                        element.addProperty(field,true)
-                        if(field=="m_IsOwned") changed++
-                    }
+                if(ref!=null) {
+                    byId[ref]?.let { pending.add(it) }
+                    continue
                 }
-                element.entrySet().forEach { (key,value) ->
-                    if(key!="\$ref" && !value.isJsonNull) pending.add(value)
+                if(!visited.add(element)) continue
+
+                val owned=element.get("m_IsOwned")
+                val revealed=element.get("m_HasOwnedBeenRevealed")
+                val hasOwned=owned?.isJsonPrimitive==true && owned.asJsonPrimitive.isBoolean
+                val hasRevealed=revealed?.isJsonPrimitive==true && revealed.asJsonPrimitive.isBoolean
+                if(hasOwned || hasRevealed) {
+                    recognizedNodes++
+                    if(hasOwned && !owned!!.asBoolean) element.addProperty("m_IsOwned",true)
+                    if(hasRevealed && !revealed!!.asBoolean) element.addProperty("m_HasOwnedBeenRevealed",true)
                 }
+
+                // Follow only graph edges; never recurse into arbitrary save objects.
+                element.get("m_Nodes")?.takeIf { it.isJsonArray }?.asJsonArray
+                    ?.forEach { if(!it.isJsonNull) pending.add(it) }
             }
             is JsonArray -> element.forEach { if(!it.isJsonNull) pending.add(it) }
             else -> Unit
         }
     }
-    return changed
+
+    // MM4 serializes these category maps as Key/Value entries.
+    listOf("m_SupplierUnlocked","m_SupplierAvailable").forEach { field ->
+        val map=supplier.get(field) ?: return@forEach
+        val rows=when {
+            map.isJsonArray -> map.asJsonArray.toList()
+            map.isJsonObject -> map.asJsonObject.entrySet().map { it.value }
+            else -> emptyList()
+        }
+        rows.forEach { row ->
+            if(row.isJsonObject) {
+                val value=row.asJsonObject.get("Value")
+                if(value?.isJsonPrimitive==true && value.asJsonPrimitive.isNumber && value.asInt!=1) {
+                    row.asJsonObject.addProperty("Value",1)
+                }
+            }
+        }
+    }
+    return recognizedNodes
 }
 
 private fun applyGodModeAction(current:Mm4SaveCodec.Document,action:String,templateData:JsonObject?=null):Mm4SaveCodec.Document? {

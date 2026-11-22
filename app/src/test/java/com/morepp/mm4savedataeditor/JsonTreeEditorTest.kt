@@ -330,7 +330,8 @@ class JsonTreeEditorTest {
         assertTrue(root.get("m_HasOwnedBeenRevealed").asBoolean)
         assertTrue(company.get("m_IsOwned").asBoolean)
         assertTrue(company.get("m_HasOwnedBeenRevealed").asBoolean)
-        assertEquals(0,unlockSupplierNetwork(data))
+        // Idempotent unlock reports the number of recognized nodes, not only changed flags.
+        assertEquals(2,unlockSupplierNetwork(data))
     }
 
     @Test
