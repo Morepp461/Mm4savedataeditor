@@ -1239,14 +1239,14 @@ private fun DriverAnalyticsPage(doc: Mm4SaveCodec.Document) {
         driverAnalyticsRecords(doc.data, doc.info.get("gameDate")?.takeIf { it.isJsonPrimitive }?.asString)
     }
     var query by remember { mutableStateOf("") }
-    var selectedDriverId by remember { mutableIntStateOf(-1) }
+    var selectedDriverKey by remember { mutableStateOf("") }
     LaunchedEffect(doc.data) {
-        if (records.none { it.driverId == selectedDriverId }) selectedDriverId = records.firstOrNull()?.driverId ?: -1
+        if (records.none { it.recordKey == selectedDriverKey }) selectedDriverKey = records.firstOrNull()?.recordKey.orEmpty()
     }
     val filtered = records.filter {
         query.isBlank() || it.name.contains(query, true) || it.teamName.contains(query, true)
     }
-    val selected = records.firstOrNull { it.driverId == selectedDriverId }
+    val selected = records.firstOrNull { it.recordKey == selectedDriverKey }
 
     LazyColumn(contentPadding = PaddingValues(14.dp), verticalArrangement = Arrangement.spacedBy(9.dp)) {
         item {
@@ -1278,10 +1278,10 @@ private fun DriverAnalyticsPage(doc: Mm4SaveCodec.Document) {
             )
         }
         item { Text("DATABASE PEMBALAP", color = Gold, fontWeight = FontWeight.Bold, fontSize = 10.sp) }
-        items(filtered, key = { it.driverId }) { driver ->
+        items(filtered, key = { it.recordKey }) { driver ->
             GlassCard(
-                Modifier.fillMaxWidth().clickable { selectedDriverId = driver.driverId }
-                    .then(if (selectedDriverId == driver.driverId) Modifier.border(1.dp, Gold, RoundedCornerShape(16.dp)) else Modifier)
+                Modifier.fillMaxWidth().clickable { selectedDriverKey = driver.recordKey }
+                    .then(if (selectedDriverKey == driver.recordKey) Modifier.border(1.dp, Gold, RoundedCornerShape(16.dp)) else Modifier)
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Column(Modifier.weight(1f)) {
