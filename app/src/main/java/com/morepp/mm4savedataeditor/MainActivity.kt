@@ -6,6 +6,8 @@ import kotlin.math.cos
 import kotlin.math.PI
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.foundation.Canvas
 import android.os.Bundle
@@ -54,6 +56,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -2827,6 +2830,13 @@ private fun GodModePage(doc:Mm4SaveCodec.Document,onAction:(String)->Unit,onEdit
 @Composable
 private fun GlassCard(modifier: Modifier = Modifier, content: @Composable ColumnScope.() -> Unit) {
     val shape = RoundedCornerShape(18.dp)
+    val motion = rememberInfiniteTransition(label = "glass-card-motion")
+    val edgePulse by motion.animateFloat(
+        initialValue = 0.10f,
+        targetValue = 0.28f,
+        animationSpec = infiniteRepeatable(tween(2600, easing = FastOutSlowInEasing), RepeatMode.Reverse),
+        label = "glass-edge-pulse"
+    )
     var entered by remember { mutableStateOf(false) }
     LaunchedEffect(Unit) { entered = true }
     val entrance by animateFloatAsState(
@@ -2840,7 +2850,7 @@ private fun GlassCard(modifier: Modifier = Modifier, content: @Composable Column
             scaleY = entrance
             alpha = entrance
         }.animateContentSize(animationSpec = tween(260)).clip(shape)
-            .border(1.dp, GlassEdge, shape)
+            .border(1.dp, Color.White.copy(alpha = edgePulse), shape)
             .background(Brush.linearGradient(listOf(Color(0xE02A3039), Color(0xC91A212A), Color(0xE0141A22))))
             .padding(1.dp)
             .clip(RoundedCornerShape(17.dp))
