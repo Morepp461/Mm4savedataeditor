@@ -920,7 +920,7 @@ private fun TeamPage(doc: Mm4SaveCodec.Document, onEdit: (String,List<String>,Js
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Text(channel.uppercase(), Modifier.weight(1f), color = Muted, fontSize = 10.sp)
-                        Text((if (value.isJsonPrimitive && value.asJsonPrimitive.isString) value.asString else value.toString()), color = Gold, fontWeight = FontWeight.Bold, fontSize = 11.sp)
+                        Text(preview(value), color = Gold, fontWeight = FontWeight.Bold, fontSize = 11.sp)
                         Icon(Icons.Default.Edit, null, tint = Muted, modifier = Modifier.size(15.dp))
                     }
                 }
@@ -1099,7 +1099,7 @@ private fun EntityCatalogPage(doc: Mm4SaveCodec.Document, category: String, onEd
                     Row(verticalAlignment=Alignment.CenterVertically) {
                         Column(Modifier.weight(1f)) {
                             Text(label,fontWeight=FontWeight.SemiBold,fontSize=12.sp)
-                            Text(path.dropLast(1).joinToString(" / "),color=Muted,fontSize=9.sp,maxLines=1,overflow=TextOverflow.Ellipsis)
+                            Text(path.dropLast(1).joinToString(" / ") { humanizeField(it) },color=Muted,fontSize=9.sp,maxLines=1,overflow=TextOverflow.Ellipsis)
                         }
                         Text(preview(value),color=Gold,fontWeight=FontWeight.Bold,fontSize=12.sp)
                         Icon(Icons.Default.Edit,null,tint=Muted,modifier=Modifier.size(16.dp))
@@ -1382,7 +1382,7 @@ private fun WorldSettingsPage(doc:Mm4SaveCodec.Document,onEdit:(String,List<Stri
             GlassCard(Modifier.fillMaxWidth()) {
                 Text(worldGroupLabel(group.key),fontWeight=FontWeight.Bold)
                 Text(categoryDescription(group.value,flatten(group.value).size),color=Muted,fontSize=10.sp)
-                flatten(group.value).filter { (path,value) -> path.none { it == "\$ref" || it == "\$version" } && value.isJsonPrimitive }.forEach { (path,value) ->
+                flatten(group.value).filter { (path,value) -> path.none { it.startsWith("\$") } && value.isJsonPrimitive }.forEach { (path,value) ->
                     Row(Modifier.fillMaxWidth().clickable { onEdit("Game Data",listOf(group.key)+path,value) }.padding(vertical=6.dp),verticalAlignment=Alignment.CenterVertically) {
                         Text(humanLabel(path.last()),Modifier.weight(1f),fontSize=11.sp)
                         Text(preview(value),color=Gold,fontSize=11.sp)
@@ -1596,7 +1596,7 @@ private fun HqPage(doc: Mm4SaveCodec.Document, onEdit: (String,List<String>,Json
       if(state!=null) TextButton(onClick={onEdit("Game Data",listOf("headquarters","m_Upgrades","["+listIndex+"]","Value","State"),state)}){Text("STATE")}
      }
      if(weeks!=null) {
-      InfoLine("Weeks to unlock",weeks.asString)
+      InfoLine("Weeks to unlock",preview(weeks))
       TextButton(onClick={onEdit("Game Data",listOf("headquarters","m_Upgrades","["+listIndex+"]","Value","weeksToUnlock"),weeks)}){Text("EDIT TIMER")}
      }
      if(path!=null) {
@@ -1714,7 +1714,7 @@ private fun MarketplaceComponentCard(element:JsonElement,arrayKey:String,compone
      val statValue=statObject.get("Value")
      Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically) {
       Text(componentStatName(statId),Modifier.weight(1f),fontSize=11.sp)
-      Text(statValue?.asString ?: "—",color=Gold,fontWeight=FontWeight.Bold,fontSize=11.sp)
+      Text(statValue?.let { preview(it) } ?: "—",color=Gold,fontWeight=FontWeight.Bold,fontSize=11.sp)
       if(statValue!=null)TextButton(onClick={onEdit("Game Data",prefix+listOf("m_Stats","["+statIndex+"]","Value"),statValue)}){Text("EDIT")}
       statObject.get("Stat")?.let{statField->IconButton(onClick={onEdit("Game Data",prefix+listOf("m_Stats","["+statIndex+"]","Stat"),statField)}){Icon(Icons.Default.Edit,contentDescription="Edit stat type",tint=Muted)}}
      }
@@ -1730,7 +1730,7 @@ private fun InfoPage(doc: Mm4SaveCodec.Document, onEdit: (String,List<String>,Js
         items(fields) { (key,label) ->
             val v = doc.info.get(key)
             if (v != null) GlassCard(Modifier.fillMaxWidth().clickable { onEdit("Save Info", listOf(key), v) }) {
-                InfoLine(label, if (v.isJsonPrimitive && v.asJsonPrimitive.isString) v.asString else v.toString())
+                InfoLine(label, preview(v))
                 Text("Tap to edit", color = Muted, fontSize = 9.sp)
             }
         }
@@ -2242,7 +2242,7 @@ private fun GodModePage(doc:Mm4SaveCodec.Document,onAction:(String)->Unit,onEdit
         item {
             GlassCard(Modifier.fillMaxWidth()) {
                 Text("INFLUENCE BALANCE",fontWeight=FontWeight.Bold)
-                Text("Saldo influence saat ini: ${influence?.asString ?: "—"}",color=Muted,fontSize=11.sp)
+                Text("Saldo influence saat ini: ${influence?.let { preview(it) } ?: "—"}",color=Muted,fontSize=11.sp)
                 if(influence?.isJsonPrimitive==true && influence.asJsonPrimitive.isNumber) {
                     OutlinedButton(
                         onClick={onEdit("Game Data",listOf("influenceManager","m_Influence"),influence)},
@@ -2263,7 +2263,7 @@ private fun GodModePage(doc:Mm4SaveCodec.Document,onAction:(String)->Unit,onEdit
         item {
             GlassCard(Modifier.fillMaxWidth()) {
                 Text("RISET MAKSIMUM",fontWeight=FontWeight.Bold)
-                Text("Riset saat ini ${research?.get("m_SeasonResearchPointsMM4")?.asString ?: "—"} / ${research?.get("m_ResearchCap")?.asString ?: "—"}",color=Muted,fontSize=11.sp)
+                Text("Riset saat ini ${research?.get("m_SeasonResearchPointsMM4")?.let { preview(it) } ?: "—"} / ${research?.get("m_ResearchCap")?.let { preview(it) } ?: "—"}",color=Muted,fontSize=11.sp)
                 Button(onClick={onAction("max_research")},modifier=Modifier.fillMaxWidth(),colors=ButtonDefaults.buttonColors(containerColor=Blue)) { Text("MAKSIMALKAN RISET & DEBUG") }
             }
         }
@@ -2570,10 +2570,15 @@ private fun categoryIcon(key: String) = when {
 }
 
 private fun preview(value: JsonElement): String = when {
-    value.isJsonNull -> "null"
-    value.isJsonObject -> "{ ${value.asJsonObject.size()} properties }"
-    value.isJsonArray -> "[ ${value.asJsonArray.size()} items ]"
-    else -> value.toString()
+    value.isJsonNull -> "Tidak tersedia"
+    value.isJsonObject -> "${value.asJsonObject.size()} data terkait"
+    value.isJsonArray -> "${value.asJsonArray.size()} item"
+    value.isJsonPrimitive && value.asJsonPrimitive.isBoolean -> if (value.asBoolean) "Aktif" else "Nonaktif"
+    value.isJsonPrimitive && value.asJsonPrimitive.isNumber -> runCatching {
+        java.math.BigDecimal(value.asString).setScale(0, java.math.RoundingMode.HALF_UP).toPlainString()
+    }.getOrDefault("0")
+    value.isJsonPrimitive && value.asJsonPrimitive.isString -> value.asString
+    else -> "Data tersedia"
 }
 
 internal fun flatten(root: JsonElement): List<Pair<List<String>, JsonElement>> {
@@ -2655,7 +2660,7 @@ private fun EditValueDialog(target: EditTarget, onClose: () -> Unit, onSave: (Js
         title = { Text(humanizeField(target.path.lastOrNull() ?: "Edit value")) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text(target.path.joinToString("  /  "), color = Muted, fontSize = 10.sp)
+                Text(target.path.joinToString("  /  ") { humanizeField(it) }, color = Muted, fontSize = 10.sp)
                 when {
                     isBoolean -> Row(verticalAlignment = Alignment.CenterVertically) {
                         Text("Nonaktif", Modifier.weight(1f))
