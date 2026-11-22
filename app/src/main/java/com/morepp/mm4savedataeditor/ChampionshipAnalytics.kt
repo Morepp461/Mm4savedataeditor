@@ -10,7 +10,8 @@ internal data class ChampionshipTeamStanding(
     val wins: Int,
     val podiums: Int,
     val races: Int,
-    val dnfs: Int
+    val dnfs: Int,
+    val path: List<String>
 )
 
 internal data class ChampionshipSummary(
@@ -55,6 +56,7 @@ internal fun championshipSummaries(data: JsonObject): List<ChampionshipSummary> 
 
     return list.mapIndexedNotNull { index, reference ->
         val championship = resolve(reference) ?: return@mapIndexedNotNull null
+        val championshipPath = idPaths[championship.get("\$id")?.takeIf { it.isJsonPrimitive }?.asString] ?: emptyList()
         val standingsObject = championship.getAsJsonObject("standings")
         val teamRows = standingsObject?.get("m_Teams")?.takeIf { it.isJsonArray }?.asJsonArray
             ?.mapIndexedNotNull { rowIndex, row ->
@@ -74,7 +76,8 @@ internal fun championshipSummaries(data: JsonObject): List<ChampionshipSummary> 
                     wins = item.get("wins")?.takeIf { it.isJsonPrimitive && it.asJsonPrimitive.isNumber }?.asInt ?: 0,
                     podiums = item.get("podiums")?.takeIf { it.isJsonPrimitive && it.asJsonPrimitive.isNumber }?.asInt ?: 0,
                     races = item.get("races")?.takeIf { it.isJsonPrimitive && it.asJsonPrimitive.isNumber }?.asInt ?: 0,
-                    dnfs = item.get("DNFs")?.takeIf { it.isJsonPrimitive && it.asJsonPrimitive.isNumber }?.asInt ?: 0
+                    dnfs = item.get("DNFs")?.takeIf { it.isJsonPrimitive && it.asJsonPrimitive.isNumber }?.asInt ?: 0,
+                    path = championshipPath + "standings" + "m_Teams" + "[$rowIndex]"
                 )
             }.orEmpty().sortedBy { it.position }
 
