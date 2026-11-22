@@ -655,7 +655,7 @@ private fun CareerHeader(
 }
 
 
-private val Sections = listOf("Overview", "Drivers", "Driver Analytics", "Staff", "Teams", "Cars", "Finance", "HQ", "Supplier Network", "Championships", "World", "Diagnostics", "Save Info", "Advanced", "God Mode")
+private val Sections = listOf("Overview", "Drivers", "Driver Analytics", "Staff", "Teams", "Cars", "Finance", "HQ", "Supplier Network", "Championships", "Circuits", "World", "Diagnostics", "Save Info", "Advanced", "God Mode")
 
 @Composable
 private fun CareerWorkspace(
@@ -1234,6 +1234,99 @@ private fun statAttributeLabel(category:String,type:String,index:Int):String {
 
 
 
+
+
+@Composable
+private fun CircuitExplorerPage(doc: Mm4SaveCodec.Document) {
+    val circuits = remember(doc.data) { circuitSummaries(doc.data) }
+    var query by remember { mutableStateOf("") }
+    var selectedKey by remember { mutableStateOf("") }
+    LaunchedEffect(doc.data) {
+        if (circuits.none { it.recordKey == selectedKey }) selectedKey = circuits.firstOrNull()?.recordKey.orEmpty()
+    }
+    val filtered = circuits.filter { query.isBlank() || it.label.contains(query, true) || it.locationId.toString().contains(query) }
+    val selected = circuits.firstOrNull { it.recordKey == selectedKey }
+    fun ratingLabel(value: Int) = when (value) {
+        1 -> "Rendah"
+        2 -> "Sedang"
+        3 -> "Tinggi"
+        else -> "Tidak tersedia"
+    }
+
+    LazyColumn(contentPadding = PaddingValues(14.dp), verticalArrangement = Arrangement.spacedBy(9.dp)) {
+        item {
+            GlassCard(Modifier.fillMaxWidth()) {
+                Text("CIRCUIT EXPLORER", color = Gold, fontWeight = FontWeight.Black, fontSize = 11.sp)
+                Text("Database sirkuit career", fontSize = 21.sp, fontWeight = FontWeight.Black)
+                Text("Data panjang lintasan dan karakteristik sirkuit yang benar-benar tersimpan di file save.", color = Muted, fontSize = 11.sp)
+                Spacer(Modifier.height(8.dp))
+                Text(circuits.size.toString(), fontSize = 24.sp, fontWeight = FontWeight.Black)
+                Text("sirkuit terdeteksi", color = Muted, fontSize = 9.sp)
+            }
+        }
+        item {
+            OutlinedTextField(
+                value = query,
+                onValueChange = { query = it },
+                modifier = Modifier.fillMaxWidth(),
+                singleLine = true,
+                placeholder = { Text("Cari nomor sirkuit atau lokasi…") },
+                leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) }
+            )
+        }
+        items(filtered, key = { it.recordKey }) { circuit ->
+            GlassCard(
+                Modifier.fillMaxWidth().clickable { selectedKey = circuit.recordKey }
+                    .then(if (selectedKey == circuit.recordKey) Modifier.border(1.dp, Gold, RoundedCornerShape(16.dp)) else Modifier)
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f)) {
+                        Text(circuit.label, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                        Text("Lokasi peta ${circuit.locationId + 1} • sekitar ${circuit.lengthKm} km", color = Muted, fontSize = 10.sp)
+                    }
+                    Icon(Icons.Default.ChevronRight, contentDescription = "Lihat karakteristik", tint = Gold)
+                }
+            }
+        }
+        if (filtered.isEmpty()) item { Text("Sirkuit tidak ditemukan.", color = Muted, fontSize = 11.sp) }
+        selected?.let { circuit ->
+            item {
+                GlassCard(Modifier.fillMaxWidth()) {
+                    Text("DETAIL SIRKUIT", color = Gold, fontWeight = FontWeight.Bold, fontSize = 10.sp)
+                    Text(circuit.label, fontSize = 20.sp, fontWeight = FontWeight.Black)
+                    Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                        Column(Modifier.weight(1f)) {
+                            Text("PANJANG LINTASAN", color = Muted, fontSize = 9.sp)
+                            Text("±${circuit.lengthKm} km", fontWeight = FontWeight.Bold, fontSize = 15.sp)
+                        }
+                        Column(Modifier.weight(1f)) {
+                            Text("LOKASI PETA", color = Muted, fontSize = 9.sp)
+                            Text((circuit.locationId + 1).toString(), fontWeight = FontWeight.Bold, fontSize = 15.sp)
+                        }
+                    }
+                    Divider(color = Color.White.copy(alpha = 0.12f))
+                    val characteristics = listOf(
+                        "Kecepatan maksimum" to circuit.topSpeed,
+                        "Akselerasi" to circuit.acceleration,
+                        "Pengereman" to circuit.braking,
+                        "Tikungan lambat" to circuit.lowSpeedCorners,
+                        "Tikungan sedang" to circuit.mediumSpeedCorners,
+                        "Tikungan cepat" to circuit.highSpeedCorners
+                    )
+                    characteristics.forEach { (label, value) ->
+                        Row(Modifier.fillMaxWidth().padding(vertical = 5.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Text(label, Modifier.weight(1f), fontSize = 11.sp)
+                            Text(ratingLabel(value), color = Gold, fontWeight = FontWeight.Bold, fontSize = 11.sp)
+                        }
+                    }
+                }
+            }
+        }
+        item {
+            Text("Nama resmi dan gambar layout sirkuit tidak tersimpan pada record ini, jadi editor menggunakan nomor sirkuit dan tidak mengarang nama atau peta.", color = Muted, fontSize = 10.sp)
+        }
+    }
+}
 
 @Composable
 private fun ChampionshipManagerPage(doc: Mm4SaveCodec.Document) {
