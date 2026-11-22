@@ -655,7 +655,7 @@ private fun CareerHeader(
 }
 
 
-private val Sections = listOf("Overview", "Drivers", "Staff", "Teams", "Cars", "Finance", "HQ", "Supplier Network", "World", "Diagnostics", "Save Info", "Advanced", "God Mode")
+private val Sections = listOf("Overview", "Drivers", "Driver Analytics", "Staff", "Teams", "Cars", "Finance", "HQ", "Supplier Network", "World", "Diagnostics", "Save Info", "Advanced", "God Mode")
 
 @Composable
 private fun CareerWorkspace(
@@ -683,6 +683,7 @@ private fun CareerWorkspace(
             when (targetSection) {
                 "Overview" -> OverviewPage(document, onSection)
                 "Drivers" -> DriverPage(document, selectedDriver, onDriver, onEdit)
+                "Driver Analytics" -> DriverAnalyticsPage(document)
                 "Staff" -> EntityCatalogPage(document, "staff", onEdit, onApplyTeamColor)
                 "Teams" -> EntityCatalogPage(document, "team", onEdit, onApplyTeamColor)
                 "Cars" -> EntityCatalogPage(document, "car", onEdit, onApplyTeamColor)
@@ -1230,6 +1231,123 @@ private fun statAttributeLabel(category:String,type:String,index:Int):String {
     return labels.getOrNull(index) ?: "Attribute "+(index+1)
 }
 
+
+
+@Composable
+private fun DriverAnalyticsPage(doc: Mm4SaveCodec.Document) {
+    val records = remember(doc.data, doc.info) {
+        driverAnalyticsRecords(doc.data, doc.info.get("gameDate")?.takeIf { it.isJsonPrimitive }?.asString)
+    }
+    var query by remember { mutableStateOf("") }
+    var selectedDriverId by remember { mutableIntStateOf(-1) }
+    LaunchedEffect(doc.data) {
+        if (records.none { it.driverId == selectedDriverId }) selectedDriverId = records.firstOrNull()?.driverId ?: -1
+    }
+    val filtered = records.filter {
+        query.isBlank() || it.name.contains(query, true) || it.teamName.contains(query, true)
+    }
+    val selected = records.firstOrNull { it.driverId == selectedDriverId }
+
+    LazyColumn(contentPadding = PaddingValues(14.dp), verticalArrangement = Arrangement.spacedBy(9.dp)) {
+        item {
+            GlassCard(Modifier.fillMaxWidth()) {
+                Text("DRIVER ANALYTICS", color = Gold, fontWeight = FontWeight.Black, fontSize = 11.sp)
+                Text("Statistik dan perjalanan pembalap", fontSize = 21.sp, fontWeight = FontWeight.Black)
+                Text("Ringkasan profil, performa, potensi, pengalaman, dan trait berdasarkan data career.", color = Muted, fontSize = 11.sp)
+                Spacer(Modifier.height(8.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Column(Modifier.weight(1f)) {
+                        Text("TOTAL PEMBALAP", color = Muted, fontSize = 9.sp)
+                        Text(records.size.toString(), fontSize = 22.sp, fontWeight = FontWeight.Black)
+                    }
+                    Column(Modifier.weight(1f)) {
+                        Text("PUNYA RIWAYAT", color = Muted, fontSize = 9.sp)
+                        Text(records.count { it.careerSeasons > 0 }.toString(), fontSize = 22.sp, fontWeight = FontWeight.Black)
+                    }
+                }
+            }
+        }
+        item {
+            OutlinedTextField(
+                value = query,
+                onValueChange = { query = it },
+                modifier = Modifier.fillMaxWidth(),
+                singleLine = true,
+                placeholder = { Text("Cari nama pembalap atau tim…") },
+                leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) }
+            )
+        }
+        item { Text("DATABASE PEMBALAP", color = Gold, fontWeight = FontWeight.Bold, fontSize = 10.sp) }
+        items(filtered, key = { it.driverId }) { driver ->
+            GlassCard(
+                Modifier.fillMaxWidth().clickable { selectedDriverId = driver.driverId }
+                    .then(if (selectedDriverId == driver.driverId) Modifier.border(1.dp, Gold, RoundedCornerShape(16.dp)) else Modifier)
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f)) {
+                        Text(driver.name, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                        Text(driver.teamName, color = Muted, fontSize = 10.sp)
+                        Text(
+                            (driver.age?.let { "Usia $it tahun" } ?: "Usia tidak tersedia") +
+                                " • ${driver.careerSeasons} musim karier",
+                            color = Muted,
+                            fontSize = 10.sp
+                        )
+                    }
+                    Icon(Icons.Default.ChevronRight, contentDescription = "Lihat statistik", tint = Gold)
+                }
+            }
+        }
+        if (filtered.isEmpty()) {
+            item { Text("Tidak ada pembalap yang cocok dengan pencarian.", color = Muted, fontSize = 11.sp) }
+        }
+        selected?.let { driver ->
+            item {
+                GlassCard(Modifier.fillMaxWidth()) {
+                    Text("PROFIL ANALITIK", color = Gold, fontWeight = FontWeight.Bold, fontSize = 10.sp)
+                    Text(driver.name, fontSize = 20.sp, fontWeight = FontWeight.Black)
+                    Text(driver.teamName, color = Muted, fontSize = 11.sp)
+                    Divider(color = Color.White.copy(alpha = 0.12f))
+                    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                        Column(Modifier.weight(1f)) {
+                            Text("USIA", color = Muted, fontSize = 9.sp)
+                            Text(driver.age?.let { "$it tahun" } ?: "—", fontWeight = FontWeight.Bold, fontSize = 15.sp)
+                        }
+                        Column(Modifier.weight(1f)) {
+                            Text("RIWAYAT KARIER", color = Muted, fontSize = 9.sp)
+                            Text("${driver.careerSeasons} musim", fontWeight = FontWeight.Bold, fontSize = 15.sp)
+                        }
+                        Column(Modifier.weight(1f)) {
+                            Text("TRAIT", color = Muted, fontSize = 9.sp)
+                            Text(driver.traitCount.toString(), fontWeight = FontWeight.Bold, fontSize = 15.sp)
+                        }
+                    }
+                    Text("ID pembalap ${driver.driverId}", color = Muted, fontSize = 9.sp)
+                }
+            }
+            if (driver.attributes.isNotEmpty() || driver.potentials.isNotEmpty()) {
+                item {
+                    GlassCard(Modifier.fillMaxWidth()) {
+                        Text("ATRIBUT DAN POTENSI", color = Gold, fontWeight = FontWeight.Bold, fontSize = 10.sp)
+                        val count = maxOf(driver.attributes.size, driver.potentials.size)
+                        (0 until count).forEach { index ->
+                            Row(Modifier.fillMaxWidth().padding(vertical = 5.dp), verticalAlignment = Alignment.CenterVertically) {
+                                Text(statAttributeLabel("driver", "driver", index), Modifier.weight(1f), fontSize = 11.sp)
+                                Column(horizontalAlignment = Alignment.End) {
+                                    Text("${driver.attributes.getOrNull(index) ?: "—"} / 20", color = Gold, fontWeight = FontWeight.Bold, fontSize = 11.sp)
+                                    Text("Potensi ${driver.potentials.getOrNull(index) ?: "—"}", color = Muted, fontSize = 9.sp)
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        item {
+            Text("Halaman ini hanya membaca data pembalap. Tidak ada statistik atau riwayat yang ditulis ulang ke save.", color = Muted, fontSize = 10.sp)
+        }
+    }
+}
 
 @Composable
 private fun SupplierNetworkPage(
