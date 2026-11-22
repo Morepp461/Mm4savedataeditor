@@ -43,7 +43,11 @@ jobs:
       - name: Verify APK
         run: |
           test -s app/build/outputs/apk/debug/app-debug.apk
-          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging app/build/outputs/apk/debug/app-debug.apk | grep -F "package: name='com.morepp.mm4savedataeditor'"
+          APK="app/build/outputs/apk/debug/app-debug.apk"
+          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$APK" | grep -F "package: name='com.morepp.mm4savedataeditor'"
+          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$APK" | grep -F "sdkVersion:'26'"
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose "$APK"
+          unzip -t "$APK"
       - name: Upload installable APK
         uses: actions/upload-artifact@v4
         with:
