@@ -1884,44 +1884,66 @@ private fun SponsorDatabasePage(doc: Mm4SaveCodec.Document) {
 
 @Composable
 private fun CareerFinanceAnalyticsPage(doc: Mm4SaveCodec.Document) {
-    val finance = doc.data.getAsJsonObject("financeManager")
-    val balance = finance?.get("m_Balance")?.takeIf { it.isJsonPrimitive && it.asJsonPrimitive.isNumber }?.asLong
-    val history = finance?.get("m_TransactionHistory")?.takeIf { it.isJsonArray }?.asJsonArray
-    val transactionCount = history?.size() ?: 0
-    val numericEntries = history?.count { entry ->
-        (entry.isJsonPrimitive && entry.asJsonPrimitive.isNumber) ||
-            (entry.isJsonObject && listOf("amount", "m_Amount", "value", "m_Value", "balance")
-                .any { key -> entry.asJsonObject.get(key)?.let { it.isJsonPrimitive && it.asJsonPrimitive.isNumber } == true })
-    } ?: 0
+    val summary = remember(doc.data) { careerFinanceSummary(doc.data) }
+    val transactions = remember(doc.data) {
+        doc.data.getAsJsonObject("financeManager")?.get("m_TransactionHistory")
+            ?.takeIf { it.isJsonArray }?.asJsonArray
+            ?.mapNotNull { value ->
+                value.takeIf { it.isJsonPrimitive && it.asJsonPrimitive.isNumber }?.asLong
+            }.orEmpty()
+    }
     LazyColumn(contentPadding = PaddingValues(14.dp), verticalArrangement = Arrangement.spacedBy(9.dp)) {
         item {
             GlassCard(Modifier.fillMaxWidth()) {
                 Text("CAREER FINANCE ANALYTICS", color = Gold, fontWeight = FontWeight.Black, fontSize = 11.sp)
                 Text("Ringkasan keuangan career", fontSize = 21.sp, fontWeight = FontWeight.Black)
-                Text("Ringkasan saldo dan catatan transaksi yang benar-benar tersedia di save.", color = Muted, fontSize = 11.sp)
+                Text("Analisis memakai saldo, riwayat transaksi, dan biaya per balapan yang tersimpan.", color = Muted, fontSize = 11.sp)
                 Spacer(Modifier.height(8.dp))
                 Text("SALDO SAAT INI", color = Muted, fontSize = 9.sp)
-                Text(balance?.let { formatMoney(it) } ?: "Tidak tersedia", color = Gold, fontSize = 24.sp, fontWeight = FontWeight.Black)
-                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Column(Modifier.weight(1f)) {
-                        Text("CATATAN TRANSAKSI", color = Muted, fontSize = 9.sp)
-                        Text(transactionCount.toString(), fontSize = 21.sp, fontWeight = FontWeight.Black)
-                    }
-                    Column(Modifier.weight(1f)) {
-                        Text("NILAI TERBACA", color = Muted, fontSize = 9.sp)
-                        Text(numericEntries.toString(), fontSize = 21.sp, fontWeight = FontWeight.Black)
-                    }
+                Text(summary?.let { formatMoney(it.balance) } ?: "Tidak tersedia", color = Gold, fontSize = 24.sp, fontWeight = FontWeight.Black)
+            }
+        }
+        if (summary != null) {
+            item {
+                GlassCard(Modifier.fillMaxWidth()) {
+                    Text("RINGKASAN TRANSAKSI", color = Gold, fontWeight = FontWeight.Bold, fontSize = 10.sp)
+                    InfoLine("Total catatan", summary.transactionCount.toString())
+                    InfoLine("Nilai positif", formatMoney(summary.incomingTotal))
+                    InfoLine("Nilai negatif", formatMoney(summary.outgoingTotal))
+                    InfoLine("Tidak mengubah saldo", summary.unchangedCount.toString())
+                }
+            }
+            item {
+                GlassCard(Modifier.fillMaxWidth()) {
+                    Text("BIAYA PER BALAPAN", color = Gold, fontWeight = FontWeight.Bold, fontSize = 10.sp)
+                    InfoLine("Catatan biaya", summary.perRaceCostCount.toString())
+                    InfoLine("Total nilai biaya", formatMoney(summary.perRaceCostTotal))
                 }
             }
         }
         item { Text("RIWAYAT TRANSAKSI", color = Gold, fontWeight = FontWeight.Bold, fontSize = 10.sp) }
-        items(transactionCount) { index ->
+        items(transactions.size) { index ->
+            val amount = transactions[index]
             GlassCard(Modifier.fillMaxWidth()) {
-                InfoLine("Transaksi ${index + 1}", history?.get(index)?.let { financeHistoryLabel(it) } ?: "Tidak tersedia")
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f)) {
+                        Text("Transaksi " + (index + 1), fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                        Text(
+                            when {
+                                amount > 0 -> "Nilai positif"
+                                amount < 0 -> "Nilai negatif"
+                                else -> "Tidak ada perubahan nilai"
+                            },
+                            color = Muted,
+                            fontSize = 9.sp
+                        )
+                    }
+                    Text(formatMoney(amount), color = if (amount >= 0) Color(0xFF9BE36A) else Gold, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                }
             }
         }
-        if (transactionCount == 0) item { Text("Belum ada riwayat transaksi yang bisa dibaca pada save ini.", color = Muted, fontSize = 11.sp) }
-        item { Text("Aplikasi tidak menebak transaksi masuk atau keluar karena arah transaksi tidak dapat dipastikan dari struktur yang tersedia.", color = Muted, fontSize = 10.sp) }
+        if (transactions.isEmpty()) item { Text("Belum ada catatan transaksi numerik pada save ini.", color = Muted, fontSize = 11.sp) }
+        item { Text("Jenis transaksi tidak ditebak karena riwayat pada save hanya menyimpan nilai. Semua angka ditampilkan tanpa pecahan.", color = Muted, fontSize = 10.sp) }
     }
 }
 
@@ -2011,7 +2033,7 @@ internal fun financeHistoryLabel(value: JsonElement): String {
             .firstNotNullOfOrNull { key -> obj.get(key)?.takeIf { it.isJsonPrimitive && it.asJsonPrimitive.isNumber } }
         if (amount != null) return runCatching { formatMoney(amount.asLong) }.getOrDefault(preview(value))
     }
-    return preview(value)
+    return "Detail transaksi tersimpan"
 }
 
 @Composable
