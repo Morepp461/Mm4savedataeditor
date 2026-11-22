@@ -795,7 +795,7 @@ private fun CareerWorkspace(
                 "Overview" -> OverviewPage(document, onSection)
                 "Drivers" -> DriverPage(document, selectedDriver, onDriver, onEdit)
                 "Driver Analytics" -> DriverAnalyticsPage(document)
-                "Championships" -> ChampionshipManagerPage(document)
+                "Championships" -> ChampionshipManagerPage(document, onEdit)
                 "Influence Actions" -> InfluenceActionsPage(document, onResetInfluenceCooldown)
                 "Career Finance Analytics" -> CareerFinanceAnalyticsPage(document)
                 "Manager Progression" -> ManagerProgressionPage(document, onApplyExperience)
@@ -1445,7 +1445,7 @@ private fun InfluenceActionsPage(doc: Mm4SaveCodec.Document, onResetCooldown: (I
 }
 
 @Composable
-private fun ChampionshipManagerPage(doc: Mm4SaveCodec.Document) {
+private fun ChampionshipManagerPage(doc: Mm4SaveCodec.Document, onEdit: (String, List<String>, JsonElement) -> Unit) {
     val championships = remember(doc.data) { championshipSummaries(doc.data) }
     var selectedKey by remember { mutableStateOf("") }
     var showChampionshipDetails by remember { mutableStateOf(false) }
