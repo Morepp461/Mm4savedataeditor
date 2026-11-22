@@ -176,7 +176,7 @@ private fun EditorApp() {
                     hasChanges=true
                     undoStack=emptyList()
                     redoStack=emptyList()
-                    snackbarHostState.showSnackbar("Template diterapkan: 40 tim dan 80 profil pembalap beserta atributnya. Kontrak dan riwayat career dipertahankan.")
+                    snackbarHostState.showSnackbar("Template diterapkan: 80 profil pembalap dan atributnya. Nama tim, kontrak, dan riwayat career tetap dipertahankan.")
                 } else {
                     snackbarHostState.showSnackbar("Template tidak cocok. Dibutuhkan 4 divisi, masing-masing 10 tim dan 2 pembalap per tim. Tidak ada perubahan diterapkan.")
                 }
@@ -2535,10 +2535,7 @@ internal fun applyOfficialF1Preset2026(data:JsonObject,templateData:JsonObject):
     if(teamPlan.size!=40 || driverPlan.size!=80) return false
 
     // All structural validation is complete before the first mutation.
-    teamPlan.forEach { (targetTeam,sourceTeam,_) ->
-        targetTeam.addProperty("name",sourceTeam.get("name").asString)
-        targetTeam.addProperty("shortName",sourceTeam.get("shortName").asString)
-    }
+    // Preserve active career team names and short names exactly as stored.
     val preservedDriverFields=setOf("contract","careerHistory","id","\$id","\$version")
     driverPlan.forEach { (targetDriver,sourceDriver) ->
         val targetId=targetDriver.get("\$id").asString
@@ -2758,10 +2755,10 @@ private fun GodModePage(doc:Mm4SaveCodec.Document,onAction:(String)->Unit,onEdit
         }
         item {
             GlassCard(Modifier.fillMaxWidth()) {
-                Text("F1–F4 SAVE TEMPLATE",color=Gold,fontWeight=FontWeight.Bold)
-                Text("Pilih save template F1–F4 (contoh: SlotTwo.msv). Editor membaca nama tim, roster, profil, portrait, kewarganegaraan, atribut dan potential pembalap langsung dari file tersebut.",color=Muted,fontSize=10.sp)
-                Text("Data tim dan 80 pembalap diterapkan berdasarkan urutan divisi, tim, dan slot roster. ID internal, kontrak, dan riwayat career dari save tujuan tetap dijaga.",color=Gold,fontSize=10.sp)
-                Button(onClick={onAction("official_f1_2026")},modifier=Modifier.fillMaxWidth(),colors=ButtonDefaults.buttonColors(containerColor=Red)) { Text("PILIH & TERAPKAN SAVE TEMPLATE F1–F4") }
+                Text("F1–F4 DRIVER TEMPLATE",color=Gold,fontWeight=FontWeight.Bold)
+                Text("Mengimpor profil, portrait, nationality, atribut, dan potential pembalap dari save template. Nama tim pada career aktif tidak disentuh.",color=Muted,fontSize=10.sp)
+                
+                Button(onClick={onAction("official_f1_2026")},modifier=Modifier.fillMaxWidth(),colors=ButtonDefaults.buttonColors(containerColor=Red)) { Text("PILIH & TERAPKAN TEMPLATE DRIVER") }
             }
         }
         item {
