@@ -353,7 +353,8 @@ class JsonTreeEditorTest {
         assertTrue(root.get("m_HasOwnedBeenRevealed").asBoolean)
         assertTrue(company.get("m_IsOwned").asBoolean)
         assertTrue(company.get("m_HasOwnedBeenRevealed").asBoolean)
-        assertEquals(0,unlockSupplierNetwork(data))
+        // The operation is idempotent: an already-unlocked network is still recognized.
+        assertEquals(2,unlockSupplierNetwork(data))
     }
 
     @Test
