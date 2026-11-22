@@ -6,6 +6,7 @@ import java.time.LocalDate
 import java.time.Period
 
 internal data class DriverAnalyticsRecord(
+    val recordKey: String,
     val driverId: Int,
     val name: String,
     val teamName: String,
@@ -70,6 +71,7 @@ internal fun driverAnalyticsRecords(data: JsonObject, careerDate: String?): List
         val id = driver.get("m_DriverID")?.takeIf { it.isJsonPrimitive && it.asJsonPrimitive.isNumber }?.asInt
             ?: index
         DriverAnalyticsRecord(
+            recordKey = driver.get("\$id")?.takeIf { it.isJsonPrimitive }?.asString ?: index.toString(),
             driverId = id,
             name = name,
             teamName = team?.get("name")?.takeIf { it.isJsonPrimitive }?.asString
