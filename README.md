@@ -13,7 +13,7 @@ Aplikasi Android untuk mengedit file career **Motorsport Manager 4 (MM4)**. Apli
 - **Finance:** saldo tim dan riwayat transaksi.
 - **Headquarters (HQ):** daftar 19 fasilitas beserta efeknya sesuai video gameplay yang diberikan, level kategori HQ, serta data upgrade node. Status, waktu unlock, dan tipe jalur upgrade bisa diedit dari data aslinya.
 - **Component Marketplace:** daftar Open Market dan tujuh toko supplier: Micronix Racing, Shimizu, Polymat Group, Tectra Fibres, Norex, Mersault, dan Kitano. Nama komponen ditampilkan jika jenisnya sudah bisa dipastikan. ID yang belum diketahui tetap ditampilkan sebagai nomor, bukan ditebak.
-- **Championships:** nama kejuaraan sesuai nama in-game yang tersedia atau pemetaan resmi divisi, detail peserta, event, dan klasemen yang tersimpan.
+- **Championships:** edit metadata kejuaraan (nama jika field tersedia, tier, series, category, event berjalan), posisi tim, statistik kemenangan/podium/balapan/DNF, serta poin per event. Kontrol edit hanya aktif untuk field yang benar-benar ditemukan pada save.
 - **World:** data marketplace, supplier, research, sesi, sirkuit, dan cuaca yang ditemukan di save.
 - **God Mode:** Team Swap antar divisi, Move Driver, preset nama divisi F1–F4, preset template F1–F4, dan supplier unlock. Preset template hanya diterapkan jika keempat divisi masing-masing memiliki tepat 10 tim dan setiap tim memiliki dua pembalap. Supplier unlock mendukung dictionary object maupun Key/Value, menelusuri referensi node supplier, dan tidak mengubah objek career di luar graph supplier.
 - **Save Info / Advanced:** pengeditan nilai dasar dengan tipe data yang didukung.
@@ -22,13 +22,14 @@ Aplikasi Android untuk mengedit file career **Motorsport Manager 4 (MM4)**. Apli
 
 - Menu Teams dan Staff punya batasan field masing-masing. Atribut mobil, pembalap, atau staf yang berada di bagian lain tidak akan ikut muncul sebagai data keuangan tim.
 - Atribut mobil diedit lewat kartu atribut khusus.
+- Slider atribut 0–20 memakai area sentuh khusus, pembacaan nilai langsung, dan kontrol tombol sebagai alternatif untuk perangkat layar sentuh.
 - Ada **Undo dan Redo** untuk membatalkan atau mengulangi sampai 50 perubahan field terakhir.
 - Aplikasi menjaga ketelitian angka desimal dan bilangan bulat yang besar saat diedit.
 - Perpindahan antar-menu, kartu, dan intro aplikasi memakai animasi.
 - Intro menampilkan logo aplikasi, watermark Morepp di bagian akhir, dan panduan singkat saat pertama kali dibuka.
 - Batas atribut pembalap/staf dan batas HQ yang dapat dihitung dari node upgrade di save divalidasi sebelum disimpan.
 - Watermark aplikasi: **Created by : Morepp**.
-- Antarmuka menggunakan tema **F1 Motorsport Glass Cockpit**: carbon black, racing red, champagne gold, titanium grey, panel glass berlapis, garis aksen balap, navigasi chips, dan animasi transisi.
+- Antarmuka menggunakan tema **F1 Motorsport Glass Cockpit**: carbon black, racing red, champagne gold, titanium grey, panel glass berlapis, garis aksen balap, tipografi condensed yang tetap terbaca, navigasi chips, animasi entrance dan perubahan ukuran kartu yang ringan, serta feedback interaksi.
 - Tampilan dioptimalkan untuk layar ponsel Android dengan kartu responsif, ringkasan status career, dan aksi export yang mudah dijangkau.
 
 ## Format file save
