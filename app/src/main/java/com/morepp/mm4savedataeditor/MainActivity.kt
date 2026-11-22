@@ -400,6 +400,19 @@ private fun EditorApp() {
                             } else {
                                 scope.launch { snackbarHostState.showSnackbar("Gagal menerapkan warna tim.") }
                             }
+                        },
+                        onSupplierFieldChange = { fieldPath, newValue ->
+                            val latest = document
+                            val before = latest?.let { resolvePath(it.data, fieldPath)?.deepCopy() }
+                            if (latest != null && before?.isJsonPrimitive == true && before.asJsonPrimitive.isBoolean && newValue.isJsonPrimitive && newValue.asJsonPrimitive.isBoolean) {
+                                val changed = mutateDocument(latest, "Game Data") { root -> setPath(root, fieldPath, newValue) }
+                                if (changed != null) {
+                                    document = changed
+                                    undoStack = (undoStack + EditOperation("Game Data", fieldPath, before, newValue.deepCopy())).takeLast(50)
+                                    redoStack = emptyList()
+                                    hasChanges = true
+                                }
+                            }
                         }
                     )
                 }
@@ -642,7 +655,7 @@ private fun CareerHeader(
 }
 
 
-private val Sections = listOf("Overview", "Drivers", "Staff", "Teams", "Cars", "Finance", "HQ", "World", "Diagnostics", "Save Info", "Advanced", "God Mode")
+private val Sections = listOf("Overview", "Drivers", "Staff", "Teams", "Cars", "Finance", "HQ", "Supplier Network", "World", "Diagnostics", "Save Info", "Advanced", "God Mode")
 
 @Composable
 private fun CareerWorkspace(
@@ -650,7 +663,8 @@ private fun CareerWorkspace(
     selectedDriver: String?, onDriver: (String?) -> Unit,
     onEdit: (String, List<String>, JsonElement) -> Unit,
     onGodAction: (String) -> Unit,
-    onApplyTeamColor: (List<String>, JsonObject) -> Unit
+    onApplyTeamColor: (List<String>, JsonObject) -> Unit,
+    onSupplierFieldChange: (List<String>, JsonElement) -> Unit
 ) {
     Column(Modifier.fillMaxSize()) {
         LazyRow(Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 4.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -674,6 +688,7 @@ private fun CareerWorkspace(
                 "Cars" -> EntityCatalogPage(document, "car", onEdit, onApplyTeamColor)
                 "Finance" -> FinancePage(document, onEdit)
                 "HQ" -> HqPage(document, onEdit)
+                "Supplier Network" -> SupplierNetworkPage(document, onSupplierFieldChange)
                 "World" -> WorldSettingsPage(document, onEdit)
                 "Diagnostics" -> SaveDiagnosticsPage(document)
                 "Save Info" -> InfoPage(document, onEdit)
@@ -1213,6 +1228,141 @@ private fun statAttributeLabel(category:String,type:String,index:Int):String {
         else -> listOf("Braking","Smoothness","Control","Consistency","Race Starts","Awareness","Cornering","Defending","Instinct","Focus","Reactions","Decisions","Overtaking","Bravery","Composure")
     }
     return labels.getOrNull(index) ?: "Attribute "+(index+1)
+}
+
+
+@Composable
+private fun SupplierNetworkPage(
+    doc: Mm4SaveCodec.Document,
+    onFieldChange: (List<String>, JsonElement) -> Unit
+) {
+    val nodes = remember(doc.data) { supplierNetworkNodes(doc.data) }
+    var selectedKey by remember(doc.data) { mutableIntStateOf(nodes.firstOrNull()?.key ?: -1) }
+    var filter by remember(doc.data) { mutableStateOf("Semua") }
+    val selected = nodes.firstOrNull { it.key == selectedKey }
+    val visibleNodes = when (filter) {
+        "Dimiliki" -> nodes.filter { it.owned }
+        "Belum dimiliki" -> nodes.filter { !it.owned }
+        "Belum ditemukan" -> nodes.filter { !it.revealed }
+        else -> nodes
+    }
+    val ownedCount = nodes.count { it.owned }
+    val revealedCount = nodes.count { it.revealed }
+
+    LazyColumn(contentPadding = PaddingValues(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        item {
+            GlassCard(Modifier.fillMaxWidth()) {
+                Text("SUPPLIER NETWORK", color = Gold, fontSize = 11.sp, fontWeight = FontWeight.Black)
+                Text("Jaringan pemasok career", fontSize = 22.sp, fontWeight = FontWeight.Black)
+                Text("Jelajahi node pemasok, hubungan antar-node, dan status yang tersimpan di career.", color = Muted, fontSize = 11.sp)
+                Spacer(Modifier.height(8.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Column(Modifier.weight(1f)) {
+                        Text("NODE PEMASOK", color = Muted, fontSize = 9.sp)
+                        Text(nodes.size.toString(), color = Color.White, fontSize = 22.sp, fontWeight = FontWeight.Black)
+                    }
+                    Column(Modifier.weight(1f)) {
+                        Text("PERUSAHAAN", color = Muted, fontSize = 9.sp)
+                        Text(supplierNetworkCompanyCount(doc.data).toString(), color = Color.White, fontSize = 22.sp, fontWeight = FontWeight.Black)
+                    }
+                    Column(Modifier.weight(1f)) {
+                        Text("MANUFAKTUR", color = Muted, fontSize = 9.sp)
+                        Text(supplierNetworkManufacturerCount(doc.data).toString(), color = Color.White, fontSize = 22.sp, fontWeight = FontWeight.Black)
+                    }
+                }
+                Text("${ownedCount} dimiliki • ${revealedCount} ditemukan", color = Gold, fontSize = 10.sp)
+            }
+        }
+        item {
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                listOf("Semua", "Dimiliki", "Belum dimiliki", "Belum ditemukan").forEach { option ->
+                    FilterChip(selected = filter == option, onClick = { filter = option }, label = { Text(option, fontSize = 10.sp) })
+                }
+            }
+        }
+        if (nodes.isEmpty()) {
+            item {
+                GlassCard(Modifier.fillMaxWidth()) {
+                    Text("Jaringan supplier tidak tersedia", fontWeight = FontWeight.Bold)
+                    Text("Save ini tidak memiliki daftar node yang bisa dikenali. Tidak ada data yang diubah.", color = Muted, fontSize = 11.sp)
+                }
+            }
+        } else {
+            item { Text("DAFTAR NODE", color = Gold, fontSize = 10.sp, fontWeight = FontWeight.Bold) }
+            items(visibleNodes, key = { it.key }) { node ->
+                GlassCard(
+                    Modifier.fillMaxWidth().clickable { selectedKey = node.key }
+                        .then(if (selectedKey == node.key) Modifier.border(1.dp, Gold, RoundedCornerShape(16.dp)) else Modifier)
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Column(Modifier.weight(1f)) {
+                            Text(node.label, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                            Text("${node.childCount} cabang • ${node.connections.size} koneksi", color = Muted, fontSize = 10.sp)
+                        }
+                        Text(if (node.owned) "DIMILIKI" else "BELUM DIMILIKI", color = if (node.owned) Color(0xFF9BE36A) else Muted, fontWeight = FontWeight.Bold, fontSize = 9.sp)
+                        Icon(Icons.Default.ChevronRight, contentDescription = "Lihat detail", tint = Gold)
+                    }
+                }
+            }
+            if (visibleNodes.isEmpty()) item { Text("Tidak ada node pada filter ini.", color = Muted, fontSize = 11.sp) }
+            selected?.let { node ->
+                item {
+                    GlassCard(Modifier.fillMaxWidth()) {
+                        Text("DETAIL NODE", color = Gold, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                        Text(node.label, fontSize = 20.sp, fontWeight = FontWeight.Black)
+                        Text("ID jaringan ${node.id + 1}", color = Muted, fontSize = 10.sp)
+                        Divider(color = Color.White.copy(alpha = 0.12f))
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Column(Modifier.weight(1f)) {
+                                Text("Status kepemilikan", fontWeight = FontWeight.SemiBold, fontSize = 12.sp)
+                                Text("Menandai apakah node sudah dimiliki dalam career.", color = Muted, fontSize = 10.sp)
+                            }
+                            Switch(checked = node.owned, onCheckedChange = { onFieldChange(node.path + "m_IsOwned", com.google.gson.JsonPrimitive(it)) })
+                        }
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Column(Modifier.weight(1f)) {
+                                Text("Status ditemukan", fontWeight = FontWeight.SemiBold, fontSize = 12.sp)
+                                Text("Mengatur apakah node sudah terlihat di jaringan.", color = Muted, fontSize = 10.sp)
+                            }
+                            Switch(checked = node.revealed, onCheckedChange = { onFieldChange(node.path + "m_HasOwnedBeenRevealed", com.google.gson.JsonPrimitive(it)) })
+                        }
+                    }
+                }
+                if (node.children.isNotEmpty()) {
+                    item {
+                        GlassCard(Modifier.fillMaxWidth()) {
+                            Text("CABANG TERHUBUNG", color = Gold, fontWeight = FontWeight.Bold, fontSize = 10.sp)
+                            node.children.forEach { child ->
+                                Row(Modifier.fillMaxWidth().padding(vertical = 5.dp), verticalAlignment = Alignment.CenterVertically) {
+                                    Column(Modifier.weight(1f)) {
+                                        Text(child.label, fontWeight = FontWeight.SemiBold, fontSize = 12.sp)
+                                        Text(child.kind, color = Muted, fontSize = 9.sp)
+                                    }
+                                    Text(when { child.owned -> "Dimiliki"; child.revealed -> "Ditemukan"; else -> "Tersembunyi" }, color = if (child.owned) Color(0xFF9BE36A) else Muted, fontSize = 9.sp)
+                                }
+                            }
+                        }
+                    }
+                }
+                if (node.connections.isNotEmpty()) {
+                    item {
+                        GlassCard(Modifier.fillMaxWidth()) {
+                            Text("KONEKSI JARINGAN", color = Gold, fontWeight = FontWeight.Bold, fontSize = 10.sp)
+                            node.connections.forEach { connection ->
+                                Row(Modifier.fillMaxWidth().padding(vertical = 5.dp), verticalAlignment = Alignment.CenterVertically) {
+                                    Text("Node ${connection.nodeId + 1}", Modifier.weight(1f), fontSize = 12.sp)
+                                    Text(if (connection.target != null) "${connection.progress ?: 0} / ${connection.target}" else "Progress tidak tersedia", color = Gold, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        item {
+            Text("Perubahan status hanya mengubah field kepemilikan yang memang tersedia pada node terpilih. Hubungan jaringan dan data lain tetap dipertahankan.", color = Muted, fontSize = 10.sp)
+        }
+    }
 }
 
 @Composable
