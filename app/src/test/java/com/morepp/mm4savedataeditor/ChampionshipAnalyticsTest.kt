@@ -61,6 +61,8 @@ class ChampionshipAnalyticsTest {
         assertEquals(2, team.podiums)
         assertEquals(listOf("entityManager", "m_Entities", "[0]"), result.path)
         assertEquals(listOf("entityManager", "m_Entities", "[0]", "standings", "m_Teams", "[0]"), team.path)
+        assertEquals(listOf("entityManager", "m_Entities", "[0]", "standings", "m_Teams", "[0]", "m_Points", "[0]"), team.pointPaths.first())
+        assertEquals(10, resolvePath(data, team.pointPaths.first())?.asInt)
     }
 
     @Test
