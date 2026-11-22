@@ -3,6 +3,7 @@ package com.morepp.mm4savedataeditor
 import com.google.gson.JsonObject
 
 internal data class InfluenceActionRecord(
+    val position: Int,
     val index: Int,
     val label: String,
     val cooldown: Int,
@@ -40,10 +41,27 @@ internal fun influenceActionRecords(data: JsonObject): List<InfluenceActionRecor
             else -> "Cooldown $cooldown event"
         }
         InfluenceActionRecord(
+            position = position,
             index = index,
             label = influenceActionLabels[index] ?: "Aksi influence ${index + 1}",
             cooldown = cooldown,
             status = status
         )
     }.sortedBy { it.index }
+}
+
+/** Resets only a positive cooldown; all other action metadata remains untouched. */
+internal fun resetInfluenceCooldown(data: JsonObject, position: Int): JsonObject? {
+    val actions = data.getAsJsonObject("influenceManager")?.get("m_Influences")
+        ?.takeIf { it.isJsonArray }?.asJsonArray ?: return null
+    if (position !in 0 until actions.size()) return null
+    val current = actions[position]?.takeIf { it.isJsonObject }?.asJsonObject ?: return null
+    val cooldown = current.get("m_CurrentCooldown")
+        ?.takeIf { it.isJsonPrimitive && it.asJsonPrimitive.isNumber }?.asInt ?: return null
+    if (cooldown <= 0) return null
+    val updated = data.deepCopy().asJsonObject
+    val updatedAction = updated.getAsJsonObject("influenceManager")
+        .getAsJsonArray("m_Influences")[position].asJsonObject
+    updatedAction.addProperty("m_CurrentCooldown", 0)
+    return updated
 }
