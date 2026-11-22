@@ -1,97 +1,113 @@
 package com.morepp.mm4savedataeditor
 
-import com.google.gson.JsonParser
+import com.google.gson.JsonArray
+import com.google.gson.JsonObject
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class SupplierNetworkUnlockTest {
-    private fun sample(owned: Boolean, revealed: Boolean) = JsonParser.parseString(
-        """
-        {
-          "supplierNetworkManager": {
-            "m_NodeDictionary": [
-              {"Key": 0, "Value": {"\$ref": "node-1"}},
-              {"Key": 1, "Value": {"\$ref": "node-2"}}
-            ],
-            "m_SupplierUnlocked": [
-              {"Key": 0, "Value": 1},
-              {"Key": 1, "Value": 0},
-              {"Key": 2, "Value": 0}
-            ],
-            "m_SupplierAvailable": [
-              {"Key": 0, "Value": 1},
-              {"Key": 1, "Value": 0},
-              {"Key": 2, "Value": 0}
-            ]
-          },
-          "supplierObjects": [
-            {
-              "\$id": "node-1",
-              "m_ID": 1,
-              "m_IsOwned": $owned,
-              "m_HasOwnedBeenRevealed": $revealed,
-              "m_Nodes": [{"\$ref": "node-2"}]
-            },
-            {
-              "\$id": "node-2",
-              "m_ID": 2,
-              "m_IsOwned": false,
-              "m_HasOwnedBeenRevealed": false,
-              "m_Nodes": []
-            }
-          ],
-          "unrelated": {"m_IsOwned": false, "m_HasOwnedBeenRevealed": false}
+    private fun ref(id: String) = JsonObject().apply { addProperty("\$ref", id) }
+
+    private fun node(id: String, owned: Boolean, revealed: Boolean, children: List<String> = emptyList()) =
+        JsonObject().apply {
+            addProperty("\$id", id)
+            addProperty("m_IsOwned", owned)
+            addProperty("m_HasOwnedBeenRevealed", revealed)
+            add("m_Nodes", JsonArray().apply { children.forEach { add(ref(it)) } })
         }
-        """.trimIndent()
-    ).asJsonObject
 
-    @Test
-    fun resolvesKeyValueArrayAndNestedReferences() {
-        val data = sample(owned = false, revealed = true)
-
-        val count = unlockSupplierNetwork(data)
-
-        val nodes = data.getAsJsonArray("supplierObjects")
-        assertEquals(2, count)
-        for (i in 0 until nodes.size()) {
-            val node = nodes[i].asJsonObject
-            assertTrue(node.get("m_IsOwned").asBoolean)
-            assertTrue(node.get("m_HasOwnedBeenRevealed").asBoolean)
+    private fun mapEntries(vararg values: Int) = JsonArray().apply {
+        values.forEachIndexed { index, value ->
+            add(JsonObject().apply {
+                addProperty("Key", index)
+                addProperty("Value", value)
+            })
         }
-        val unrelated = data.getAsJsonObject("unrelated")
-        assertTrue(!unrelated.get("m_IsOwned").asBoolean)
-        assertTrue(!unrelated.get("m_HasOwnedBeenRevealed").asBoolean)
+    }
+
+    private fun sample() = JsonObject().apply {
+        val supplier = JsonObject().apply {
+            add("m_NodeDictionary", JsonArray().apply {
+                repeat(3) { index ->
+                    add(JsonObject().apply {
+                        addProperty("Key", index)
+                        add("Value", ref("node-$index"))
+                    })
+                }
+            })
+            add("m_SupplierUnlocked", mapEntries(1, 0, 0))
+            add("m_SupplierAvailable", mapEntries(1, 0, 0))
+        }
+        add("supplierNetworkManager", supplier)
+        add("nodeObjects", JsonArray().apply {
+            add(node("node-0", owned = true, revealed = true, children = listOf("node-1")))
+            add(node("node-1", owned = false, revealed = true, children = listOf("node-2")))
+            add(node("node-2", owned = true, revealed = false))
+        })
     }
 
     @Test
-    fun unlocksEverySupplierCategory() {
-        val data = sample(owned = true, revealed = true)
+    fun readsKeyValueDictionaryAndUnlocksEveryReferencedNode() {
+        val data = sample()
+
+        val recognized = unlockSupplierNetwork(data)
+
+        val nodes = data.getAsJsonArray("nodeObjects")
+        assertEquals(3, recognized)
+        nodes.forEach { element ->
+            val value = element.asJsonObject
+            assertTrue(value.get("m_IsOwned").asBoolean)
+            assertTrue(value.get("m_HasOwnedBeenRevealed").asBoolean)
+        }
+    }
+
+    @Test
+    fun unlocksAllSupplierCategories() {
+        val data = sample()
 
         unlockSupplierNetwork(data)
 
-        val manager = data.getAsJsonObject("supplierNetworkManager")
-        for (field in listOf("m_SupplierUnlocked", "m_SupplierAvailable")) {
-            val values = manager.getAsJsonArray(field)
-            assertEquals(3, values.size())
-            for (entry in values) assertEquals(1, entry.asJsonObject.get("Value").asInt)
+        val supplier = data.getAsJsonObject("supplierNetworkManager")
+        listOf("m_SupplierUnlocked", "m_SupplierAvailable").forEach { field ->
+            supplier.getAsJsonArray(field).forEach { item ->
+                assertEquals(1, item.asJsonObject.get("Value").asInt)
+            }
         }
     }
 
     @Test
     fun alreadyUnlockedNetworkIsIdempotentlySuccessful() {
-        val data = sample(owned = true, revealed = true)
+        val data = sample()
 
-        assertEquals(2, unlockSupplierNetwork(data))
-        assertEquals(2, unlockSupplierNetwork(data))
+        val first = unlockSupplierNetwork(data)
+        val second = unlockSupplierNetwork(data)
+
+        assertEquals(3, first)
+        assertEquals(3, second)
     }
 
     @Test
     fun emptyDictionaryIsNotTreatedAsUnlocked() {
-        val data = JsonParser.parseString(
-            """{"supplierNetworkManager":{"m_NodeDictionary":[]}}"""
-        ).asJsonObject
+        val data = JsonObject().apply {
+            add("supplierNetworkManager", JsonObject().apply {
+                add("m_NodeDictionary", JsonArray())
+            })
+        }
 
         assertEquals(0, unlockSupplierNetwork(data))
+    }
+
+    @Test
+    fun ignoresUnrelatedObjectsOutsideSupplierGraph() {
+        val data = sample()
+        val unrelated = node("unrelated", owned = false, revealed = false)
+        data.add("unrelatedManager", unrelated)
+
+        unlockSupplierNetwork(data)
+
+        assertFalse(unrelated.get("m_IsOwned").asBoolean)
+        assertFalse(unrelated.get("m_HasOwnedBeenRevealed").asBoolean)
     }
 }
