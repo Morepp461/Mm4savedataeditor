@@ -1742,7 +1742,7 @@ private fun AdvancedPage(doc: Mm4SaveCodec.Document, onEdit: (String,List<String
     var query by remember { mutableStateOf("") }
     val fields=remember(doc.data,query) {
         flatten(doc.data).filter { (path,value) ->
-            path.none { it == "\$ref" || it == "\$version" } && value.isJsonPrimitive && (query.isBlank() ||
+            path.none { it.startsWith("\$") } && value.isJsonPrimitive && (query.isBlank() ||
                 humanizeField(path.last()).contains(query,true) ||
                 path.joinToString(" ").contains(query,true))
         }
