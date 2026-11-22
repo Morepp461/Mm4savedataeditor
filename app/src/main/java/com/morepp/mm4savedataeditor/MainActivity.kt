@@ -490,7 +490,7 @@ private fun EditorApp() {
                 Column(verticalArrangement = Arrangement.spacedBy(9.dp)) {
                     Text("Panduan singkat sebelum mulai:")
                     InfoLine("1. Buka save", "Pilih file career .msv dari penyimpanan")
-                    InfoLine("2. Edit data", "Gunakan Drivers, Staff, Teams, Cars, Finance, dan HQ")
+                    InfoLine("2. Edit data", "Gunakan Drivers, Staff, Teams, Cars, Finance, HQ, dan Supplier Network")
                     InfoLine("3. Undo / Redo", "Batalkan perubahan sebelum export")
                     InfoLine("4. Export", "Simpan sebagai file baru, jangan timpa save asli")
                     Text("Beberapa data lanjutan bergantung pada struktur career yang sedang dibuka.", color = Muted, fontSize = 11.sp)
@@ -1274,8 +1274,8 @@ private fun SupplierNetworkPage(
             }
         }
         item {
-            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                listOf("Semua", "Dimiliki", "Belum dimiliki", "Belum ditemukan").forEach { option ->
+            LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                items(listOf("Semua", "Dimiliki", "Belum dimiliki", "Belum ditemukan")) { option ->
                     FilterChip(selected = filter == option, onClick = { filter = option }, label = { Text(option, fontSize = 10.sp) })
                 }
             }
