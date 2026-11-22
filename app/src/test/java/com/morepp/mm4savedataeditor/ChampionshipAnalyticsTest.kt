@@ -68,4 +68,13 @@ class ChampionshipAnalyticsTest {
         championshipSummaries(data)
         assertEquals(before, data.toString())
     }
+
+    @Test
+    fun fallbackUsesOriginalInGameChampionshipNames() {
+        assertEquals("World Motorsport", careerDivisionLabel(0))
+        assertEquals("Asia Pacific Super Cup", careerDivisionLabel(1))
+        assertEquals("European Racing", careerDivisionLabel(2))
+        assertEquals("Open Wheel Sprint", careerDivisionLabel(3))
+    }
+
 }
