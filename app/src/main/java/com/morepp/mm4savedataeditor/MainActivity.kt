@@ -671,8 +671,8 @@ private fun WelcomePanel(busy: Boolean, onOpen: () -> Unit) {
                 onClick = onOpen,
                 enabled = !busy,
                 modifier = Modifier.fillMaxWidth(),
-                colors = ButtonDefaults.buttonColors(containerColor = Gold),
-                shape = RoundedCornerShape(14.dp)
+                colors = ButtonDefaults.buttonColors(containerColor = Red, contentColor = Color.White),
+                shape = RoundedCornerShape(12.dp)
             ) {
                 Icon(Icons.Default.FolderOpen, contentDescription = null)
                 Spacer(Modifier.width(8.dp))
@@ -716,7 +716,7 @@ private fun CareerHeader(
             Text(fileName, color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(5.dp)) {
                 Box(Modifier.size(6.dp).clip(CircleShape).background(if (hasChanges) Gold else Color(0xFF66C58A)))
-                Text(if (hasChanges) "UNSAVED CHANGES" else "SAVE VERIFIED IN MEMORY", color = if (hasChanges) Gold else Color(0xFF82D7A2), fontSize = 8.sp, fontWeight = FontWeight.Bold, letterSpacing = 0.45.sp)
+                Text(if (hasChanges) "CHANGES PENDING EXPORT" else "CAREER LOADED • ORIGINAL PRESERVED", color = if (hasChanges) Gold else Color(0xFF82D7A2), fontSize = 8.sp, fontWeight = FontWeight.Bold, letterSpacing = 0.45.sp)
             }
         }
         Button(
