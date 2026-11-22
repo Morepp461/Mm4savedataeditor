@@ -647,7 +647,7 @@ private fun WelcomePanel(busy: Boolean, onOpen: () -> Unit) {
         Column(
             Modifier.fillMaxWidth()
                 .clip(RoundedCornerShape(26.dp))
-                .background(Brush.linearGradient(listOf(Color(0xE0252C35), Color(0xD9182029), Color(0xE02A1718))))
+                .background(Brush.linearGradient(listOf(Color(0xB84A3A58), Color(0x8C252E3B), Color(0xA83C2736))))
                 .border(1.dp, GlassEdge, RoundedCornerShape(26.dp))
                 .padding(24.dp)
         ) {
@@ -670,12 +670,7 @@ private fun WelcomePanel(busy: Boolean, onOpen: () -> Unit) {
                 Spacer(Modifier.width(8.dp))
                 Text("BUKA FILE SAVE (.MSV)")
             }
-            Spacer(Modifier.height(16.dp))
-            Text(
-                "MM4 CAREER EDITOR  •  SAFE SAVE EXPORT",
-                color = Gold,
-                fontSize = 9.sp
-            )
+
         }
     }
 }
