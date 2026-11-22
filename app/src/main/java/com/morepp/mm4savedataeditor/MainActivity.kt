@@ -435,6 +435,22 @@ private fun EditorApp() {
                                 scope.launch { snackbarHostState.showSnackbar("Experience manager diperbarui mengikuti tabel level career.") }
                             }
                         }
+                        ,
+                        onResetInfluenceCooldown = { position ->
+                            val latest = document ?: return@CareerWorkspace
+                            val path = listOf("influenceManager", "m_Influences", "[$position]", "m_CurrentCooldown")
+                            val before = resolvePath(latest.data, path)?.deepCopy()
+                            val updatedData = resetInfluenceCooldown(latest.data, position)
+                            if (before != null && updatedData != null) {
+                                val changed = latest.copy(data = updatedData)
+                                document = changed
+                                val after = resolvePath(updatedData, path)?.deepCopy()
+                                if (after != null) undoStack = (undoStack + EditOperation("Game Data", path, before, after)).takeLast(50)
+                                redoStack = emptyList()
+                                hasChanges = true
+                                scope.launch { snackbarHostState.showSnackbar("Cooldown aksi berhasil diatur menjadi siap digunakan.") }
+                            }
+                        }
                     )
                 }
             }
@@ -686,7 +702,8 @@ private fun CareerWorkspace(
     onGodAction: (String) -> Unit,
     onApplyTeamColor: (List<String>, JsonObject) -> Unit,
     onSupplierFieldChange: (List<String>, JsonElement) -> Unit,
-    onApplyExperience: (Int) -> Unit
+    onApplyExperience: (Int) -> Unit,
+    onResetInfluenceCooldown: (Int) -> Unit
 ) {
     Column(Modifier.fillMaxSize()) {
         LazyRow(Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 4.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -708,7 +725,7 @@ private fun CareerWorkspace(
                 "Driver Analytics" -> DriverAnalyticsPage(document)
                 "Championships" -> ChampionshipManagerPage(document)
                 "Circuits" -> CircuitExplorerPage(document)
-                "Influence Actions" -> InfluenceActionsPage(document)
+                "Influence Actions" -> InfluenceActionsPage(document, onResetInfluenceCooldown)
                 "Sponsor Database" -> SponsorDatabasePage(document)
                 "Career Finance Analytics" -> CareerFinanceAnalyticsPage(document)
                 "Manager Progression" -> ManagerProgressionPage(document, onApplyExperience)
@@ -1265,7 +1282,7 @@ private fun statAttributeLabel(category:String,type:String,index:Int):String {
 
 
 @Composable
-private fun InfluenceActionsPage(doc: Mm4SaveCodec.Document) {
+private fun InfluenceActionsPage(doc: Mm4SaveCodec.Document, onResetCooldown: (Int) -> Unit) {
     val actions = remember(doc.data) { influenceActionRecords(doc.data) }
     val influence = doc.data.getAsJsonObject("influenceManager")?.get("m_Influence")
     val readyCount = actions.count { it.cooldown <= 0 }
@@ -1273,8 +1290,8 @@ private fun InfluenceActionsPage(doc: Mm4SaveCodec.Document) {
     LazyColumn(contentPadding = PaddingValues(14.dp), verticalArrangement = Arrangement.spacedBy(9.dp)) {
         item {
             GlassCard(Modifier.fillMaxWidth()) {
-                Text("INFLUENCE ACTIONS", color = Gold, fontWeight = FontWeight.Black, fontSize = 11.sp)
-                Text("Daftar aksi influence", fontSize = 21.sp, fontWeight = FontWeight.Black)
+                Text("INFLUENCE ACTION EDITOR", color = Gold, fontWeight = FontWeight.Black, fontSize = 11.sp)
+                Text("Kelola kesiapan aksi influence", fontSize = 21.sp, fontWeight = FontWeight.Black)
                 Text("Status aksi yang tercatat dalam career, termasuk waktu tunggu penggunaannya.", color = Muted, fontSize = 11.sp)
                 Spacer(Modifier.height(8.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -1297,17 +1314,25 @@ private fun InfluenceActionsPage(doc: Mm4SaveCodec.Document) {
                         Text(action.label, fontWeight = FontWeight.Bold, fontSize = 13.sp)
                         Text("Aksi ${action.index + 1}", color = Muted, fontSize = 9.sp)
                     }
-                    Text(
-                        action.status,
-                        color = if (action.cooldown <= 0) Color(0xFF9BE36A) else Gold,
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 10.sp
-                    )
+                    Column(horizontalAlignment = Alignment.End) {
+                        Text(
+                            action.status,
+                            color = if (action.cooldown <= 0) Color(0xFF9BE36A) else Gold,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 10.sp
+                        )
+                        if (action.cooldown > 0) {
+                            TextButton(
+                                onClick = { onResetCooldown(action.position) },
+                                contentPadding = PaddingValues(horizontal = 4.dp, vertical = 0.dp)
+                            ) { Text("Siapkan aksi", color = Gold, fontSize = 9.sp) }
+                        }
+                    }
                 }
             }
         }
         if (actions.isEmpty()) item { Text("Data aksi influence tidak ditemukan pada save ini.", color = Muted, fontSize = 11.sp) }
-        item { Text("Halaman ini hanya membaca status cooldown dan saldo. Tidak ada cooldown atau aksi yang diubah.", color = Muted, fontSize = 10.sp) }
+        item { Text("Aksi dengan cooldown aktif dapat disiapkan kembali. Data lain pada setiap aksi tetap dipertahankan.", color = Muted, fontSize = 10.sp) }
     }
 }
 
