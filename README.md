@@ -20,7 +20,6 @@ Aplikasi Android untuk mengedit file career **Motorsport Manager 4 (MM4)**. Apli
 
 ## Fitur dan pengaman edit
 
-
 - Menu Teams dan Staff punya batasan field masing-masing. Atribut mobil, pembalap, atau staf yang berada di bagian lain tidak akan ikut muncul sebagai data keuangan tim.
 - Atribut mobil diedit lewat kartu atribut khusus.
 - Ada **Undo dan Redo** untuk membatalkan atau mengulangi sampai 50 perubahan field terakhir.
@@ -28,6 +27,8 @@ Aplikasi Android untuk mengedit file career **Motorsport Manager 4 (MM4)**. Apli
 - Perpindahan antar-menu, kartu, dan intro aplikasi memakai animasi.
 - Intro menampilkan logo aplikasi, watermark Morepp di bagian akhir, dan panduan singkat saat pertama kali dibuka.\n- Batas atribut pembalap/staf dan batas HQ yang dapat dihitung dari node upgrade di save divalidasi sebelum disimpan.
 - Watermark aplikasi: **Created by : Morepp**.
+- Antarmuka menggunakan tema **F1 Motorsport Glass Cockpit**: carbon black, racing red, champagne gold, titanium grey, panel glass berlapis, garis aksen balap, navigasi chips, dan animasi transisi.
+- Tampilan dioptimalkan untuk layar ponsel Android dengan kartu responsif, ringkasan status career, dan aksi export yang mudah dijangkau.
 
 ## Format file save
 
