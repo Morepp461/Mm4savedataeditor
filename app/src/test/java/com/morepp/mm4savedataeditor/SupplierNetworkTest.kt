@@ -17,6 +17,14 @@ class SupplierNetworkTest {
             addProperty("Key", 0)
             add("Value", JsonObject().apply { addProperty("\$ref", "10") })
         })
+        dictionary.add(JsonObject().apply {
+            addProperty("Key", 1)
+            add("Value", JsonObject().apply { addProperty("\$ref", "11") })
+        })
+        dictionary.add(JsonObject().apply {
+            addProperty("Key", 2)
+            add("Value", JsonObject().apply { addProperty("\$ref", "12") })
+        })
         manager.add("m_NodeDictionary", dictionary)
         manager.add("m_Companies", JsonArray().apply {
             add(JsonObject().apply { addProperty("\$ref", "12") })
@@ -70,9 +78,11 @@ class SupplierNetworkTest {
     fun resolvesReferencesAndBuildsFriendlyDisplayData() {
         val data = fixture()
         val nodes = supplierNetworkNodes(data)
-        assertEquals(1, nodes.size)
-        val node = nodes.single()
+        assertEquals(3, nodes.size)
+        val node = nodes.first()
         assertEquals("Supplier 01", node.label)
+        assertEquals("Manufacturer 04", nodes[1].label)
+        assertEquals("Supplier company 09", nodes[2].label)
         assertTrue(node.owned)
         assertFalse(node.revealed)
         assertEquals(1, node.childCount)
@@ -101,12 +111,12 @@ class SupplierNetworkTest {
                 addProperty("Key", 1)
                 add("Value", JsonObject().apply { addProperty("\$ref", "missing") })
             })
-        assertEquals(1, supplierNetworkNodes(data).size)
+        assertEquals(3, supplierNetworkNodes(data).size)
     }
     @Test
     fun ownershipEditRoundTripsWithoutChangingOtherSupplierData() {
         val original = fixture()
-        val node = supplierNetworkNodes(original).single()
+        val node = supplierNetworkNodes(original).first()
         val originalOwnership = resolvePath(original, node.path + "m_IsOwned")!!.deepCopy()
         val edited = original.deepCopy().asJsonObject
         assertTrue(setPath(edited, node.path + "m_IsOwned", JsonPrimitive(false)))
