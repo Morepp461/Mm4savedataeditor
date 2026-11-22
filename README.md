@@ -14,7 +14,8 @@ Aplikasi Android untuk mengedit file career **Motorsport Manager 4 (MM4)**. Apli
 - **Supplier Network:** penjelajah 80 node jaringan (pemasok, manufaktur, dan perusahaan), cabang, koneksi jaringan, status kepemilikan, dan status ditemukan. Perubahan status menggunakan field boolean yang sudah ada pada node; struktur referensi dan koneksi tidak dibuat ulang.
 - **Headquarters (HQ):** daftar 19 fasilitas beserta efeknya sesuai video gameplay yang diberikan, level kategori HQ, serta data upgrade node. Status, waktu unlock, dan tipe jalur upgrade bisa diedit dari data aslinya.
 - **Component Marketplace:** daftar Open Market dan tujuh toko supplier: Micronix Racing, Shimizu, Polymat Group, Tectra Fibres, Norex, Mersault, dan Kitano. Nama komponen ditampilkan jika jenisnya sudah bisa dipastikan. ID yang belum diketahui tetap ditampilkan sebagai nomor, bukan ditebak.
-- **World:** data championship, marketplace, supplier, research, sesi, sirkuit, dan cuaca yang ditemukan di save.\n- **God Mode:** Team Swap antar divisi, Move Driver, preset nama divisi F1–F4, dan preset lineup F1 2026. Preset F1 hanya diterapkan jika divisi berisi tepat 11 tim dengan dua pembalap per tim.
+- **World:** data championship, marketplace, supplier, research, sesi, sirkuit, dan cuaca yang ditemukan di save.
+- **God Mode:** Team Swap antar divisi, Move Driver, preset nama divisi F1–F4, dan preset lineup F1 2026. Preset F1 hanya diterapkan jika divisi berisi tepat 11 tim dengan dua pembalap per tim.
 - **Save Info / Advanced:** pengeditan nilai dasar dengan tipe data yang didukung.
 - **God Mode:** beberapa perubahan langsung pada data save.
 
@@ -27,7 +28,8 @@ Aplikasi Android untuk mengedit file career **Motorsport Manager 4 (MM4)**. Apli
 - Atribut mobil diedit lewat kartu atribut khusus.
 - Ada **Undo dan Redo** untuk membatalkan atau mengulangi sampai 50 perubahan field terakhir.
 - Aplikasi menjaga ketelitian angka desimal dan bilangan bulat yang besar saat diedit.
-- Perpindahan antar-menu, kartu, dan intro aplikasi memakai animasi.\n- Intro menampilkan logo aplikasi, watermark Morepp di bagian akhir, dan panduan singkat saat pertama kali dibuka.\n- Batas atribut pembalap/staf dan batas HQ yang dapat dihitung dari node upgrade di save divalidasi sebelum disimpan.
+- Perpindahan antar-menu, kartu, dan intro aplikasi memakai animasi.
+- Intro menampilkan logo aplikasi, watermark Morepp di bagian akhir, dan panduan singkat saat pertama kali dibuka.\n- Batas atribut pembalap/staf dan batas HQ yang dapat dihitung dari node upgrade di save divalidasi sebelum disimpan.
 - Watermark aplikasi: **Created by : Morepp**.
 
 ## Format file save
