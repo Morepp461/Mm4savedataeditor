@@ -523,7 +523,7 @@ private fun EditorApp() {
                 Column(
                     Modifier.fillMaxWidth().padding(horizontal = 22.dp)
                         .clip(RoundedCornerShape(28.dp))
-                        .background(Brush.linearGradient(listOf(PanelAlt, Panel, Color(0xFF2A2028))))
+                        .background(Brush.linearGradient(listOf(Color(0xF0252B33), Color(0xF0131921), Color(0xF02A1517))))
                         .border(1.dp, Color.White.copy(alpha = 0.12f), RoundedCornerShape(28.dp))
                         .padding(22.dp),
                     verticalArrangement = Arrangement.spacedBy(18.dp)
@@ -540,7 +540,7 @@ private fun EditorApp() {
                     }
                     Box(
                         Modifier.fillMaxWidth().height(116.dp).clip(RoundedCornerShape(20.dp))
-                            .background(Brush.horizontalGradient(listOf(Color(0xFF17233B), Color(0xFF3A2024)))),
+                            .background(Brush.horizontalGradient(listOf(Color(0xFF171D25), Color(0xFF32191B)))),
                         contentAlignment = Alignment.Center
                     ) {
                         Text(page.first, color = Color.White.copy(alpha = 0.10f), fontSize = 84.sp, fontWeight = FontWeight.Black)
@@ -599,7 +599,7 @@ private fun IntroSplash() {
     LaunchedEffect(Unit) { delay(1900); showEndingMark = true }
     Dialog(onDismissRequest = {}, properties = DialogProperties(usePlatformDefaultWidth = false)) {
         Box(
-            Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(Color(0xFF0B1430), Color(0xFF182B54), Color(0xFF0B1430)))),
+            Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(Color(0xFF080B10), Color(0xFF171D25), Color(0xFF080B10)))),
             contentAlignment = Alignment.Center
         ) {
             Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(16.dp)) {
@@ -613,7 +613,7 @@ private fun IntroSplash() {
                     }
                 )
                 Text("MM4 SAVE DATA EDITOR", color = Color.White, fontSize = 19.sp, fontWeight = FontWeight.Black, letterSpacing = 1.8.sp)
-                Text("CAREER DATA WORKSHOP", color = Gold, fontSize = 10.sp, letterSpacing = 2.4.sp)
+                Text("F1 MOTORSPORT  •  CAREER ENGINEERING", color = Gold, fontSize = 9.sp, letterSpacing = 1.8.sp)
                 LinearProgressIndicator(
                     Modifier.width(176.dp).padding(top = 8.dp),
                     color = Red,
@@ -623,7 +623,7 @@ private fun IntroSplash() {
                     Text("Created by : Morepp", color = Muted, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
                 }
             }
-            Text("VERSION 1.7 • PERSONAL BUILD", Modifier.align(Alignment.BottomCenter).padding(bottom = 28.dp), color = Muted.copy(alpha = 0.7f), fontSize = 9.sp, letterSpacing = 1.2.sp)
+            Text("MM4 CAREER CONTROL  •  PERSONAL BUILD", Modifier.align(Alignment.BottomCenter).padding(bottom = 28.dp), color = Muted.copy(alpha = 0.7f), fontSize = 9.sp, letterSpacing = 1.2.sp)
         }
     }
 }
@@ -639,7 +639,7 @@ private fun WelcomePanel(busy: Boolean, onOpen: () -> Unit) {
                 .clip(RoundedCornerShape(26.dp))
                 .background(
                     Brush.linearGradient(
-                        listOf(PanelAlt, Panel, Color(0xFF3A2024))
+                        listOf(Color(0xE0252C35), Color(0xD9182029), Color(0xE02A1718))
                     )
                 )
                 .padding(24.dp)
@@ -652,7 +652,7 @@ private fun WelcomePanel(busy: Boolean, onOpen: () -> Unit) {
             )
             Spacer(Modifier.height(22.dp))
             Text(
-                "YOUR CAREER.\nYOUR RULES.",
+                "TAKE CONTROL.\nOWN THE PADDOCK.",
                 fontSize = 30.sp,
                 lineHeight = 33.sp,
                 fontWeight = FontWeight.Black
@@ -676,7 +676,7 @@ private fun WelcomePanel(busy: Boolean, onOpen: () -> Unit) {
             }
             Spacer(Modifier.height(16.dp))
             Text(
-                "CAREER EDITOR • KONTROL TERARAH • LZ4 EXPORT",
+                "MM4 CAREER EDITOR  •  SAFE SAVE EXPORT",
                 color = Gold,
                 fontSize = 9.sp
             )
@@ -698,38 +698,32 @@ private fun CareerHeader(
         ?: "CAREER LOADED"
     Row(
         Modifier.fillMaxWidth()
-            .padding(14.dp)
+            .padding(horizontal = 12.dp, vertical = 8.dp)
             .clip(RoundedCornerShape(18.dp))
             .background(Brush.horizontalGradient(listOf(Color(0xE0252C35), Color(0xD9182029), Color(0xE02A1718))))
             .border(1.dp, GlassEdge, RoundedCornerShape(18.dp))
             .padding(14.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Column(Modifier.weight(1f)) {
-            Text(label.uppercase(), fontWeight = FontWeight.Black)
-            Text(
-                fileName,
-                color = Muted,
-                fontSize = 10.sp,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
-            Text(
-                if (hasChanges) "UNSAVED CHANGES" else "SAVE DATA READY",
-                color = if (hasChanges) Gold else Color(0xFF82D7A2),
-                fontSize = 9.sp,
-                fontWeight = FontWeight.Bold
-            )
+        Box(Modifier.width(4.dp).height(48.dp).clip(RoundedCornerShape(4.dp)).background(Red))
+        Spacer(Modifier.width(12.dp))
+        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+            Text("CAREER CONTROL  /  ${label.uppercase()}", color = Gold, fontSize = 8.sp, fontWeight = FontWeight.Black, letterSpacing = 1.0.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(fileName, color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(5.dp)) {
+                Box(Modifier.size(6.dp).clip(CircleShape).background(if (hasChanges) Gold else Color(0xFF66C58A)))
+                Text(if (hasChanges) "UNSAVED CHANGES" else "SAVE VERIFIED IN MEMORY", color = if (hasChanges) Gold else Color(0xFF82D7A2), fontSize = 8.sp, fontWeight = FontWeight.Bold, letterSpacing = 0.45.sp)
+            }
         }
         Button(
             onClick = onExport,
             colors = ButtonDefaults.buttonColors(containerColor = Red, contentColor = Color.White),
             shape = RoundedCornerShape(10.dp),
-            contentPadding = PaddingValues(horizontal = 17.dp, vertical = 10.dp)
+            contentPadding = PaddingValues(horizontal = 13.dp, vertical = 10.dp)
         ) {
-            Icon(Icons.Default.FileUpload, contentDescription = null, modifier = Modifier.size(15.dp))
-            Spacer(Modifier.width(6.dp))
-            Text("EXPORT", fontSize = 10.sp, fontWeight = FontWeight.Black, letterSpacing = 0.8.sp)
+            Icon(Icons.Default.FileUpload, contentDescription = null, modifier = Modifier.size(14.dp))
+            Spacer(Modifier.width(5.dp))
+            Text("EXPORT", fontSize = 9.sp, fontWeight = FontWeight.Black, letterSpacing = 0.7.sp)
         }
     }
 }
