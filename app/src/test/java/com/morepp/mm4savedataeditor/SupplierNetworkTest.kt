@@ -123,11 +123,11 @@ class SupplierNetworkTest {
             val id = (1000 + index).toString()
             dictionary.add(JsonObject().apply {
                 addProperty("Key", index)
-                add("Value", JsonObject().apply { addProperty("\\$ref", id) })
+                add("Value", JsonObject().apply { addProperty("\$ref", id) })
             })
             entities.add(JsonObject().apply {
-                addProperty("\\$id", id)
-                addProperty("\\$type", when (index % 3) {
+                addProperty("\$id", id)
+                addProperty("\$type", when (index % 3) {
                     0 -> "SupplierNetworkSupplier"
                     1 -> "SupplierNetworkManufacturer"
                     else -> "SupplierNetworkCompany"
