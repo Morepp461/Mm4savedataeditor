@@ -1910,15 +1910,10 @@ internal fun renameCareerDivisions(data:JsonObject):Int {
 internal fun unlockSupplierNetwork(data:JsonObject):Int {
     val supplier=data.get("supplierNetworkManager")?.takeIf { it.isJsonObject }?.asJsonObject ?: return 0
     val dictionary=supplier.get("m_NodeDictionary")?.takeIf { it.isJsonObject }?.asJsonObject ?: return 0
-
-    // MM4 stores this dictionary as a JSON object keyed by node ID, not as an array.
-    // The uploaded SlotOne career has an empty dictionary and no start/target nodes.
     if(dictionary.size()==0) return 0
-    val pending=java.util.ArrayDeque<JsonElement>()
-    dictionary.entrySet().forEach { (_,value) -> if(!value.isJsonNull) pending.add(value) }
-    supplier.get("m_StartNode")?.takeIf { !it.isJsonNull }?.let { pending.add(it) }
-    supplier.get("m_TargetNodes")?.takeIf { it.isJsonArray }?.asJsonArray?.forEach { if(!it.isJsonNull) pending.add(it) }
 
+    // Build the managed-reference index once. Dictionary entries can be $ref wrappers,
+    // while the actual node objects live elsewhere in the serialized object graph.
     val byId=mutableMapOf<String,JsonObject>()
     val scan=java.util.ArrayDeque<JsonElement>()
     scan.add(data)
@@ -1926,28 +1921,43 @@ internal fun unlockSupplierNetwork(data:JsonObject):Int {
         when(val element=scan.removeLast()) {
             is JsonObject -> {
                 element.get("\$id")?.takeIf { it.isJsonPrimitive }?.asString?.let { byId[it]=element }
-                element.entrySet().forEach { (_,v) -> if(!v.isJsonNull) scan.add(v) }
+                element.entrySet().forEach { (_,value) -> if(!value.isJsonNull) scan.add(value) }
             }
             is JsonArray -> element.forEach { if(!it.isJsonNull) scan.add(it) }
             else -> Unit
         }
     }
 
-    var changed=0
+    val pending=java.util.ArrayDeque<JsonElement>()
+    dictionary.entrySet().forEach { (_,value) -> if(!value.isJsonNull) pending.add(value) }
+    supplier.get("m_StartNode")?.takeIf { !it.isJsonNull }?.let { pending.add(it) }
+    supplier.get("m_TargetNodes")?.takeIf { it.isJsonArray }?.asJsonArray
+        ?.forEach { if(!it.isJsonNull) pending.add(it) }
+
+    var recognizedNodes=0
     val visited=java.util.Collections.newSetFromMap(java.util.IdentityHashMap<JsonObject,Boolean>())
     while(pending.isNotEmpty()) {
         when(val element=pending.removeLast()) {
             is JsonObject -> {
                 if(!visited.add(element)) continue
                 val ref=element.get("\$ref")?.takeIf { it.isJsonPrimitive }?.asString
-                if(ref!=null) byId[ref]?.let { pending.add(it) }
-                listOf("m_IsOwned","m_HasOwnedBeenRevealed").forEach { field ->
-                    val value=element.get(field)
-                    if(value!=null && value.isJsonPrimitive && value.asJsonPrimitive.isBoolean && !value.asBoolean) {
-                        element.addProperty(field,true)
-                        if(field=="m_IsOwned") changed++
-                    }
+                if(ref!=null) {
+                    byId[ref]?.let { pending.add(it) }
+                    // A managed-reference wrapper is not itself a supplier node.
+                    continue
                 }
+
+                val owned=element.get("m_IsOwned")
+                val revealed=element.get("m_HasOwnedBeenRevealed")
+                val hasOwnedFlag=owned?.isJsonPrimitive==true && owned.asJsonPrimitive.isBoolean
+                val hasRevealFlag=revealed?.isJsonPrimitive==true && revealed.asJsonPrimitive.isBoolean
+                if(hasOwnedFlag || hasRevealFlag) recognizedNodes++
+
+                // Update both flags independently. A reveal-only change is still a
+                // successful operation; the previous implementation counted only ownership.
+                if(hasOwnedFlag && !owned!!.asBoolean) element.addProperty("m_IsOwned",true)
+                if(hasRevealFlag && !revealed!!.asBoolean) element.addProperty("m_HasOwnedBeenRevealed",true)
+
                 element.entrySet().forEach { (key,value) ->
                     if(key!="\$ref" && !value.isJsonNull) pending.add(value)
                 }
@@ -1956,7 +1966,9 @@ internal fun unlockSupplierNetwork(data:JsonObject):Int {
             else -> Unit
         }
     }
-    return changed
+    // Return the number of recognized nodes, not the number of fields changed.
+    // This makes an already-unlocked network idempotently successful on repeated runs.
+    return recognizedNodes
 }
 
 private fun applyGodModeAction(current:Mm4SaveCodec.Document,action:String,templateData:JsonObject?=null):Mm4SaveCodec.Document? {
