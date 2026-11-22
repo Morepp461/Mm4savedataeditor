@@ -2359,17 +2359,6 @@ internal fun careerDivisionLabel(championshipId:Int):String = when(championshipI
     else -> "Divisi $championshipId"
 }
 
-private fun divisionTeamIds(data:JsonObject,divisionId:Int):List<String> {
-    val championship=championshipEntityById(data,divisionId) ?: return emptyList()
-    val ids=championship.getAsJsonArray("m_TeamIDs") ?: return emptyList()
-    val teamObjects=collectObjectsWithId(data).map { it.second }
-    return ids.mapNotNull { teamId ->
-        val numericId=teamId.takeIf { it.isJsonPrimitive && it.asJsonPrimitive.isNumber }?.asInt ?: return@mapNotNull null
-        teamObjects.firstOrNull { it.get("m_TeamID")?.takeIf { v -> v.isJsonPrimitive && v.asJsonPrimitive.isNumber }?.asInt==numericId }
-            ?.get("\$id")?.asString
-    }
-}
-
 private fun resolveRosterDriver(slot:JsonObject,objects:Map<String,JsonObject>):JsonObject? {
     val driver=slot.get("driver")?.takeIf { it.isJsonObject }?.asJsonObject ?: return null
     val inlineId=driver.get("\$id")?.takeIf { it.isJsonPrimitive }?.asString
