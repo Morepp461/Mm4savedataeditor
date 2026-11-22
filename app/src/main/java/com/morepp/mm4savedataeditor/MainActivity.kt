@@ -2532,7 +2532,7 @@ internal fun moveDriverToTeam(data:JsonObject,driverId:String,targetTeamId:Strin
 
 internal fun swapTeamsBetweenDivisions(data:JsonObject,teamA:String,teamB:String):Boolean {
     if(teamA==teamB) return false
-    val objects=collectObjectsWithId(data).mapNotNull { (_,obj) -> obj.get("\\$id")?.asString?.let { it to obj } }.toMap()
+    val objects=collectObjectsWithId(data).mapNotNull { (_,obj) -> obj.get("\$id")?.asString?.let { it to obj } }.toMap()
     val teamAObject=objects[teamA] ?: return false
     val teamBObject=objects[teamB] ?: return false
     val teamAId=teamAObject.get("m_TeamID")?.takeIf { it.isJsonPrimitive && it.asJsonPrimitive.isNumber }?.asInt ?: return false
@@ -2540,7 +2540,7 @@ internal fun swapTeamsBetweenDivisions(data:JsonObject,teamA:String,teamB:String
     if(teamAId==teamBId) return false
     val championshipRefs=data.getAsJsonObject("championshipManager")?.getAsJsonArray("championships") ?: return false
     val championships=championshipRefs.mapNotNull { ref ->
-        val id=ref.takeIf { it.isJsonObject }?.asJsonObject?.get("\\$ref")?.asString ?: return@mapNotNull null
+        val id=ref.takeIf { it.isJsonObject }?.asJsonObject?.get("\$ref")?.asString ?: return@mapNotNull null
         objects[id]
     }
     data class Slot(val championship:JsonObject,val index:Int)
@@ -2558,17 +2558,17 @@ internal fun swapTeamsBetweenDivisions(data:JsonObject,teamA:String,teamB:String
     if(slotA.championship===slotB.championship) return false
     val teamAChamp=teamAObject.get("m_Championship")?.takeIf { it.isJsonObject }?.asJsonObject ?: return false
     val teamBChamp=teamBObject.get("m_Championship")?.takeIf { it.isJsonObject }?.asJsonObject ?: return false
-    val champAId=slotA.championship.get("\\$id")?.asString ?: return false
-    val champBId=slotB.championship.get("\\$id")?.asString ?: return false
-    val oldA=teamAChamp.get("\\$ref")?.asString ?: return false
-    val oldB=teamBChamp.get("\\$ref")?.asString ?: return false
+    val champAId=slotA.championship.get("\$id")?.asString ?: return false
+    val champBId=slotB.championship.get("\$id")?.asString ?: return false
+    val oldA=teamAChamp.get("\$ref")?.asString ?: return false
+    val oldB=teamBChamp.get("\$ref")?.asString ?: return false
     if(oldA!=champAId || oldB!=champBId) return false
     val idsA=slotA.championship.getAsJsonArray("m_TeamIDs")
     val idsB=slotB.championship.getAsJsonArray("m_TeamIDs")
     idsA.set(slotA.index,com.google.gson.JsonPrimitive(teamBId))
     idsB.set(slotB.index,com.google.gson.JsonPrimitive(teamAId))
-    teamAChamp.addProperty("\\$ref",champBId)
-    teamBChamp.addProperty("\\$ref",champAId)
+    teamAChamp.addProperty("\$ref",champBId)
+    teamBChamp.addProperty("\$ref",champAId)
     return true
 }
 
