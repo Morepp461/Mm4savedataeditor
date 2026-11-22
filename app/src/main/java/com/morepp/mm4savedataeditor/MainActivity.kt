@@ -58,6 +58,8 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -3205,7 +3207,6 @@ private fun EditValueDialog(target: EditTarget, onClose: () -> Unit, onSave: (Js
     val currentNumber = if (isNumber) runCatching { primitive.asDouble }.getOrDefault(0.0) else 0.0
     val isAttribute = target.path.lastOrNull() in setOf("m_Stat", "m_Potential")
     val attributeValue = currentNumber.toInt().coerceIn(0, 20)
-    val numberStep = when { kotlin.math.abs(currentNumber) >= 1000000 -> 100000.0; kotlin.math.abs(currentNumber) >= 10000 -> 1000.0; kotlin.math.abs(currentNumber) >= 100 -> 10.0; else -> 1.0 }
     val meaning = when { attributeValue <= 4 -> "Sangat rendah"; attributeValue <= 8 -> "Rendah"; attributeValue <= 12 -> "Menengah"; attributeValue <= 16 -> "Tinggi"; else -> "Elite" }
     var validationMessage by remember(target) { mutableStateOf<String?>(null) }
     AlertDialog(
@@ -3220,51 +3221,19 @@ private fun EditValueDialog(target: EditTarget, onClose: () -> Unit, onSave: (Js
                         Switch(checked = value.toBoolean(), onCheckedChange = { value = it.toString() })
                         Text("Aktif", Modifier.padding(start = 8.dp))
                     }
-                    isNumber && isAttribute -> {
-                        Text(attributeValue.toString() + " / 20 • " + meaning, color = Gold, fontWeight = FontWeight.Bold)
-                        Slider(
-                            value = attributeValue.toFloat(),
-                            onValueChange = { value = it.toInt().coerceIn(0,20).toString() },
-                            valueRange = 0f..20f,
-                            steps = 19
-                        )
-                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                            Text("0 • Minimum", color = Muted, fontSize = 9.sp)
-                            Text("20 • Maksimum", color = Muted, fontSize = 9.sp)
-                        }
-                        Text("Skala atribut 0–20. Pilih nilai dengan menggeser slider.", color = Muted, fontSize = 10.sp)
-                    }
-                    isNumber && target.path==listOf("influenceManager","m_Influence") -> {
-                        OutlinedTextField(value=value,onValueChange={ typed -> if(typed.isEmpty()) value="0" else if(typed.all { it.isDigit() }) value=typed },modifier=Modifier.fillMaxWidth(),label={ Text("Influence") },supportingText={ Text("Masukkan 0 sampai 2.000.000.000") },singleLine=true)
-                    }
-                    isNumber && target.path==listOf("financeManager","m_Balance") -> {
-                        OutlinedTextField(
-                            value=value,
-                            onValueChange={ typed -> if(typed.isEmpty()) value="0" else if(typed.all { it.isDigit() }) value=typed },
-                            modifier=Modifier.fillMaxWidth(),
-                            label={ Text("Saldo (£)") },
-                            supportingText={ Text("Masukkan 0 sampai £2.000.000.000") },
-                            singleLine=true
-                        )
-                    }
-                    isNumber && target.minValue != null && target.maxValue != null -> {
-                        val min = target.minValue.toFloat()
-                        val max = target.maxValue.toFloat()
-                        val selected = currentNumber.toFloat().coerceIn(min,max)
-                        Text(displayInteger(value) + " • batas " + target.minValue + "–" + target.maxValue, fontSize = 18.sp, fontWeight = FontWeight.Bold, color = Gold)
-                        Slider(value=selected,onValueChange={value=it.toInt().coerceIn(min.toInt(),max.toInt()).toString()},valueRange=min..max,steps=(max-min-1f).toInt().coerceAtLeast(0))
-                        Text("Nilai dibatasi sesuai rentang yang dikenali dari struktur save.",color=Muted,fontSize=10.sp)
-                    }
                     isNumber -> {
-                        Text(displayInteger(value), fontSize = 24.sp, fontWeight = FontWeight.Bold, color = Gold)
-                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                            OutlinedButton(onClick = { value = stepNumericValue(value, numberStep, -1) ?: value }) { Text("−") }
-                            Text("Langkah " + numberStep.toLong(), color = Muted, fontSize = 10.sp)
-                            OutlinedButton(onClick = { value = stepNumericValue(value, numberStep, 1) ?: value }) { Text("+") }
-                        }
-                        Text("Gunakan tombol untuk memilih nilai, tanpa mengetik angka manual.", color = Muted, fontSize = 10.sp)
+                        if (isAttribute) Text("BATAS ATRIBUT 0–20", color = Gold, fontWeight = FontWeight.Bold, fontSize = 11.sp)
+                        OutlinedTextField(
+                            value = value,
+                            onValueChange = { typed -> if (typed.isEmpty() || typed.all { it.isDigit() }) value = typed },
+                            modifier = Modifier.fillMaxWidth(),
+                            label = { Text(if (isAttribute) "Nilai atribut" else "Masukkan angka") },
+                            supportingText = { Text(if (isAttribute) "Masukkan angka bulat 0 sampai 20." else "Input angka manual. Batas save divalidasi otomatis.") },
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                            singleLine = true
+                        )
                     }
-                    else -> OutlinedTextField(value = value, onValueChange = { value = it }, modifier = Modifier.fillMaxWidth(), label = { Text(if(target.path.lastOrNull()=="dateOfBirth") "Tanggal lahir (YYYY-MM-DD)" else "Text") }, singleLine = true)
+                                        else -> OutlinedTextField(value = value, onValueChange = { value = it }, modifier = Modifier.fillMaxWidth(), label = { Text(if(target.path.lastOrNull()=="dateOfBirth") "Tanggal lahir (YYYY-MM-DD)" else "Text") }, singleLine = true)
                 }
                 validationMessage?.let { Text(it,color=Red,fontSize=10.sp) }
             }
@@ -3275,8 +3244,9 @@ private fun EditValueDialog(target: EditTarget, onClose: () -> Unit, onSave: (Js
                     isBoolean -> com.google.gson.JsonPrimitive(value.toBoolean())
                     isNumber -> {
                         val number=java.math.BigDecimal(value)
-                        val min=target.minValue?.let { java.math.BigDecimal(it) }
-                        val max=target.maxValue?.let { java.math.BigDecimal(it) }
+                        val min=(if (isAttribute) "0" else target.minValue)?.let { java.math.BigDecimal(it) }
+                        val max=(if (isAttribute) "20" else target.maxValue)?.let { java.math.BigDecimal(it) }
+                        if (isAttribute && number.stripTrailingZeros().scale() > 0) { validationMessage="Atribut harus berupa angka bulat dari 0 sampai 20."; return@Button }
                         if((min!=null && number<min) || (max!=null && number>max)) {
                             validationMessage="Nilai harus berada di antara " + (target.minValue ?: "—") + " dan " + (target.maxValue ?: "—")
                             return@Button
