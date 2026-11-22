@@ -631,10 +631,9 @@ private fun IntroSplash() {
                     trackColor = Color.White.copy(alpha = 0.14f)
                 )
                 AnimatedVisibility(visible = showEndingMark, enter = fadeIn(tween(500)) + slideInVertically(tween(500)) { it / 2 }) {
-                    Text("Created by : Morepp", color = Muted, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                    Text("CREATED BY MOREPP", color = Muted, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, letterSpacing = 1.2.sp)
                 }
             }
-            Text("MM4 CAREER CONTROL  •  PERSONAL BUILD", Modifier.align(Alignment.BottomCenter).padding(bottom = 28.dp), color = Muted.copy(alpha = 0.7f), fontSize = 9.sp, letterSpacing = 1.2.sp)
         }
     }
 }
@@ -652,32 +651,14 @@ private fun WelcomePanel(busy: Boolean, onOpen: () -> Unit) {
                 .border(1.dp, GlassEdge, RoundedCornerShape(26.dp))
                 .padding(24.dp)
         ) {
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(9.dp)) {
-                Box(Modifier.width(4.dp).height(30.dp).clip(RoundedCornerShape(3.dp)).background(Red))
-                Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                    Text("MM4 / RACE CONTROL", color = Gold, fontSize = 9.sp, fontWeight = FontWeight.Black, letterSpacing = 1.5.sp)
-                    Text("CAREER ENGINEERING SUITE", color = Muted, fontSize = 8.sp, letterSpacing = 1.1.sp)
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                Image(painter = painterResource(id = R.drawable.mm4_app_logo), contentDescription = "MM4 Save Data Editor", modifier = Modifier.size(58.dp))
+                Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                    Text("CREATED BY MOREPP", color = Gold, fontSize = 9.sp, fontWeight = FontWeight.Black, letterSpacing = 1.4.sp)
+                    Text("MM4 SAVE DATA EDITOR", color = Color.White, fontSize = 17.sp, fontWeight = FontWeight.Black, letterSpacing = 0.6.sp)
                 }
             }
-            Icon(
-                Icons.Default.DirectionsCar,
-                contentDescription = null,
-                tint = Red,
-                modifier = Modifier.size(44.dp)
-            )
-            Spacer(Modifier.height(22.dp))
-            Text(
-                "TAKE CONTROL.\nOWN THE PADDOCK.",
-                fontSize = 30.sp,
-                lineHeight = 33.sp,
-                fontWeight = FontWeight.Black
-            )
-            Spacer(Modifier.height(8.dp))
-            Text(
-                "Buka save Motorsport Manager 4 untuk menjelajahi dan mengedit data karier.",
-                color = Muted
-            )
-            Spacer(Modifier.height(20.dp))
+            Spacer(Modifier.height(28.dp))
             Button(
                 onClick = onOpen,
                 enabled = !busy,
