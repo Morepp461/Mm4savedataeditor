@@ -99,7 +99,7 @@ internal fun supplierNetworkNodes(data: JsonObject): List<SupplierNetworkNode> {
         val value = row.get("Value") ?: return@mapIndexedNotNull null
         val (node, path) = resolve(value, listOf("supplierNetworkManager", "m_NodeDictionary", "[$index]", "Value"))
             ?: return@mapIndexedNotNull null
-        if (kindOf(node) != "Supplier") return@mapIndexedNotNull null
+        if (kindOf(node) == "Network item") return@mapIndexedNotNull null
 
         val children = node.get("m_Nodes")?.takeIf { it.isJsonArray }?.asJsonArray
             ?.mapIndexedNotNull { childIndex, child ->
@@ -130,7 +130,7 @@ internal fun supplierNetworkNodes(data: JsonObject): List<SupplierNetworkNode> {
         SupplierNetworkNode(
             key = key,
             id = id,
-            label = "Supplier " + (key + 1).coerceAtLeast(1).toString().padStart(2, '0'),
+            label = displayLabel(node, key),
             owned = node.get("m_IsOwned")?.takeIf { it.isJsonPrimitive }?.asBoolean ?: false,
             revealed = node.get("m_HasOwnedBeenRevealed")?.takeIf { it.isJsonPrimitive }?.asBoolean ?: false,
             childCount = children.size,
