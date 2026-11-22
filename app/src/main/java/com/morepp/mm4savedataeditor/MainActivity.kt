@@ -2757,9 +2757,6 @@ private fun GodModePage(doc:Mm4SaveCodec.Document,onAction:(String)->Unit,onEdit
                 ) { Text(if(supplierNodeCount>0) "BUKA SEMUA SUPPLIER" else "JARINGAN BELUM TERSEDIA") }
             }
         }
-        item {
-            Text("Pemindahan tim antar divisi dan transfer pembalap belum diaktifkan pada build ini. Keduanya harus menjaga referensi roster, kontrak, klasemen, dan kejuaraan secara serentak. Tidak akan dibuat tombol yang berisiko merusak save.",color=Muted,fontSize=10.sp)
-        }
     }
     if(picker!=null) AlertDialog(
         onDismissRequest={picker=null},
