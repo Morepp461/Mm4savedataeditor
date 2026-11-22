@@ -114,6 +114,49 @@ class SupplierNetworkTest {
         assertEquals(3, supplierNetworkNodes(data).size)
     }
     @Test
+    fun supportsTheFullEightyNodeNetworkAndResolvesEveryConnection() {
+        val data = JsonObject()
+        val manager = JsonObject()
+        val dictionary = JsonArray()
+        val entities = JsonArray()
+        repeat(80) { index ->
+            val id = (1000 + index).toString()
+            dictionary.add(JsonObject().apply {
+                addProperty("Key", index)
+                add("Value", JsonObject().apply { addProperty("\\$ref", id) })
+            })
+            entities.add(JsonObject().apply {
+                addProperty("\\$id", id)
+                addProperty("\\$type", when (index % 3) {
+                    0 -> "SupplierNetworkSupplier"
+                    1 -> "SupplierNetworkManufacturer"
+                    else -> "SupplierNetworkCompany"
+                })
+                addProperty("m_ID", index)
+                addProperty("m_IsOwned", index % 2 == 0)
+                addProperty("m_HasOwnedBeenRevealed", true)
+                add("m_Nodes", JsonArray())
+                add("m_NodeConnections", JsonArray().apply {
+                    if (index < 79) add(JsonObject().apply {
+                        addProperty("nodeID", index + 1)
+                        addProperty("progress", 1)
+                        addProperty("progressTarget", 2)
+                    })
+                })
+            })
+        }
+        manager.add("m_NodeDictionary", dictionary)
+        data.add("supplierNetworkManager", manager)
+        data.add("entityManager", JsonObject().apply { add("m_Entities", entities) })
+
+        val nodes = supplierNetworkNodes(data)
+        assertEquals(80, nodes.size)
+        assertEquals(79, nodes.sumOf { it.connections.size })
+        assertTrue(nodes.all { !it.label.contains("\\$") })
+        assertTrue(nodes.flatMap { it.connections }.all { connection -> nodes.any { it.id == connection.nodeId } })
+    }
+
+    @Test
     fun ownershipEditRoundTripsWithoutChangingOtherSupplierData() {
         val original = fixture()
         val node = supplierNetworkNodes(original).first()
