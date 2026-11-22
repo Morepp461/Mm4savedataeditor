@@ -655,7 +655,7 @@ private fun CareerHeader(
 }
 
 
-private val Sections = listOf("Overview", "Drivers", "Driver Analytics", "Staff", "Teams", "Cars", "Finance", "HQ", "Supplier Network", "Championships", "Circuits", "World", "Diagnostics", "Save Info", "Advanced", "God Mode")
+private val Sections = listOf("Overview", "Drivers", "Driver Analytics", "Staff", "Teams", "Cars", "Finance", "HQ", "Supplier Network", "Championships", "Circuits", "Influence Actions", "World", "Diagnostics", "Save Info", "Advanced", "God Mode")
 
 @Composable
 private fun CareerWorkspace(
@@ -1235,6 +1235,54 @@ private fun statAttributeLabel(category:String,type:String,index:Int):String {
 
 
 
+
+
+@Composable
+private fun InfluenceActionsPage(doc: Mm4SaveCodec.Document) {
+    val actions = remember(doc.data) { influenceActionRecords(doc.data) }
+    val influence = doc.data.getAsJsonObject("influenceManager")?.get("m_Influence")
+    val readyCount = actions.count { it.cooldown <= 0 }
+
+    LazyColumn(contentPadding = PaddingValues(14.dp), verticalArrangement = Arrangement.spacedBy(9.dp)) {
+        item {
+            GlassCard(Modifier.fillMaxWidth()) {
+                Text("INFLUENCE ACTIONS", color = Gold, fontWeight = FontWeight.Black, fontSize = 11.sp)
+                Text("Daftar aksi influence", fontSize = 21.sp, fontWeight = FontWeight.Black)
+                Text("Status aksi yang tercatat dalam career, termasuk waktu tunggu penggunaannya.", color = Muted, fontSize = 11.sp)
+                Spacer(Modifier.height(8.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Column(Modifier.weight(1f)) {
+                        Text("SALDO INFLUENCE", color = Muted, fontSize = 9.sp)
+                        Text(influence?.let { preview(it) } ?: "—", color = Gold, fontSize = 22.sp, fontWeight = FontWeight.Black)
+                    }
+                    Column(Modifier.weight(1f)) {
+                        Text("AKSI SIAP", color = Muted, fontSize = 9.sp)
+                        Text("$readyCount / ${actions.size}", fontSize = 22.sp, fontWeight = FontWeight.Black)
+                    }
+                }
+            }
+        }
+        item { Text("DAFTAR AKSI", color = Gold, fontWeight = FontWeight.Bold, fontSize = 10.sp) }
+        items(actions, key = { it.index }) { action ->
+            GlassCard(Modifier.fillMaxWidth()) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f)) {
+                        Text(action.label, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                        Text("Aksi ${action.index + 1}", color = Muted, fontSize = 9.sp)
+                    }
+                    Text(
+                        action.status,
+                        color = if (action.cooldown <= 0) Color(0xFF9BE36A) else Gold,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 10.sp
+                    )
+                }
+            }
+        }
+        if (actions.isEmpty()) item { Text("Data aksi influence tidak ditemukan pada save ini.", color = Muted, fontSize = 11.sp) }
+        item { Text("Halaman ini hanya membaca status cooldown dan saldo. Tidak ada cooldown atau aksi yang diubah.", color = Muted, fontSize = 10.sp) }
+    }
+}
 
 @Composable
 private fun CircuitExplorerPage(doc: Mm4SaveCodec.Document) {
