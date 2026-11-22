@@ -67,13 +67,15 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 
-private val Ink = Color(0xFF101A3A)
-private val Panel = Color(0xD91D2D58)
-private val PanelAlt = Color(0xE62A3F73)
-private val Red = Color(0xFFE53935)
-private val Gold = Color(0xFFB9E84F)
-private val Blue = Color(0xFF3488DC)
-private val Muted = Color(0xFF9CA6B2)
+private val Ink = Color(0xFF080B10)
+private val Panel = Color(0xB51A2029)
+private val PanelAlt = Color(0xE0202731)
+private val Red = Color(0xFFE10600)
+private val Gold = Color(0xFFD6B56D)
+private val Blue = Color(0xFF8C9AA8)
+private val Muted = Color(0xFF9AA4B0)
+private val GlassEdge = Color(0x38FFFFFF)
+private val Carbon = Color(0xFF11161D)
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -253,18 +255,13 @@ private fun EditorApp() {
                 TopAppBar(
                     title = {
                         Column {
-                            Text(
-                                "MM4 SAVE DATA EDITOR",
-                                fontSize = 15.sp,
-                                fontWeight = FontWeight.Black,
-                                letterSpacing = 1.sp
-                            )
-                            Text(
-                                "CAREER DATA WORKSHOP",
-                                color = Gold,
-                                fontSize = 9.sp,
-                                letterSpacing = 1.3.sp
-                            )
+                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(7.dp)) {
+                                Box(Modifier.width(3.dp).height(25.dp).clip(RoundedCornerShape(3.dp)).background(Red))
+                                Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                                    Text("MM4 SAVE DATA EDITOR", fontSize = 14.sp, fontWeight = FontWeight.Black, letterSpacing = 1.15.sp)
+                                    Text("PADDOCK CONTROL  •  CAREER ENGINEERING", color = Gold, fontSize = 8.sp, letterSpacing = 1.05.sp)
+                                }
+                            }
                         }
                     },
                     actions = {
@@ -311,14 +308,18 @@ private fun EditorApp() {
                         }
                     },
                     colors = TopAppBarDefaults.topAppBarColors(
-                        containerColor = Ink,
+                        containerColor = Color(0xFF090D12),
                         titleContentColor = Color.White
                     )
                 )
             },
             bottomBar = { WatermarkFooter() }
         ) { padding ->
-            Column(Modifier.fillMaxSize().padding(padding)) {
+            Column(
+                Modifier.fillMaxSize()
+                    .background(Brush.verticalGradient(listOf(Color(0xFF0B1017), Ink, Color(0xFF10151C))))
+                    .padding(padding)
+            ) {
                 val current = document
                 if (current == null) {
                     WelcomePanel(busy, requestOpen)
@@ -699,11 +700,8 @@ private fun CareerHeader(
         Modifier.fillMaxWidth()
             .padding(14.dp)
             .clip(RoundedCornerShape(18.dp))
-            .background(
-                Brush.horizontalGradient(
-                    listOf(PanelAlt, Panel, Color(0xFF382326))
-                )
-            )
+            .background(Brush.horizontalGradient(listOf(Color(0xE0252C35), Color(0xD9182029), Color(0xE02A1718))))
+            .border(1.dp, GlassEdge, RoundedCornerShape(18.dp))
             .padding(14.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
@@ -725,9 +723,13 @@ private fun CareerHeader(
         }
         Button(
             onClick = onExport,
-            colors = ButtonDefaults.buttonColors(containerColor = Red)
+            colors = ButtonDefaults.buttonColors(containerColor = Red, contentColor = Color.White),
+            shape = RoundedCornerShape(10.dp),
+            contentPadding = PaddingValues(horizontal = 17.dp, vertical = 10.dp)
         ) {
-            Text("EXPORT")
+            Icon(Icons.Default.FileUpload, contentDescription = null, modifier = Modifier.size(15.dp))
+            Spacer(Modifier.width(6.dp))
+            Text("EXPORT", fontSize = 10.sp, fontWeight = FontWeight.Black, letterSpacing = 0.8.sp)
         }
     }
 }
@@ -746,8 +748,31 @@ private fun CareerWorkspace(
     onResetInfluenceCooldown: (Int) -> Unit
 ) {
     Column(Modifier.fillMaxSize()) {
-        LazyRow(Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 4.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            items(Sections) { s -> FilterChip(selected = section == s, onClick = { onSection(s) }, label = { Text(s, fontSize = 11.sp) }) }
+        LazyRow(
+            Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 7.dp),
+            horizontalArrangement = Arrangement.spacedBy(7.dp),
+            contentPadding = PaddingValues(horizontal = 2.dp)
+        ) {
+            items(Sections) { s ->
+                FilterChip(
+                    selected = section == s,
+                    onClick = { onSection(s) },
+                    label = { Text(s.uppercase(), fontSize = 9.sp, fontWeight = FontWeight.Bold, letterSpacing = 0.45.sp) },
+                    shape = RoundedCornerShape(10.dp),
+                    colors = FilterChipDefaults.filterChipColors(
+                        selectedContainerColor = Red,
+                        selectedLabelColor = Color.White,
+                        containerColor = Color(0x661C242E),
+                        labelColor = Muted
+                    ),
+                    border = FilterChipDefaults.filterChipBorder(
+                        enabled = true,
+                        selected = section == s,
+                        borderColor = GlassEdge,
+                        selectedBorderColor = Red
+                    )
+                )
+            }
         }
         AnimatedContent(
             targetState = section,
@@ -2775,11 +2800,11 @@ private fun GlassCard(modifier: Modifier = Modifier, content: @Composable Column
             scaleY = entrance
             alpha = entrance
         }.animateContentSize(animationSpec = tween(260)).clip(shape)
-            .border(1.dp, Color.White.copy(alpha = 0.16f), shape)
-            .background(Brush.linearGradient(listOf(Color(0xC936568A), Color(0xB91B2D58), Color(0xA51A2445))))
+            .border(1.dp, GlassEdge, shape)
+            .background(Brush.linearGradient(listOf(Color(0xE02A3039), Color(0xC91A212A), Color(0xE0141A22))))
             .padding(1.dp)
             .clip(RoundedCornerShape(17.dp))
-            .background(Brush.linearGradient(listOf(Color(0xD82B416B), Color(0xC51B2A50), Color(0xB9152344))))
+            .background(Brush.linearGradient(listOf(Color(0xD51B222B), Color(0xC9151B23), Color(0xE010151C))))
             .padding(14.dp),
         content = content
     )
@@ -2787,10 +2812,22 @@ private fun GlassCard(modifier: Modifier = Modifier, content: @Composable Column
 
 @Composable
 private fun QuickLink(title: String, desc: String, icon: androidx.compose.ui.graphics.vector.ImageVector, click: () -> Unit) {
-    Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(Panel).clickable(onClick = click).padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
-        Icon(icon, null, tint = Gold); Spacer(Modifier.width(12.dp))
-        Column(Modifier.weight(1f)) { Text(title, fontWeight = FontWeight.Bold); Text(desc, color = Muted, fontSize = 10.sp) }
-        Icon(Icons.Default.ChevronRight, null, tint = Muted)
+    Row(
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp))
+            .background(Brush.horizontalGradient(listOf(Color(0xD51D242D), Color(0xB5151B23))))
+            .border(1.dp, GlassEdge, RoundedCornerShape(14.dp))
+            .clickable(onClick = click).padding(14.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Box(Modifier.size(38.dp).clip(RoundedCornerShape(11.dp)).background(Color(0x22E10600)), contentAlignment = Alignment.Center) {
+            Icon(icon, null, tint = Red)
+        }
+        Spacer(Modifier.width(12.dp))
+        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+            Text(title, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+            Text(desc, color = Muted, fontSize = 10.sp)
+        }
+        Icon(Icons.Default.ChevronRight, null, tint = Gold)
     }
 }
 
@@ -3059,15 +3096,17 @@ internal fun stepNumericValue(current: String, step: Double, direction: Int): St
 private fun WatermarkFooter() {
     Row(
         Modifier.fillMaxWidth()
-            .background(Ink)
-            .border(width = 0.5.dp, color = Color.White.copy(alpha = 0.10f))
+            .background(Color(0xFF090D12))
+            .border(width = 0.5.dp, color = GlassEdge)
             .padding(horizontal = 16.dp, vertical = 9.dp),
         horizontalArrangement = Arrangement.Center,
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Text("Created by :", color = Muted, fontSize = 10.sp, letterSpacing = 0.4.sp)
-        Spacer(Modifier.width(4.dp))
-        Text("Morepp", color = Gold, fontSize = 10.sp, fontWeight = FontWeight.Black, letterSpacing = 0.8.sp)
+        Box(Modifier.width(18.dp).height(2.dp).background(Red))
+        Spacer(Modifier.width(8.dp))
+        Text("ENGINEERED FOR THE PADDOCK", color = Muted, fontSize = 8.sp, letterSpacing = 1.1.sp, fontWeight = FontWeight.Bold)
+        Spacer(Modifier.width(8.dp))
+        Text("MOREPP", color = Gold, fontSize = 9.sp, fontWeight = FontWeight.Black, letterSpacing = 1.2.sp)
     }
 }
 
