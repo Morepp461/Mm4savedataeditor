@@ -24,19 +24,21 @@ internal data class ChampionshipSummary(
     val teamCount: Int,
     val driverCount: Int,
     val raceCount: Int,
-    val standings: List<ChampionshipTeamStanding>
+    val standings: List<ChampionshipTeamStanding>,
+    val path: List<String>
 )
 
 internal fun championshipSummaries(data: JsonObject): List<ChampionshipSummary> {
     val idMap = mutableMapOf<String, JsonObject>()
-    fun collect(node: JsonElement) {
+    val idPaths = mutableMapOf<String, List<String>>()
+    fun collect(node: JsonElement, path: List<String> = emptyList()) {
         when {
             node.isJsonObject -> {
                 val obj = node.asJsonObject
-                obj.get("\$id")?.takeIf { it.isJsonPrimitive }?.asString?.let { idMap[it] = obj }
-                obj.entrySet().forEach { (_, value) -> collect(value) }
+                obj.get("\$id")?.takeIf { it.isJsonPrimitive }?.asString?.let { idMap[it] = obj; idPaths[it] = path }
+                obj.entrySet().forEach { (key, value) -> collect(value, path + key) }
             }
-            node.isJsonArray -> node.asJsonArray.forEach { collect(it) }
+            node.isJsonArray -> node.asJsonArray.forEachIndexed { index, value -> collect(value, path + index.toString()) }
         }
     }
     collect(data)
@@ -87,7 +89,8 @@ internal fun championshipSummaries(data: JsonObject): List<ChampionshipSummary> 
             teamCount = championship.get("m_TeamIDs")?.takeIf { it.isJsonArray }?.asJsonArray?.size() ?: teamRows.size,
             driverCount = standingsObject?.get("m_Drivers")?.takeIf { it.isJsonArray }?.asJsonArray?.size() ?: 0,
             raceCount = championship.get("m_Races")?.takeIf { it.isJsonArray }?.asJsonArray?.size() ?: 0,
-            standings = teamRows
+            standings = teamRows,
+            path = idPaths[championship.get("\$id")?.takeIf { it.isJsonPrimitive }?.asString] ?: emptyList()
         )
     }.sortedWith(compareBy({ it.tier }, { it.series }, { it.id }))
 }
