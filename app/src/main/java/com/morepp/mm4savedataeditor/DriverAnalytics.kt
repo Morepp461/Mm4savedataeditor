@@ -78,6 +78,9 @@ internal fun driverAnalyticsRecords(data: JsonObject, careerDate: String?): List
         val careerRows = driver.getAsJsonObject("careerHistory")?.get("m_Career")
             ?.takeIf { it.isJsonArray }?.asJsonArray
         val careerHistory = careerRows?.mapNotNull { entry ->
+            if (entry.isJsonPrimitive && entry.asJsonPrimitive.isNumber) {
+                return@mapNotNull DriverCareerSeason(entry.asInt, "Tim tidak diketahui", 0, 0, 0, 0, 0)
+            }
             if (!entry.isJsonObject) return@mapNotNull null
             val row = entry.asJsonObject
             val careerTeam = resolve(row.get("team"))
