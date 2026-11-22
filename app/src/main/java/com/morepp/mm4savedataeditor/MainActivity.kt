@@ -567,7 +567,7 @@ private fun EditorApp() {
                     }
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                         repeat(pages.size) { index ->
-                            Box(Modifier.weight(1f).height(4.dp).clip(CircleShape).background(if (index <= tutorialPage) Red else Color.White.copy(alpha = 0.16f)))
+                            Box(Modifier.weight(1f).height(4.dp).clip(RoundedCornerShape(4.dp)).background(if (index <= tutorialPage) Red else Color.White.copy(alpha = 0.16f)))
                         }
                     }
                     AnimatedContent(
@@ -592,7 +592,7 @@ private fun EditorApp() {
                                     context.getSharedPreferences("mm4_editor", android.content.Context.MODE_PRIVATE).edit().putBoolean("tutorial_seen", true).apply()
                                 }
                             },
-                            colors = ButtonDefaults.buttonColors(containerColor = Lime, contentColor = Color(0xFF10131D))
+                            colors = ButtonDefaults.buttonColors(containerColor = Gold, contentColor = Color(0xFF10131D))
                         ) { Text(if (tutorialPage == pages.lastIndex) "MULAI EDIT" else "LANJUT", fontWeight = FontWeight.Black) }
                     }
                 }
