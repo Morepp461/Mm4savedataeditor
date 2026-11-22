@@ -58,6 +58,8 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -176,7 +178,7 @@ private fun EditorApp() {
                     hasChanges=true
                     undoStack=emptyList()
                     redoStack=emptyList()
-                    snackbarHostState.showSnackbar("Template diterapkan: 40 tim dan 80 profil pembalap beserta atributnya. Kontrak dan riwayat career dipertahankan.")
+                    snackbarHostState.showSnackbar("Template diterapkan: 80 profil pembalap dan atributnya. Nama tim, kontrak, dan riwayat career tetap dipertahankan.")
                 } else {
                     snackbarHostState.showSnackbar("Template tidak cocok. Dibutuhkan 4 divisi, masing-masing 10 tim dan 2 pembalap per tim. Tidak ada perubahan diterapkan.")
                 }
@@ -373,7 +375,6 @@ private fun EditorApp() {
                                         val successText = when {
                                             action == "official_f1_2026" -> "Template tim dan 80 profil pembalap berhasil diterapkan."
                                             action == "rename_divisions" -> "Label divisi berhasil diperbarui."
-                                            action.startsWith("swap_teams|") -> "Tim berhasil ditukar antar divisi."
                                             action.startsWith("move_driver|") -> "Pembalap berhasil dipindahkan."
                                             action == "max_balance" -> "Saldo berhasil diatur ke £2 miliar."
                                             action == "unlock_hq" -> "Upgrade HQ berhasil dibuka."
@@ -629,10 +630,9 @@ private fun IntroSplash() {
                     trackColor = Color.White.copy(alpha = 0.14f)
                 )
                 AnimatedVisibility(visible = showEndingMark, enter = fadeIn(tween(500)) + slideInVertically(tween(500)) { it / 2 }) {
-                    Text("Created by : Morepp", color = Muted, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                    Text("CREATED BY MOREPP", color = Muted, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, letterSpacing = 1.2.sp)
                 }
             }
-            Text("MM4 CAREER CONTROL  •  PERSONAL BUILD", Modifier.align(Alignment.BottomCenter).padding(bottom = 28.dp), color = Muted.copy(alpha = 0.7f), fontSize = 9.sp, letterSpacing = 1.2.sp)
         }
     }
 }
@@ -646,36 +646,18 @@ private fun WelcomePanel(busy: Boolean, onOpen: () -> Unit) {
         Column(
             Modifier.fillMaxWidth()
                 .clip(RoundedCornerShape(26.dp))
-                .background(Brush.linearGradient(listOf(Color(0xE0252C35), Color(0xD9182029), Color(0xE02A1718))))
+                .background(Brush.linearGradient(listOf(Color(0xB84A3A58), Color(0x8C252E3B), Color(0xA83C2736))))
                 .border(1.dp, GlassEdge, RoundedCornerShape(26.dp))
                 .padding(24.dp)
         ) {
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(9.dp)) {
-                Box(Modifier.width(4.dp).height(30.dp).clip(RoundedCornerShape(3.dp)).background(Red))
-                Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                    Text("MM4 / RACE CONTROL", color = Gold, fontSize = 9.sp, fontWeight = FontWeight.Black, letterSpacing = 1.5.sp)
-                    Text("CAREER ENGINEERING SUITE", color = Muted, fontSize = 8.sp, letterSpacing = 1.1.sp)
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                Image(painter = painterResource(id = R.drawable.mm4_app_logo), contentDescription = "MM4 Save Data Editor", modifier = Modifier.size(58.dp))
+                Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                    Text("CREATED BY MOREPP", color = Gold, fontSize = 9.sp, fontWeight = FontWeight.Black, letterSpacing = 1.4.sp)
+                    Text("MM4 SAVE DATA EDITOR", color = Color.White, fontSize = 17.sp, fontWeight = FontWeight.Black, letterSpacing = 0.6.sp)
                 }
             }
-            Icon(
-                Icons.Default.DirectionsCar,
-                contentDescription = null,
-                tint = Red,
-                modifier = Modifier.size(44.dp)
-            )
-            Spacer(Modifier.height(22.dp))
-            Text(
-                "TAKE CONTROL.\nOWN THE PADDOCK.",
-                fontSize = 30.sp,
-                lineHeight = 33.sp,
-                fontWeight = FontWeight.Black
-            )
-            Spacer(Modifier.height(8.dp))
-            Text(
-                "Buka save Motorsport Manager 4 untuk menjelajahi dan mengedit data karier.",
-                color = Muted
-            )
-            Spacer(Modifier.height(20.dp))
+            Spacer(Modifier.height(28.dp))
             Button(
                 onClick = onOpen,
                 enabled = !busy,
@@ -687,12 +669,7 @@ private fun WelcomePanel(busy: Boolean, onOpen: () -> Unit) {
                 Spacer(Modifier.width(8.dp))
                 Text("BUKA FILE SAVE (.MSV)")
             }
-            Spacer(Modifier.height(16.dp))
-            Text(
-                "MM4 CAREER EDITOR  •  SAFE SAVE EXPORT",
-                color = Gold,
-                fontSize = 9.sp
-            )
+
         }
     }
 }
@@ -742,7 +719,7 @@ private fun CareerHeader(
 }
 
 
-private val Sections = listOf("Overview", "Drivers", "Driver Analytics", "Staff", "Teams", "Cars", "Finance", "Career Finance Analytics", "HQ", "Championships", "Influence Actions", "Manager Progression", "World", "Diagnostics", "Save Info", "Advanced", "God Mode")
+private val Sections = listOf("Overview", "Drivers", "Staff", "Teams", "Cars", "Finance", "Career Finance Analytics", "HQ", "Influence Actions", "Manager Progression", "Diagnostics", "Save Info", "God Mode")
 
 @Composable
 private fun CareerWorkspace(
@@ -794,9 +771,7 @@ private fun CareerWorkspace(
             when (targetSection) {
                 "Overview" -> OverviewPage(document, onSection)
                 "Drivers" -> DriverPage(document, selectedDriver, onDriver, onEdit)
-                "Driver Analytics" -> DriverAnalyticsPage(document)
-                "Championships" -> ChampionshipManagerPage(document, onEdit)
-                "Influence Actions" -> InfluenceActionsPage(document, onResetInfluenceCooldown)
+                "Influence Actions" -> InfluenceActionsPage(document, onResetInfluenceCooldown, onEdit)
                 "Career Finance Analytics" -> CareerFinanceAnalyticsPage(document)
                 "Manager Progression" -> ManagerProgressionPage(document, onApplyExperience)
                 "Staff" -> EntityCatalogPage(document, "staff", onEdit, onApplyTeamColor)
@@ -804,11 +779,10 @@ private fun CareerWorkspace(
                 "Cars" -> EntityCatalogPage(document, "car", onEdit, onApplyTeamColor)
                 "Finance" -> FinancePage(document, onEdit)
                 "HQ" -> HqPage(document, onEdit)
-                "World" -> WorldSettingsPage(document, onEdit)
                 "Diagnostics" -> SaveDiagnosticsPage(document)
                 "Save Info" -> InfoPage(document, onEdit)
                 "God Mode" -> GodModePage(document, onGodAction, onEdit)
-                else -> AdvancedPage(document, onEdit)
+                else -> SaveDiagnosticsPage(document)
             }
         }
     }
@@ -1390,7 +1364,7 @@ private fun statAttributeLabel(category:String,type:String,index:Int):String {
 
 
 @Composable
-private fun InfluenceActionsPage(doc: Mm4SaveCodec.Document, onResetCooldown: (Int) -> Unit) {
+private fun InfluenceActionsPage(doc: Mm4SaveCodec.Document, onResetCooldown: (Int) -> Unit, onEdit: (String, List<String>, JsonElement) -> Unit) {
     val actions = remember(doc.data) { influenceActionRecords(doc.data) }
     val influence = doc.data.getAsJsonObject("influenceManager")?.get("m_Influence")
     val readyCount = actions.count { it.cooldown <= 0 }
@@ -1398,20 +1372,18 @@ private fun InfluenceActionsPage(doc: Mm4SaveCodec.Document, onResetCooldown: (I
     LazyColumn(contentPadding = PaddingValues(14.dp), verticalArrangement = Arrangement.spacedBy(9.dp)) {
         item {
             GlassCard(Modifier.fillMaxWidth()) {
-                Text("INFLUENCE ACTION EDITOR", color = Gold, fontWeight = FontWeight.Black, fontSize = 11.sp)
-                Text("Kelola kesiapan aksi influence", fontSize = 21.sp, fontWeight = FontWeight.Black)
-                Text("Status aksi yang tercatat dalam career, termasuk waktu tunggu penggunaannya.", color = Muted, fontSize = 11.sp)
-                Spacer(Modifier.height(8.dp))
-                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Column(Modifier.weight(1f)) {
-                        Text("SALDO INFLUENCE", color = Muted, fontSize = 9.sp)
-                        Text(influence?.let { preview(it) } ?: "—", color = Gold, fontSize = 22.sp, fontWeight = FontWeight.Black)
-                    }
-                    Column(Modifier.weight(1f)) {
-                        Text("AKSI SIAP", color = Muted, fontSize = 9.sp)
-                        Text("$readyCount / ${actions.size}", fontSize = 22.sp, fontWeight = FontWeight.Black)
-                    }
-                }
+                Text("INFLUENCE BALANCE", color = Gold, fontWeight = FontWeight.Black, fontSize = 11.sp)
+                Text(influence?.let { preview(it) } ?: "—", color = Gold, fontSize = 26.sp, fontWeight = FontWeight.Black)
+                if (influence?.isJsonPrimitive == true && influence.asJsonPrimitive.isNumber) {
+                    Button(onClick = { onEdit("Game Data", listOf("influenceManager", "m_Influence"), influence) }, modifier = Modifier.fillMaxWidth(), colors = ButtonDefaults.buttonColors(containerColor = Red)) { Text("EDIT SALDO INFLUENCE") }
+                } else Text("Saldo influence tidak tersedia pada save ini.", color = Muted, fontSize = 10.sp)
+            }
+        }
+        item {
+            GlassCard(Modifier.fillMaxWidth()) {
+                Text("INFLUENCE ACTIONS", color = Gold, fontWeight = FontWeight.Black, fontSize = 11.sp)
+                Text("Aksi siap", color = Muted, fontSize = 9.sp)
+                Text("$readyCount / " + actions.size, fontSize = 22.sp, fontWeight = FontWeight.Black)
             }
         }
         item { Text("DAFTAR AKSI", color = Gold, fontWeight = FontWeight.Bold, fontSize = 10.sp) }
@@ -2371,49 +2343,6 @@ internal fun moveDriverToTeam(data:JsonObject,driverId:String,targetTeamId:Strin
     return oldTeamId!=targetTeamId
 }
 
-internal fun swapTeamsBetweenDivisions(data:JsonObject,teamA:String,teamB:String):Boolean {
-    if(teamA==teamB) return false
-    val objects=collectObjectsWithId(data).mapNotNull { (_,obj) -> obj.get("\$id")?.asString?.let { it to obj } }.toMap()
-    val teamAObject=objects[teamA] ?: return false
-    val teamBObject=objects[teamB] ?: return false
-    val teamAId=teamAObject.get("m_TeamID")?.takeIf { it.isJsonPrimitive && it.asJsonPrimitive.isNumber }?.asInt ?: return false
-    val teamBId=teamBObject.get("m_TeamID")?.takeIf { it.isJsonPrimitive && it.asJsonPrimitive.isNumber }?.asInt ?: return false
-    if(teamAId==teamBId) return false
-    val championshipRefs=data.getAsJsonObject("championshipManager")?.getAsJsonArray("championships") ?: return false
-    val championships=championshipRefs.mapNotNull { ref ->
-        val id=ref.takeIf { it.isJsonObject }?.asJsonObject?.get("\$ref")?.asString ?: return@mapNotNull null
-        objects[id]
-    }
-    data class Slot(val championship:JsonObject,val index:Int)
-    fun findSlot(teamId:Int):Slot? {
-        val matches=championships.flatMap { championship ->
-            val ids=championship.get("m_TeamIDs")?.takeIf { it.isJsonArray }?.asJsonArray ?: return@flatMap emptyList()
-            ids.mapIndexedNotNull { index,value ->
-                if(value.isJsonPrimitive && value.asJsonPrimitive.isNumber && value.asInt==teamId) Slot(championship,index) else null
-            }
-        }
-        return matches.singleOrNull()
-    }
-    val slotA=findSlot(teamAId) ?: return false
-    val slotB=findSlot(teamBId) ?: return false
-    if(slotA.championship===slotB.championship) return false
-    val teamAChamp=teamAObject.get("m_Championship")?.takeIf { it.isJsonObject }?.asJsonObject ?: return false
-    val teamBChamp=teamBObject.get("m_Championship")?.takeIf { it.isJsonObject }?.asJsonObject ?: return false
-    val champAId=slotA.championship.get("\$id")?.asString ?: return false
-    val champBId=slotB.championship.get("\$id")?.asString ?: return false
-    val oldA=teamAChamp.get("\$ref")?.asString ?: return false
-    val oldB=teamBChamp.get("\$ref")?.asString ?: return false
-    if(oldA!=champAId || oldB!=champBId) return false
-    val idsA=slotA.championship.getAsJsonArray("m_TeamIDs")
-    val idsB=slotB.championship.getAsJsonArray("m_TeamIDs")
-    idsA.set(slotA.index,com.google.gson.JsonPrimitive(teamBId))
-    idsB.set(slotB.index,com.google.gson.JsonPrimitive(teamAId))
-    teamAChamp.addProperty("\$ref",champBId)
-    teamBChamp.addProperty("\$ref",champAId)
-    return true
-}
-
-
 private fun championshipEntityById(data:JsonObject, championshipId:Int):JsonObject? {
     val all=collectObjectsWithId(data).associateBy { it.second.get("\$id")?.asString }
     val refs=data.getAsJsonObject("championshipManager")?.getAsJsonArray("championships") ?: return null
@@ -2422,24 +2351,12 @@ private fun championshipEntityById(data:JsonObject, championshipId:Int):JsonObje
         all[id]?.second?.takeIf { it.get("m_ID")?.asInt==championshipId }
     }
 }
-
 internal fun careerDivisionLabel(championshipId:Int):String = when(championshipId) {
     0 -> "World Motorsport"
     1 -> "Asia Pacific Super Cup"
     2 -> "European Racing"
     3 -> "Open Wheel Sprint"
     else -> "Divisi $championshipId"
-}
-
-private fun divisionTeamIds(data:JsonObject,divisionId:Int):List<String> {
-    val championship=championshipEntityById(data,divisionId) ?: return emptyList()
-    val ids=championship.getAsJsonArray("m_TeamIDs") ?: return emptyList()
-    val teamObjects=collectObjectsWithId(data).map { it.second }
-    return ids.mapNotNull { teamId ->
-        val numericId=teamId.takeIf { it.isJsonPrimitive && it.asJsonPrimitive.isNumber }?.asInt ?: return@mapNotNull null
-        teamObjects.firstOrNull { it.get("m_TeamID")?.takeIf { v -> v.isJsonPrimitive && v.asJsonPrimitive.isNumber }?.asInt==numericId }
-            ?.get("\$id")?.asString
-    }
 }
 
 private fun resolveRosterDriver(slot:JsonObject,objects:Map<String,JsonObject>):JsonObject? {
@@ -2540,10 +2457,7 @@ internal fun applyOfficialF1Preset2026(data:JsonObject,templateData:JsonObject):
     if(teamPlan.size!=40 || driverPlan.size!=80) return false
 
     // All structural validation is complete before the first mutation.
-    teamPlan.forEach { (targetTeam,sourceTeam,_) ->
-        targetTeam.addProperty("name",sourceTeam.get("name").asString)
-        targetTeam.addProperty("shortName",sourceTeam.get("shortName").asString)
-    }
+    // Preserve active career team names and short names exactly as stored.
     val preservedDriverFields=setOf("contract","careerHistory","id","\$id","\$version")
     driverPlan.forEach { (targetDriver,sourceDriver) ->
         val targetId=targetDriver.get("\$id").asString
@@ -2715,10 +2629,6 @@ private fun applyGodModeAction(current:Mm4SaveCodec.Document,action:String,templ
         action=="official_f1_2026" -> {
             if(templateData==null || !applyOfficialF1Preset2026(data,templateData)) return null
         }
-        action.startsWith("swap_teams|") -> {
-            val parts=action.split("|")
-            if(parts.size!=3 || !swapTeamsBetweenDivisions(data,parts[1],parts[2])) return null
-        }
         action.startsWith("move_driver|") -> {
             val parts=action.split("|")
             if(parts.size!=3 || !moveDriverToTeam(data,parts[1],parts[2])) return null
@@ -2742,7 +2652,6 @@ private fun GodModePage(doc:Mm4SaveCodec.Document,onAction:(String)->Unit,onEdit
         }
     } ?: 0
     val balance=doc.data.getAsJsonObject("financeManager")?.get("m_Balance")?.asLong ?: 0L
-    val influence=doc.data.getAsJsonObject("influenceManager")?.get("m_Influence")
     val hq=doc.data.getAsJsonObject("headquarters")?.getAsJsonArray("m_Upgrades")
     val unlocked=hq?.count { row ->
         row.isJsonObject && row.asJsonObject.get("Value")?.takeIf { it.isJsonObject }
@@ -2751,12 +2660,10 @@ private fun GodModePage(doc:Mm4SaveCodec.Document,onAction:(String)->Unit,onEdit
     val research=doc.data.getAsJsonObject("researchManager")
     val teams=remember(doc.data) { teamOptions(doc.data) }
     val drivers=remember(doc.data) { driverOptions(doc.data) }
-    var teamA by remember { mutableStateOf<String?>(null) }
-    var teamB by remember { mutableStateOf<String?>(null) }
     var driverId by remember { mutableStateOf<String?>(null) }
     var targetTeam by remember { mutableStateOf<String?>(null) }
     var picker by remember { mutableStateOf<String?>(null) }
-    val pickerOptions=when(picker) { "teamA","teamB","targetTeam" -> teams; "driver" -> drivers; else -> emptyList() }
+    val pickerOptions=when(picker) { "targetTeam" -> teams; "driver" -> drivers; else -> emptyList() }
     LazyColumn(contentPadding=PaddingValues(14.dp),verticalArrangement=Arrangement.spacedBy(10.dp)) {
         item {
             GlassCard(Modifier.fillMaxWidth()) {
@@ -2766,10 +2673,10 @@ private fun GodModePage(doc:Mm4SaveCodec.Document,onAction:(String)->Unit,onEdit
         }
         item {
             GlassCard(Modifier.fillMaxWidth()) {
-                Text("F1–F4 SAVE TEMPLATE",color=Gold,fontWeight=FontWeight.Bold)
-                Text("Pilih save template F1–F4 (contoh: SlotTwo.msv). Editor membaca nama tim, roster, profil, portrait, kewarganegaraan, atribut dan potential pembalap langsung dari file tersebut.",color=Muted,fontSize=10.sp)
-                Text("Data tim dan 80 pembalap diterapkan berdasarkan urutan divisi, tim, dan slot roster. ID internal, kontrak, dan riwayat career dari save tujuan tetap dijaga.",color=Gold,fontSize=10.sp)
-                Button(onClick={onAction("official_f1_2026")},modifier=Modifier.fillMaxWidth(),colors=ButtonDefaults.buttonColors(containerColor=Red)) { Text("PILIH & TERAPKAN SAVE TEMPLATE F1–F4") }
+                Text("F1–F4 DRIVER TEMPLATE",color=Gold,fontWeight=FontWeight.Bold)
+                Text("Mengimpor profil, portrait, nationality, atribut, dan potential pembalap dari save template. Nama tim pada career aktif tidak disentuh.",color=Muted,fontSize=10.sp)
+                
+                Button(onClick={onAction("official_f1_2026")},modifier=Modifier.fillMaxWidth(),colors=ButtonDefaults.buttonColors(containerColor=Red)) { Text("PILIH & TERAPKAN TEMPLATE DRIVER") }
             }
         }
         item {
@@ -2780,15 +2687,6 @@ private fun GodModePage(doc:Mm4SaveCodec.Document,onAction:(String)->Unit,onEdit
                 InfoLine("ID 1",careerDivisionLabel(1))
                 InfoLine("ID 2",careerDivisionLabel(2))
                 InfoLine("ID 3",careerDivisionLabel(3))
-            }
-        }
-        item {
-            GlassCard(Modifier.fillMaxWidth()) {
-                Text("TEAM SWAP • PINDAH DIVISI",color=Gold,fontWeight=FontWeight.Bold)
-                Text("Pilih dua tim untuk menukar slot divisi mereka. Fitur hanya aktif jika save menyimpan daftar tim di championship manager.",color=Muted,fontSize=10.sp)
-                Button(onClick={picker="teamA"},modifier=Modifier.fillMaxWidth()) { Text(teams.firstOrNull { it.id==teamA }?.name ?: "PILIH TIM PERTAMA") }
-                Button(onClick={picker="teamB"},modifier=Modifier.fillMaxWidth()) { Text(teams.firstOrNull { it.id==teamB }?.name ?: "PILIH TIM KEDUA") }
-                Button(onClick={if(teamA!=null && teamB!=null) onAction("swap_teams|$teamA|$teamB")},enabled=teamA!=null && teamB!=null && teamA!=teamB,modifier=Modifier.fillMaxWidth(),colors=ButtonDefaults.buttonColors(containerColor=Blue)) { Text("TUKAR DIVISI TIM") }
             }
         }
         item {
@@ -2805,20 +2703,6 @@ private fun GodModePage(doc:Mm4SaveCodec.Document,onAction:(String)->Unit,onEdit
                 Text("KEUANGAN TANPA BATAS",fontWeight=FontWeight.Bold)
                 Text("Saldo sekarang ${formatMoney(balance)}",color=Muted,fontSize=11.sp)
                 Button(onClick={onAction("max_balance")},modifier=Modifier.fillMaxWidth(),colors=ButtonDefaults.buttonColors(containerColor=Red)) { Text("SET SALDO £2 MILIAR") }
-            }
-        }
-        item {
-            GlassCard(Modifier.fillMaxWidth()) {
-                Text("INFLUENCE BALANCE",fontWeight=FontWeight.Bold)
-                Text("Saldo influence saat ini: ${influence?.let { preview(it) } ?: "—"}",color=Muted,fontSize=11.sp)
-                if(influence?.isJsonPrimitive==true && influence.asJsonPrimitive.isNumber) {
-                    OutlinedButton(
-                        onClick={onEdit("Game Data",listOf("influenceManager","m_Influence"),influence)},
-                        modifier=Modifier.fillMaxWidth()
-                    ) { Text("EDIT INFLUENCE") }
-                } else {
-                    Text("Field influenceManager.m_Influence tidak ditemukan pada save ini.",color=Red,fontSize=10.sp)
-                }
             }
         }
         item {
@@ -2861,12 +2745,12 @@ private fun GodModePage(doc:Mm4SaveCodec.Document,onAction:(String)->Unit,onEdit
     }
     if(picker!=null) AlertDialog(
         onDismissRequest={picker=null},
-        title={Text(when(picker) { "teamA"->"Pilih tim pertama"; "teamB"->"Pilih tim kedua"; "driver"->"Pilih pembalap"; else->"Pilih tim tujuan" })},
+        title={Text(if (picker == "driver") "Pilih pembalap" else "Pilih tim tujuan")},
         text={
             LazyColumn(Modifier.heightIn(max=420.dp)) {
                 items(pickerOptions,key={it.id}) { option ->
                     TextButton(onClick={
-                        when(picker) { "teamA"->teamA=option.id; "teamB"->teamB=option.id; "driver"->driverId=option.id; "targetTeam"->targetTeam=option.id }
+                        when(picker) { "driver"->driverId=option.id; "targetTeam"->targetTeam=option.id }
                         picker=null
                     },modifier=Modifier.fillMaxWidth()) {
                         Column(Modifier.fillMaxWidth()) {
@@ -2898,10 +2782,10 @@ private fun GlassCard(modifier: Modifier = Modifier, content: @Composable Column
             alpha = entrance
         }.animateContentSize(animationSpec = tween(260)).clip(shape)
             .border(1.dp, Color.White.copy(alpha = edgeAlpha), shape)
-            .background(Brush.linearGradient(listOf(Color(0xE02A3039), Color(0xC91A212A), Color(0xE0141A22))))
+            .background(Brush.linearGradient(listOf(Color(0xB84A3A58), Color(0x8C252E3B), Color(0xA83C2736))))
             .padding(1.dp)
             .clip(RoundedCornerShape(17.dp))
-            .background(Brush.linearGradient(listOf(Color(0xD51B222B), Color(0xC9151B23), Color(0xE010151C)))),
+            .background(Brush.linearGradient(listOf(Color(0xB5222935), Color(0x8E1A2431), Color(0xA82A202B)))),
     ) {
         Box(Modifier.padding(start = 14.dp, top = 12.dp).width(28.dp).height(2.dp).clip(RoundedCornerShape(2.dp)).background(Red))
         Column(Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 11.dp), content = content)
@@ -3239,7 +3123,6 @@ private fun EditValueDialog(target: EditTarget, onClose: () -> Unit, onSave: (Js
     val currentNumber = if (isNumber) runCatching { primitive.asDouble }.getOrDefault(0.0) else 0.0
     val isAttribute = target.path.lastOrNull() in setOf("m_Stat", "m_Potential")
     val attributeValue = currentNumber.toInt().coerceIn(0, 20)
-    val numberStep = when { kotlin.math.abs(currentNumber) >= 1000000 -> 100000.0; kotlin.math.abs(currentNumber) >= 10000 -> 1000.0; kotlin.math.abs(currentNumber) >= 100 -> 10.0; else -> 1.0 }
     val meaning = when { attributeValue <= 4 -> "Sangat rendah"; attributeValue <= 8 -> "Rendah"; attributeValue <= 12 -> "Menengah"; attributeValue <= 16 -> "Tinggi"; else -> "Elite" }
     var validationMessage by remember(target) { mutableStateOf<String?>(null) }
     AlertDialog(
@@ -3254,51 +3137,19 @@ private fun EditValueDialog(target: EditTarget, onClose: () -> Unit, onSave: (Js
                         Switch(checked = value.toBoolean(), onCheckedChange = { value = it.toString() })
                         Text("Aktif", Modifier.padding(start = 8.dp))
                     }
-                    isNumber && isAttribute -> {
-                        Text(attributeValue.toString() + " / 20 • " + meaning, color = Gold, fontWeight = FontWeight.Bold)
-                        Slider(
-                            value = attributeValue.toFloat(),
-                            onValueChange = { value = it.toInt().coerceIn(0,20).toString() },
-                            valueRange = 0f..20f,
-                            steps = 19
-                        )
-                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                            Text("0 • Minimum", color = Muted, fontSize = 9.sp)
-                            Text("20 • Maksimum", color = Muted, fontSize = 9.sp)
-                        }
-                        Text("Skala atribut 0–20. Pilih nilai dengan menggeser slider.", color = Muted, fontSize = 10.sp)
-                    }
-                    isNumber && target.path==listOf("influenceManager","m_Influence") -> {
-                        OutlinedTextField(value=value,onValueChange={ typed -> if(typed.isEmpty()) value="0" else if(typed.all { it.isDigit() }) value=typed },modifier=Modifier.fillMaxWidth(),label={ Text("Influence") },supportingText={ Text("Masukkan 0 sampai 2.000.000.000") },singleLine=true)
-                    }
-                    isNumber && target.path==listOf("financeManager","m_Balance") -> {
-                        OutlinedTextField(
-                            value=value,
-                            onValueChange={ typed -> if(typed.isEmpty()) value="0" else if(typed.all { it.isDigit() }) value=typed },
-                            modifier=Modifier.fillMaxWidth(),
-                            label={ Text("Saldo (£)") },
-                            supportingText={ Text("Masukkan 0 sampai £2.000.000.000") },
-                            singleLine=true
-                        )
-                    }
-                    isNumber && target.minValue != null && target.maxValue != null -> {
-                        val min = target.minValue.toFloat()
-                        val max = target.maxValue.toFloat()
-                        val selected = currentNumber.toFloat().coerceIn(min,max)
-                        Text(displayInteger(value) + " • batas " + target.minValue + "–" + target.maxValue, fontSize = 18.sp, fontWeight = FontWeight.Bold, color = Gold)
-                        Slider(value=selected,onValueChange={value=it.toInt().coerceIn(min.toInt(),max.toInt()).toString()},valueRange=min..max,steps=(max-min-1f).toInt().coerceAtLeast(0))
-                        Text("Nilai dibatasi sesuai rentang yang dikenali dari struktur save.",color=Muted,fontSize=10.sp)
-                    }
                     isNumber -> {
-                        Text(displayInteger(value), fontSize = 24.sp, fontWeight = FontWeight.Bold, color = Gold)
-                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                            OutlinedButton(onClick = { value = stepNumericValue(value, numberStep, -1) ?: value }) { Text("−") }
-                            Text("Langkah " + numberStep.toLong(), color = Muted, fontSize = 10.sp)
-                            OutlinedButton(onClick = { value = stepNumericValue(value, numberStep, 1) ?: value }) { Text("+") }
-                        }
-                        Text("Gunakan tombol untuk memilih nilai, tanpa mengetik angka manual.", color = Muted, fontSize = 10.sp)
+                        if (isAttribute) Text("BATAS ATRIBUT 0–20", color = Gold, fontWeight = FontWeight.Bold, fontSize = 11.sp)
+                        OutlinedTextField(
+                            value = value,
+                            onValueChange = { typed -> if (typed.all { it.isDigit() || it == '-' || it == '.' }) value = typed },
+                            modifier = Modifier.fillMaxWidth(),
+                            label = { Text(if (isAttribute) "Nilai atribut" else "Masukkan angka") },
+                            supportingText = { Text(if (isAttribute) "Masukkan angka bulat 0 sampai 20." else "Input angka manual. Batas save divalidasi otomatis.") },
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                            singleLine = true
+                        )
                     }
-                    else -> OutlinedTextField(value = value, onValueChange = { value = it }, modifier = Modifier.fillMaxWidth(), label = { Text(if(target.path.lastOrNull()=="dateOfBirth") "Tanggal lahir (YYYY-MM-DD)" else "Text") }, singleLine = true)
+                                        else -> OutlinedTextField(value = value, onValueChange = { value = it }, modifier = Modifier.fillMaxWidth(), label = { Text(if(target.path.lastOrNull()=="dateOfBirth") "Tanggal lahir (YYYY-MM-DD)" else "Text") }, singleLine = true)
                 }
                 validationMessage?.let { Text(it,color=Red,fontSize=10.sp) }
             }
@@ -3308,11 +3159,13 @@ private fun EditValueDialog(target: EditTarget, onClose: () -> Unit, onSave: (Js
                 val result = when {
                     isBoolean -> com.google.gson.JsonPrimitive(value.toBoolean())
                     isNumber -> {
-                        val number=java.math.BigDecimal(value)
-                        val min=target.minValue?.let { java.math.BigDecimal(it) }
-                        val max=target.maxValue?.let { java.math.BigDecimal(it) }
+                        if (value.isBlank() || value == "-" || value == ".") { validationMessage="Masukkan angka yang valid."; return@Button }
+                        val number=runCatching { java.math.BigDecimal(value) }.getOrElse { validationMessage="Format angka tidak valid."; return@Button }
+                        val min=(if (isAttribute) "0" else target.minValue)?.let { java.math.BigDecimal(it) }
+                        val max=(if (isAttribute) "20" else target.maxValue)?.let { java.math.BigDecimal(it) }
+                        if (isAttribute && number.stripTrailingZeros().scale() > 0) { validationMessage="Atribut harus berupa angka bulat dari 0 sampai 20."; return@Button }
                         if((min!=null && number<min) || (max!=null && number>max)) {
-                            validationMessage="Nilai harus berada di antara " + (target.minValue ?: "—") + " dan " + (target.maxValue ?: "—")
+                            validationMessage="Nilai harus berada di antara " + (if (isAttribute) "0" else target.minValue ?: "—") + " dan " + (if (isAttribute) "20" else target.maxValue ?: "—")
                             return@Button
                         }
                         com.google.gson.JsonPrimitive(number)

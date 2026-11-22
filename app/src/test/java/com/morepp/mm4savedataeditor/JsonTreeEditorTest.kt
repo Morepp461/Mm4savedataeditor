@@ -208,7 +208,7 @@ class JsonTreeEditorTest {
 
 
     @Test
-    fun f1F4TemplateCopiesAllTeamAndDriverProfileDataButKeepsCareerContracts() {
+    fun f1F4TemplateImportsDriverProfilesAndPreservesCareerTeamIdentity() {
         fun fixture():JsonObject {
             val championshipRefs=JsonArray()
             val entityRows=JsonArray()
@@ -279,10 +279,10 @@ class JsonTreeEditorTest {
 
         assertTrue(applyOfficialF1Preset2026(target,template))
         val byId=collectObjectsWithId(target).associate { it.second.get("\$id").asString to it.second }
-        assertEquals("Template Team 1",byId["team-1"]!!.get("name").asString)
-        assertEquals("T11",byId["team-11"]!!.get("shortName").asString)
-        assertEquals("Template Team 21",byId["team-21"]!!.get("name").asString)
-        assertEquals("Template Team 31",byId["team-31"]!!.get("name").asString)
+        assertEquals("Original Team 1",byId["team-1"]!!.get("name").asString)
+        assertEquals("Original",byId["team-11"]!!.get("shortName").asString)
+        assertEquals("Original Team 21",byId["team-21"]!!.get("name").asString)
+        assertEquals("Original Team 31",byId["team-31"]!!.get("name").asString)
         assertEquals("Template Driver 1-0",byId["driver-1-0"]!!.getAsJsonObject("m_PersonDetails").get("name").asString)
         assertEquals(91,byId["driver-1-0"]!!.getAsJsonObject("m_PersonDetails").getAsJsonObject("nationality").get("mNationalityID").asInt)
         assertEquals(101,byId["driver-10-1"]!!.getAsJsonObject("m_PersonDetails").getAsJsonObject("nationality").get("mNationalityID").asInt)
