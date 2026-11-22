@@ -11,7 +11,8 @@ internal data class ChampionshipTeamStanding(
     val podiums: Int,
     val races: Int,
     val dnfs: Int,
-    val path: List<String>
+    val path: List<String>,
+    val pointPaths: List<List<String>>
 )
 
 internal data class ChampionshipSummary(
@@ -77,7 +78,10 @@ internal fun championshipSummaries(data: JsonObject): List<ChampionshipSummary> 
                     podiums = item.get("podiums")?.takeIf { it.isJsonPrimitive && it.asJsonPrimitive.isNumber }?.asInt ?: 0,
                     races = item.get("races")?.takeIf { it.isJsonPrimitive && it.asJsonPrimitive.isNumber }?.asInt ?: 0,
                     dnfs = item.get("DNFs")?.takeIf { it.isJsonPrimitive && it.asJsonPrimitive.isNumber }?.asInt ?: 0,
-                    path = championshipPath + "standings" + "m_Teams" + "[$rowIndex]"
+                    path = championshipPath + "standings" + "m_Teams" + "[$rowIndex]",
+                    pointPaths = item.get("m_Points")?.takeIf { it.isJsonArray }?.asJsonArray
+                        ?.mapIndexed { scoreIndex, _ -> championshipPath + "standings" + "m_Teams" + "[$rowIndex]" + "m_Points" + "[$scoreIndex]" }
+                        .orEmpty()
                 )
             }.orEmpty().sortedBy { it.position }
 
