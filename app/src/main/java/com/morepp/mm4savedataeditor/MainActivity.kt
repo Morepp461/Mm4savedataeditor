@@ -3144,11 +3144,11 @@ private fun EditValueDialog(target: EditTarget, onClose: () -> Unit, onSave: (Js
                         if (isAttribute) Text("BATAS ATRIBUT 0–20", color = Gold, fontWeight = FontWeight.Bold, fontSize = 11.sp)
                         OutlinedTextField(
                             value = value,
-                            onValueChange = { typed -> if (typed.isEmpty() || typed.all { it.isDigit() }) value = typed },
+                            onValueChange = { typed -> if (typed.all { it.isDigit() || it == '-' || it == '.' }) value = typed },
                             modifier = Modifier.fillMaxWidth(),
                             label = { Text(if (isAttribute) "Nilai atribut" else "Masukkan angka") },
                             supportingText = { Text(if (isAttribute) "Masukkan angka bulat 0 sampai 20." else "Input angka manual. Batas save divalidasi otomatis.") },
-                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                             singleLine = true
                         )
                     }
@@ -3162,12 +3162,13 @@ private fun EditValueDialog(target: EditTarget, onClose: () -> Unit, onSave: (Js
                 val result = when {
                     isBoolean -> com.google.gson.JsonPrimitive(value.toBoolean())
                     isNumber -> {
-                        val number=java.math.BigDecimal(value)
+                        if (value.isBlank() || value == "-" || value == ".") { validationMessage="Masukkan angka yang valid."; return@Button }
+                        val number=runCatching { java.math.BigDecimal(value) }.getOrElse { validationMessage="Format angka tidak valid."; return@Button }
                         val min=(if (isAttribute) "0" else target.minValue)?.let { java.math.BigDecimal(it) }
                         val max=(if (isAttribute) "20" else target.maxValue)?.let { java.math.BigDecimal(it) }
                         if (isAttribute && number.stripTrailingZeros().scale() > 0) { validationMessage="Atribut harus berupa angka bulat dari 0 sampai 20."; return@Button }
                         if((min!=null && number<min) || (max!=null && number>max)) {
-                            validationMessage="Nilai harus berada di antara " + (target.minValue ?: "—") + " dan " + (target.maxValue ?: "—")
+                            validationMessage="Nilai harus berada di antara " + (if (isAttribute) "0" else target.minValue ?: "—") + " dan " + (if (isAttribute) "20" else target.maxValue ?: "—")
                             return@Button
                         }
                         com.google.gson.JsonPrimitive(number)
