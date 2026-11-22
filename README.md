@@ -25,7 +25,8 @@ Aplikasi Android untuk mengedit file career **Motorsport Manager 4 (MM4)**. Apli
 - Ada **Undo dan Redo** untuk membatalkan atau mengulangi sampai 50 perubahan field terakhir.
 - Aplikasi menjaga ketelitian angka desimal dan bilangan bulat yang besar saat diedit.
 - Perpindahan antar-menu, kartu, dan intro aplikasi memakai animasi.
-- Intro menampilkan logo aplikasi, watermark Morepp di bagian akhir, dan panduan singkat saat pertama kali dibuka.\n- Batas atribut pembalap/staf dan batas HQ yang dapat dihitung dari node upgrade di save divalidasi sebelum disimpan.
+- Intro menampilkan logo aplikasi, watermark Morepp di bagian akhir, dan panduan singkat saat pertama kali dibuka.
+- Batas atribut pembalap/staf dan batas HQ yang dapat dihitung dari node upgrade di save divalidasi sebelum disimpan.
 - Watermark aplikasi: **Created by : Morepp**.
 - Antarmuka menggunakan tema **F1 Motorsport Glass Cockpit**: carbon black, racing red, champagne gold, titanium grey, panel glass berlapis, garis aksen balap, navigasi chips, dan animasi transisi.
 - Tampilan dioptimalkan untuk layar ponsel Android dengan kartu responsif, ringkasan status career, dan aksi export yang mudah dijangkau.
