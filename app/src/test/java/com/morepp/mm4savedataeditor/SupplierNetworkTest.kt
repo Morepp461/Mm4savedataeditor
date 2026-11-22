@@ -1,54 +1,69 @@
 package com.morepp.mm4savedataeditor
 
+import com.google.gson.JsonArray
 import com.google.gson.JsonObject
-import com.google.gson.JsonParser
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class SupplierNetworkTest {
-    private fun fixture(): JsonObject = JsonParser.parseString(
-        """
-        {
-          "supplierNetworkManager": {
-            "m_NodeDictionary": [
-              {"Key": 0, "Value": {"\$ref": "10"}}
-            ],
-            "m_Companies": [{"\$ref": "12"}],
-            "m_Manufacturers": [{"\$ref": "11"}]
-          },
-          "entityManager": {
-            "m_Entities": [
-              {
-                "\$id": "10",
-                "\$type": "SupplierNetworkSupplier",
-                "m_ID": 0,
-                "m_IsOwned": true,
-                "m_HasOwnedBeenRevealed": false,
-                "m_Nodes": [{"\$ref": "11"}],
-                "m_NodeConnections": [
-                  {"nodeID": 4, "progress": 25, "progressTarget": 50}
-                ]
-              },
-              {
-                "\$id": "11",
-                "\$type": "SupplierNetworkManufacturer",
-                "m_ID": 3,
-                "m_IsOwned": false,
-                "m_HasOwnedBeenRevealed": true,
-                "m_Nodes": []
-              },
-              {
-                "\$id": "12",
-                "\$type": "SupplierNetworkCompany",
-                "m_ID": 8
-              }
-            ]
-          }
+    private fun fixture(): JsonObject {
+        val data = JsonObject()
+        val manager = JsonObject()
+        val dictionary = JsonArray()
+        dictionary.add(JsonObject().apply {
+            addProperty("Key", 0)
+            add("Value", JsonObject().apply { addProperty("\$ref", "10") })
+        })
+        manager.add("m_NodeDictionary", dictionary)
+        manager.add("m_Companies", JsonArray().apply {
+            add(JsonObject().apply { addProperty("\$ref", "12") })
+        })
+        manager.add("m_Manufacturers", JsonArray().apply {
+            add(JsonObject().apply { addProperty("\$ref", "11") })
+        })
+        data.add("supplierNetworkManager", manager)
+
+        val supplier = JsonObject().apply {
+            addProperty("\$id", "10")
+            addProperty("\$type", "SupplierNetworkSupplier")
+            addProperty("m_ID", 0)
+            addProperty("m_IsOwned", true)
+            addProperty("m_HasOwnedBeenRevealed", false)
+            add("m_Nodes", JsonArray().apply {
+                add(JsonObject().apply { addProperty("\$ref", "11") })
+            })
+            add("m_NodeConnections", JsonArray().apply {
+                add(JsonObject().apply {
+                    addProperty("nodeID", 4)
+                    addProperty("progress", 25)
+                    addProperty("progressTarget", 50)
+                })
+            })
         }
-        """.trimIndent()
-    ).asJsonObject
+        val manufacturer = JsonObject().apply {
+            addProperty("\$id", "11")
+            addProperty("\$type", "SupplierNetworkManufacturer")
+            addProperty("m_ID", 3)
+            addProperty("m_IsOwned", false)
+            addProperty("m_HasOwnedBeenRevealed", true)
+            add("m_Nodes", JsonArray())
+        }
+        val company = JsonObject().apply {
+            addProperty("\$id", "12")
+            addProperty("\$type", "SupplierNetworkCompany")
+            addProperty("m_ID", 8)
+        }
+        data.add("entityManager", JsonObject().apply {
+            add("m_Entities", JsonArray().apply {
+                add(supplier)
+                add(manufacturer)
+                add(company)
+            })
+        })
+        return data
+    }
 
     @Test
     fun resolvesReferencesAndBuildsFriendlyDisplayData() {
@@ -81,7 +96,10 @@ class SupplierNetworkTest {
     fun malformedOrUnresolvedEntriesAreSkippedWithoutCrashing() {
         val data = fixture()
         data.getAsJsonObject("supplierNetworkManager").getAsJsonArray("m_NodeDictionary")
-            .add(JsonParser.parseString("""{"Key": 1, "Value": {"\$ref": "missing"}}"""))
+            .add(JsonObject().apply {
+                addProperty("Key", 1)
+                add("Value", JsonObject().apply { addProperty("\$ref", "missing") })
+            })
         assertEquals(1, supplierNetworkNodes(data).size)
     }
 }
