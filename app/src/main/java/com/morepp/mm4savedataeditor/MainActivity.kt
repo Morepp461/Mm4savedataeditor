@@ -1722,7 +1722,16 @@ private fun DriverAnalyticsPage(doc: Mm4SaveCodec.Document) {
                 Column(verticalArrangement = Arrangement.spacedBy(7.dp)) {
                     Text(selected.teamName, color = Gold, fontWeight = FontWeight.Bold)
                     InfoLine("Usia", selected.age?.let { it.toString() + " tahun" } ?: "Tidak tersedia")
-                    InfoLine("Riwayat karier", selected.careerSeasons.toString() + " catatan musim")
+                    InfoLine("Riwayat karier", selected.careerSeasons.toString() + " musim")
+                    selected.careerHistory.take(10).forEach { season ->
+                        Column(verticalArrangement = Arrangement.spacedBy(2.dp), modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
+                            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                                Text(season.year.toString() + " • " + season.teamName, color = Color.White, fontWeight = FontWeight.SemiBold, fontSize = 11.sp)
+                                Text(season.points.toString() + " poin", color = Gold, fontWeight = FontWeight.Bold, fontSize = 11.sp)
+                            }
+                            Text("Menang ${season.wins}  •  Podium ${season.podiums}  •  Balapan ${season.races}  •  DNF ${season.dnfs}", color = Muted, fontSize = 9.sp)
+                        }
+                    }
                     InfoLine("Trait", selected.traitCount.toString())
                     Divider(color = Color.White.copy(alpha = 0.15f))
                     Text("ATRIBUT & POTENSI", color = Gold, fontWeight = FontWeight.Bold)

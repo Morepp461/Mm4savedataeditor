@@ -5,6 +5,16 @@ import com.google.gson.JsonObject
 import java.time.LocalDate
 import java.time.Period
 
+internal data class DriverCareerSeason(
+    val year: Int,
+    val teamName: String,
+    val wins: Int,
+    val podiums: Int,
+    val races: Int,
+    val dnfs: Int,
+    val points: Int
+)
+
 internal data class DriverAnalyticsRecord(
     val recordKey: String,
     val driverId: Int,
@@ -12,6 +22,7 @@ internal data class DriverAnalyticsRecord(
     val teamName: String,
     val age: Int?,
     val careerSeasons: Int,
+    val careerHistory: List<DriverCareerSeason>,
     val traitCount: Int,
     val attributes: List<Int>,
     val potentials: List<Int>
@@ -64,8 +75,24 @@ internal fun driverAnalyticsRecords(data: JsonObject, careerDate: String?): List
             item.takeIf { it.isJsonObject }?.asJsonObject?.get("m_Potential")
                 ?.takeIf { it.isJsonPrimitive && it.asJsonPrimitive.isNumber }?.asInt
         }.orEmpty()
-        val career = driver.getAsJsonObject("careerHistory")?.get("m_Career")
-            ?.takeIf { it.isJsonArray }?.asJsonArray?.size() ?: 0
+        val careerRows = driver.getAsJsonObject("careerHistory")?.get("m_Career")
+            ?.takeIf { it.isJsonArray }?.asJsonArray
+        val careerHistory = careerRows?.mapNotNull { entry ->
+            if (!entry.isJsonObject) return@mapNotNull null
+            val row = entry.asJsonObject
+            val careerTeam = resolve(row.get("team"))
+            DriverCareerSeason(
+                year = row.get("year")?.takeIf { it.isJsonPrimitive && it.asJsonPrimitive.isNumber }?.asInt ?: 0,
+                teamName = careerTeam?.get("name")?.takeIf { it.isJsonPrimitive && it.asJsonPrimitive.isString }?.asString
+                    ?.takeIf { it.isNotBlank() } ?: "Tim tidak diketahui",
+                wins = row.get("wins")?.takeIf { it.isJsonPrimitive && it.asJsonPrimitive.isNumber }?.asInt ?: 0,
+                podiums = row.get("podiums")?.takeIf { it.isJsonPrimitive && it.asJsonPrimitive.isNumber }?.asInt ?: 0,
+                races = row.get("races")?.takeIf { it.isJsonPrimitive && it.asJsonPrimitive.isNumber }?.asInt ?: 0,
+                dnfs = row.get("DNFs")?.takeIf { it.isJsonPrimitive && it.asJsonPrimitive.isNumber }?.asInt ?: 0,
+                points = row.get("points")?.takeIf { it.isJsonPrimitive && it.asJsonPrimitive.isNumber }?.asInt ?: 0
+            )
+        }.orEmpty().sortedByDescending { it.year }
+        val career = careerHistory.size
         val traits = driver.getAsJsonObject("traits")?.get("m_Traits")
             ?.takeIf { it.isJsonArray }?.asJsonArray?.size() ?: 0
         val id = driver.get("m_DriverID")?.takeIf { it.isJsonPrimitive && it.asJsonPrimitive.isNumber }?.asInt
@@ -78,6 +105,7 @@ internal fun driverAnalyticsRecords(data: JsonObject, careerDate: String?): List
                 ?.takeIf { it.isNotBlank() } ?: "Belum bergabung dengan tim",
             age = age,
             careerSeasons = career,
+            careerHistory = careerHistory,
             traitCount = traits,
             attributes = attributes,
             potentials = potentials
