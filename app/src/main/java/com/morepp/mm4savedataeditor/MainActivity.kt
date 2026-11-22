@@ -2737,7 +2737,6 @@ private fun GodModePage(doc:Mm4SaveCodec.Document,onAction:(String)->Unit,onEdit
         }
     } ?: 0
     val balance=doc.data.getAsJsonObject("financeManager")?.get("m_Balance")?.asLong ?: 0L
-    val influence=doc.data.getAsJsonObject("influenceManager")?.get("m_Influence")
     val hq=doc.data.getAsJsonObject("headquarters")?.getAsJsonArray("m_Upgrades")
     val unlocked=hq?.count { row ->
         row.isJsonObject && row.asJsonObject.get("Value")?.takeIf { it.isJsonObject }
@@ -2746,12 +2745,10 @@ private fun GodModePage(doc:Mm4SaveCodec.Document,onAction:(String)->Unit,onEdit
     val research=doc.data.getAsJsonObject("researchManager")
     val teams=remember(doc.data) { teamOptions(doc.data) }
     val drivers=remember(doc.data) { driverOptions(doc.data) }
-    var teamA by remember { mutableStateOf<String?>(null) }
-    var teamB by remember { mutableStateOf<String?>(null) }
     var driverId by remember { mutableStateOf<String?>(null) }
     var targetTeam by remember { mutableStateOf<String?>(null) }
     var picker by remember { mutableStateOf<String?>(null) }
-    val pickerOptions=when(picker) { "teamA","teamB","targetTeam" -> teams; "driver" -> drivers; else -> emptyList() }
+    val pickerOptions=when(picker) { "targetTeam" -> teams; "driver" -> drivers; else -> emptyList() }
     LazyColumn(contentPadding=PaddingValues(14.dp),verticalArrangement=Arrangement.spacedBy(10.dp)) {
         item {
             GlassCard(Modifier.fillMaxWidth()) {
@@ -2779,15 +2776,6 @@ private fun GodModePage(doc:Mm4SaveCodec.Document,onAction:(String)->Unit,onEdit
         }
         item {
             GlassCard(Modifier.fillMaxWidth()) {
-                Text("TEAM SWAP • PINDAH DIVISI",color=Gold,fontWeight=FontWeight.Bold)
-                Text("Pilih dua tim untuk menukar slot divisi mereka. Fitur hanya aktif jika save menyimpan daftar tim di championship manager.",color=Muted,fontSize=10.sp)
-                Button(onClick={picker="teamA"},modifier=Modifier.fillMaxWidth()) { Text(teams.firstOrNull { it.id==teamA }?.name ?: "PILIH TIM PERTAMA") }
-                Button(onClick={picker="teamB"},modifier=Modifier.fillMaxWidth()) { Text(teams.firstOrNull { it.id==teamB }?.name ?: "PILIH TIM KEDUA") }
-                Button(onClick={if(teamA!=null && teamB!=null) onAction("swap_teams|$teamA|$teamB")},enabled=teamA!=null && teamB!=null && teamA!=teamB,modifier=Modifier.fillMaxWidth(),colors=ButtonDefaults.buttonColors(containerColor=Blue)) { Text("TUKAR DIVISI TIM") }
-            }
-        }
-        item {
-            GlassCard(Modifier.fillMaxWidth()) {
                 Text("MOVE DRIVER • PINDAH TIM",color=Gold,fontWeight=FontWeight.Bold)
                 Text("Memindahkan pembalap dengan memperbarui referensi tim pada kontrak. Roster tim ikut disinkronkan jika struktur save menyediakan daftar m_Drivers.",color=Muted,fontSize=10.sp)
                 Button(onClick={picker="driver"},modifier=Modifier.fillMaxWidth()) { Text(drivers.firstOrNull { it.id==driverId }?.name ?: "PILIH PEMBALAP") }
@@ -2800,20 +2788,6 @@ private fun GodModePage(doc:Mm4SaveCodec.Document,onAction:(String)->Unit,onEdit
                 Text("KEUANGAN TANPA BATAS",fontWeight=FontWeight.Bold)
                 Text("Saldo sekarang ${formatMoney(balance)}",color=Muted,fontSize=11.sp)
                 Button(onClick={onAction("max_balance")},modifier=Modifier.fillMaxWidth(),colors=ButtonDefaults.buttonColors(containerColor=Red)) { Text("SET SALDO £2 MILIAR") }
-            }
-        }
-        item {
-            GlassCard(Modifier.fillMaxWidth()) {
-                Text("INFLUENCE BALANCE",fontWeight=FontWeight.Bold)
-                Text("Saldo influence saat ini: ${influence?.let { preview(it) } ?: "—"}",color=Muted,fontSize=11.sp)
-                if(influence?.isJsonPrimitive==true && influence.asJsonPrimitive.isNumber) {
-                    OutlinedButton(
-                        onClick={onEdit("Game Data",listOf("influenceManager","m_Influence"),influence)},
-                        modifier=Modifier.fillMaxWidth()
-                    ) { Text("EDIT INFLUENCE") }
-                } else {
-                    Text("Field influenceManager.m_Influence tidak ditemukan pada save ini.",color=Red,fontSize=10.sp)
-                }
             }
         }
         item {
