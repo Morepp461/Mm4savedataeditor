@@ -1544,7 +1544,7 @@ private fun HqPage(doc: Mm4SaveCodec.Document, onEdit: (String,List<String>,Json
       val group=HqGroupNames.getOrNull(key) ?: "HQ Category #"+key
       Row(Modifier.fillMaxWidth().padding(vertical=4.dp),verticalAlignment=Alignment.CenterVertically) {
        Text(group,Modifier.weight(1f),color=Color.White,fontSize=12.sp)
-       Text(value?.asString ?: "—",color=Gold,fontWeight=FontWeight.Bold)
+       Text(value?.let { preview(it) } ?: "—",color=Gold,fontWeight=FontWeight.Bold)
        if(value!=null) IconButton(onClick={onEdit("Game Data",listOf("headquarters","m_CurrentTierInformation","["+index+"]","Value"),value)}) {
         Icon(Icons.Default.Edit,contentDescription="Edit "+group+" level",tint=Muted)
        }
@@ -1600,7 +1600,7 @@ private fun HqPage(doc: Mm4SaveCodec.Document, onEdit: (String,List<String>,Json
       TextButton(onClick={onEdit("Game Data",listOf("headquarters","m_Upgrades","["+listIndex+"]","Value","weeksToUnlock"),weeks)}){Text("EDIT TIMER")}
      }
      if(path!=null) {
-      InfoLine("Upgrade path",HqGroupNames.getOrNull(path.asInt) ?: path.asString)
+      InfoLine("Upgrade path",HqGroupNames.getOrNull(path.asInt) ?: preview(path))
       TextButton(onClick={onEdit("Game Data",listOf("headquarters","m_Upgrades","["+listIndex+"]","Value","pathType"),path)}){Text("EDIT PATH")}
      }
     }
