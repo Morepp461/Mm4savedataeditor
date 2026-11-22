@@ -1909,11 +1909,17 @@ internal fun renameCareerDivisions(data:JsonObject):Int {
 
 internal fun unlockSupplierNetwork(data:JsonObject):Int {
     val supplier=data.get("supplierNetworkManager")?.takeIf { it.isJsonObject }?.asJsonObject ?: return 0
-    val dictionary=supplier.get("m_NodeDictionary")?.takeIf { it.isJsonObject }?.asJsonObject ?: return 0
-    if(dictionary.size()==0) return 0
+    val dictionary=supplier.get("m_NodeDictionary") ?: return 0
+    val entries:List<JsonElement> = when {
+        dictionary.isJsonArray -> dictionary.asJsonArray.toList()
+        dictionary.isJsonObject -> dictionary.asJsonObject.entrySet().map { it.value }
+        else -> return 0
+    }
+    if(entries.isEmpty()) return 0
 
-    // Build the managed-reference index once. Dictionary entries can be $ref wrappers,
-    // while the actual node objects live elsewhere in the serialized object graph.
+    // MM4 v40 stores m_NodeDictionary as Key/Value entries. Values may be
+    // inline nodes or managed-reference wrappers; resolve those against the
+    // complete save graph before walking only the supplier m_Nodes links.
     val byId=mutableMapOf<String,JsonObject>()
     val scan=java.util.ArrayDeque<JsonElement>()
     scan.add(data)
@@ -1929,45 +1935,58 @@ internal fun unlockSupplierNetwork(data:JsonObject):Int {
     }
 
     val pending=java.util.ArrayDeque<JsonElement>()
-    dictionary.entrySet().forEach { (_,value) -> if(!value.isJsonNull) pending.add(value) }
-    supplier.get("m_StartNode")?.takeIf { !it.isJsonNull }?.let { pending.add(it) }
-    supplier.get("m_TargetNodes")?.takeIf { it.isJsonArray }?.asJsonArray
-        ?.forEach { if(!it.isJsonNull) pending.add(it) }
+    entries.forEach { entry ->
+        if(entry.isJsonObject) {
+            val value=entry.asJsonObject.get("Value")
+            if(value!=null && !value.isJsonNull) pending.add(value)
+            else if(entry.asJsonObject.has("\$ref") || entry.asJsonObject.has("m_Nodes")) pending.add(entry)
+        }
+    }
 
     var recognizedNodes=0
     val visited=java.util.Collections.newSetFromMap(java.util.IdentityHashMap<JsonObject,Boolean>())
     while(pending.isNotEmpty()) {
         when(val element=pending.removeLast()) {
             is JsonObject -> {
-                if(!visited.add(element)) continue
                 val ref=element.get("\$ref")?.takeIf { it.isJsonPrimitive }?.asString
                 if(ref!=null) {
                     byId[ref]?.let { pending.add(it) }
-                    // A managed-reference wrapper is not itself a supplier node.
                     continue
                 }
+                if(!visited.add(element)) continue
 
                 val owned=element.get("m_IsOwned")
                 val revealed=element.get("m_HasOwnedBeenRevealed")
-                val hasOwnedFlag=owned?.isJsonPrimitive==true && owned.asJsonPrimitive.isBoolean
-                val hasRevealFlag=revealed?.isJsonPrimitive==true && revealed.asJsonPrimitive.isBoolean
-                if(hasOwnedFlag || hasRevealFlag) recognizedNodes++
-
-                // Update both flags independently. A reveal-only change is still a
-                // successful operation; the previous implementation counted only ownership.
-                if(hasOwnedFlag && !owned!!.asBoolean) element.addProperty("m_IsOwned",true)
-                if(hasRevealFlag && !revealed!!.asBoolean) element.addProperty("m_HasOwnedBeenRevealed",true)
-
-                element.entrySet().forEach { (key,value) ->
-                    if(key!="\$ref" && !value.isJsonNull) pending.add(value)
+                val hasOwned=owned?.isJsonPrimitive==true && owned.asJsonPrimitive.isBoolean
+                val hasRevealed=revealed?.isJsonPrimitive==true && revealed.asJsonPrimitive.isBoolean
+                if(hasOwned || hasRevealed) {
+                    recognizedNodes++
+                    if(hasOwned && !owned!!.asBoolean) element.addProperty("m_IsOwned",true)
+                    if(hasRevealed && !revealed!!.asBoolean) element.addProperty("m_HasOwnedBeenRevealed",true)
                 }
+
+                // Traverse network edges only. Do not touch unrelated objects
+                // such as finances, teams, contracts, or connection metadata.
+                element.get("m_Nodes")?.takeIf { it.isJsonArray }?.asJsonArray
+                    ?.forEach { if(!it.isJsonNull) pending.add(it) }
             }
             is JsonArray -> element.forEach { if(!it.isJsonNull) pending.add(it) }
             else -> Unit
         }
     }
-    // Return the number of recognized nodes, not the number of fields changed.
-    // This makes an already-unlocked network idempotently successful on repeated runs.
+
+    // Supplier types are indexed 0..2 in MM4's Key/Value serialized maps.
+    // Mark every supplier category as both unlocked and available.
+    listOf("m_SupplierUnlocked","m_SupplierAvailable").forEach { field ->
+        val values=supplier.get(field)?.takeIf { it.isJsonArray }?.asJsonArray ?: return@forEach
+        values.forEach { item ->
+            if(item.isJsonObject) {
+                val value=item.asJsonObject.get("Value")
+                if(value?.isJsonPrimitive==true) item.asJsonObject.addProperty("Value",1)
+            }
+        }
+    }
+
     return recognizedNodes
 }
 
