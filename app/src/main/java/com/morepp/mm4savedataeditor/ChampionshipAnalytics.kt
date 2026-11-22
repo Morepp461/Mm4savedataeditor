@@ -79,7 +79,7 @@ internal fun championshipSummaries(data: JsonObject): List<ChampionshipSummary> 
         ChampionshipSummary(
             recordKey = championship.get("\$id")?.takeIf { it.isJsonPrimitive }?.asString ?: index.toString(),
             id = championship.get("m_ID")?.takeIf { it.isJsonPrimitive && it.asJsonPrimitive.isNumber }?.asInt ?: index,
-            displayName = listOf("name", "m_Name", "displayName", "title").firstNotNullOfOrNull { key -> championship.get(key)?.takeIf { it.isJsonPrimitive && it.asJsonPrimitive.isString }?.asString?.trim()?.takeIf { it.isNotEmpty() } } ?: "Tier " + ((championship.get("tier")?.asInt ?: 0) + 1) + " • Series " + ((championship.get("series")?.asInt ?: 0) + 1),
+            displayName = listOf("name", "m_Name", "displayName", "title").firstNotNullOfOrNull { key -> championship.get(key)?.takeIf { it.isJsonPrimitive && it.asJsonPrimitive.isString }?.asString?.trim()?.takeIf { it.isNotEmpty() } } ?: careerDivisionLabel(championship.get("m_ID")?.takeIf { it.isJsonPrimitive && it.asJsonPrimitive.isNumber }?.asInt ?: index),
             tier = championship.get("tier")?.takeIf { it.isJsonPrimitive && it.asJsonPrimitive.isNumber }?.asInt ?: 0,
             series = championship.get("series")?.takeIf { it.isJsonPrimitive && it.asJsonPrimitive.isNumber }?.asInt ?: 0,
             category = championship.get("category")?.takeIf { it.isJsonPrimitive && it.asJsonPrimitive.isNumber }?.asInt ?: 0,

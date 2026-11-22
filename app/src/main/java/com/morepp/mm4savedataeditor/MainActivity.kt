@@ -517,29 +517,76 @@ private fun EditorApp() {
             )
         }
         if (showIntro) IntroSplash()
-        if (showTutorial) AlertDialog(
-            onDismissRequest = {
-                showTutorial = false
-                context.getSharedPreferences("mm4_editor", android.content.Context.MODE_PRIVATE).edit().putBoolean("tutorial_seen", true).apply()
-            },
-            title = { Text("Selamat datang di MM4 Save Data Editor") },
-            text = {
-                Column(verticalArrangement = Arrangement.spacedBy(9.dp)) {
-                    Text("Panduan singkat sebelum mulai:")
-                    InfoLine("1. Buka save", "Pilih file career .msv dari penyimpanan")
-                    InfoLine("2. Edit data", "Gunakan Drivers, Staff, Teams, Cars, Finance, HQ, dan God Mode")
-                    InfoLine("3. Undo / Redo", "Batalkan perubahan sebelum export")
-                    InfoLine("4. Export", "Simpan sebagai file baru, jangan timpa save asli")
-                    Text("Beberapa data lanjutan bergantung pada struktur career yang sedang dibuka.", color = Muted, fontSize = 11.sp)
-                }
-            },
-            confirmButton = {
-                Button(onClick = {
+        if (showTutorial) {
+            var tutorialPage by remember { mutableIntStateOf(0) }
+            val pages = listOf(
+                Triple("01", "BUKA CAREER SAVE", "Pilih file career .msv dari penyimpanan perangkat. File asli tidak akan ditimpa."),
+                Triple("02", "EDIT DATA CAREER", "Pilih kategori Drivers, Staff, Teams, Cars, Finance, HQ, atau God Mode. Periksa perubahan sebelum melanjutkan."),
+                Triple("03", "UNDO / REDO", "Gunakan tombol kembali dan ulangi untuk membatalkan atau memulihkan perubahan selama sesi edit."),
+                Triple("04", "EXPORT SAVE BARU", "Simpan hasil sebagai file baru. Editor akan memeriksa hasil encode dan decode sebelum file ditulis.")
+            )
+            val page = pages[tutorialPage]
+            Dialog(
+                onDismissRequest = {
                     showTutorial = false
                     context.getSharedPreferences("mm4_editor", android.content.Context.MODE_PRIVATE).edit().putBoolean("tutorial_seen", true).apply()
-                }) { Text("MULAI") }
+                },
+                properties = DialogProperties(usePlatformDefaultWidth = false)
+            ) {
+                Column(
+                    Modifier.fillMaxWidth().padding(horizontal = 22.dp)
+                        .clip(RoundedCornerShape(28.dp))
+                        .background(Brush.linearGradient(listOf(PanelAlt, Panel, Color(0xFF2A2028))))
+                        .border(1.dp, Color.White.copy(alpha = 0.12f), RoundedCornerShape(28.dp))
+                        .padding(22.dp),
+                    verticalArrangement = Arrangement.spacedBy(18.dp)
+                ) {
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                            Text("MM4 • CAREER WORKSHOP", color = Gold, fontSize = 10.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.8.sp)
+                            Text("QUICK START GUIDE", color = Color.White, fontSize = 21.sp, fontWeight = FontWeight.Black)
+                        }
+                        TextButton(onClick = {
+                            showTutorial = false
+                            context.getSharedPreferences("mm4_editor", android.content.Context.MODE_PRIVATE).edit().putBoolean("tutorial_seen", true).apply()
+                        }) { Text("LEWATI", color = Muted, fontSize = 10.sp) }
+                    }
+                    Box(
+                        Modifier.fillMaxWidth().height(116.dp).clip(RoundedCornerShape(20.dp))
+                            .background(Brush.horizontalGradient(listOf(Color(0xFF17233B), Color(0xFF3A2024)))),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(page.first, color = Color.White.copy(alpha = 0.10f), fontSize = 84.sp, fontWeight = FontWeight.Black)
+                        Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                            Icon(Icons.Default.Flag, contentDescription = null, tint = Red, modifier = Modifier.size(30.dp))
+                            Text("RACE CONTROL", color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Black, letterSpacing = 2.sp)
+                        }
+                    }
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        repeat(pages.size) { index ->
+                            Box(Modifier.weight(1f).height(4.dp).clip(CircleShape).background(if (index <= tutorialPage) Red else Color.White.copy(alpha = 0.16f)))
+                        }
+                    }
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text(page.second, color = Gold, fontSize = 12.sp, fontWeight = FontWeight.Black, letterSpacing = 1.1.sp)
+                        Text(page.third, color = Color.White.copy(alpha = 0.82f), fontSize = 14.sp, lineHeight = 21.sp)
+                    }
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                        Text("LANGKAH ${tutorialPage + 1} DARI ${pages.size}", color = Muted, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                        Button(
+                            onClick = {
+                                if (tutorialPage < pages.lastIndex) tutorialPage++
+                                else {
+                                    showTutorial = false
+                                    context.getSharedPreferences("mm4_editor", android.content.Context.MODE_PRIVATE).edit().putBoolean("tutorial_seen", true).apply()
+                                }
+                            },
+                            colors = ButtonDefaults.buttonColors(containerColor = Lime, contentColor = Color(0xFF10131D))
+                        ) { Text(if (tutorialPage == pages.lastIndex) "MULAI EDIT" else "LANJUT", fontWeight = FontWeight.Black) }
+                    }
+                }
             }
-        )
+        }
 
     }
 }
