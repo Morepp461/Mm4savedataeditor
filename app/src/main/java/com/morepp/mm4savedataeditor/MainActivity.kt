@@ -375,7 +375,6 @@ private fun EditorApp() {
                                         val successText = when {
                                             action == "official_f1_2026" -> "Template tim dan 80 profil pembalap berhasil diterapkan."
                                             action == "rename_divisions" -> "Label divisi berhasil diperbarui."
-                                            action.startsWith("swap_teams|") -> "Tim berhasil ditukar antar divisi."
                                             action.startsWith("move_driver|") -> "Pembalap berhasil dipindahkan."
                                             action == "max_balance" -> "Saldo berhasil diatur ke £2 miliar."
                                             action == "unlock_hq" -> "Upgrade HQ berhasil dibuka."
@@ -2344,58 +2343,6 @@ internal fun moveDriverToTeam(data:JsonObject,driverId:String,targetTeamId:Strin
     return oldTeamId!=targetTeamId
 }
 
-internal fun swapTeamsBetweenDivisions(data:JsonObject,teamA:String,teamB:String):Boolean {
-    if(teamA==teamB) return false
-    val objects=collectObjectsWithId(data).mapNotNull { (_,obj) -> obj.get("\$id")?.asString?.let { it to obj } }.toMap()
-    val teamAObject=objects[teamA] ?: return false
-    val teamBObject=objects[teamB] ?: return false
-    val teamAId=teamAObject.get("m_TeamID")?.takeIf { it.isJsonPrimitive && it.asJsonPrimitive.isNumber }?.asInt ?: return false
-    val teamBId=teamBObject.get("m_TeamID")?.takeIf { it.isJsonPrimitive && it.asJsonPrimitive.isNumber }?.asInt ?: return false
-    if(teamAId==teamBId) return false
-    val championshipRefs=data.getAsJsonObject("championshipManager")?.getAsJsonArray("championships") ?: return false
-    val championships=championshipRefs.mapNotNull { ref ->
-        val id=ref.takeIf { it.isJsonObject }?.asJsonObject?.get("\$ref")?.asString ?: return@mapNotNull null
-        objects[id]
-    }
-    data class Slot(val championship:JsonObject,val index:Int)
-    fun findSlot(teamId:Int):Slot? {
-        val matches=championships.flatMap { championship ->
-            val ids=championship.get("m_TeamIDs")?.takeIf { it.isJsonArray }?.asJsonArray ?: return@flatMap emptyList()
-            ids.mapIndexedNotNull { index,value ->
-                if(value.isJsonPrimitive && value.asJsonPrimitive.isNumber && value.asInt==teamId) Slot(championship,index) else null
-            }
-        }
-        return matches.singleOrNull()
-    }
-    val slotA=findSlot(teamAId) ?: return false
-    val slotB=findSlot(teamBId) ?: return false
-    if(slotA.championship===slotB.championship) return false
-    val teamAChamp=teamAObject.get("m_Championship")?.takeIf { it.isJsonObject }?.asJsonObject ?: return false
-    val teamBChamp=teamBObject.get("m_Championship")?.takeIf { it.isJsonObject }?.asJsonObject ?: return false
-    val champAId=slotA.championship.get("\$id")?.asString ?: return false
-    val champBId=slotB.championship.get("\$id")?.asString ?: return false
-    val oldA=teamAChamp.get("\$ref")?.asString ?: return false
-    val oldB=teamBChamp.get("\$ref")?.asString ?: return false
-    if(oldA!=champAId || oldB!=champBId) return false
-    val idsA=slotA.championship.getAsJsonArray("m_TeamIDs")
-    val idsB=slotB.championship.getAsJsonArray("m_TeamIDs")
-    idsA.set(slotA.index,com.google.gson.JsonPrimitive(teamBId))
-    idsB.set(slotB.index,com.google.gson.JsonPrimitive(teamAId))
-    teamAChamp.addProperty("\$ref",champBId)
-    teamBChamp.addProperty("\$ref",champAId)
-    return true
-}
-
-
-private fun championshipEntityById(data:JsonObject, championshipId:Int):JsonObject? {
-    val all=collectObjectsWithId(data).associateBy { it.second.get("\$id")?.asString }
-    val refs=data.getAsJsonObject("championshipManager")?.getAsJsonArray("championships") ?: return null
-    return refs.firstNotNullOfOrNull { ref ->
-        val id=ref.takeIf { it.isJsonObject }?.asJsonObject?.get("\$ref")?.asString ?: return@firstNotNullOfOrNull null
-        all[id]?.second?.takeIf { it.get("m_ID")?.asInt==championshipId }
-    }
-}
-
 internal fun careerDivisionLabel(championshipId:Int):String = when(championshipId) {
     0 -> "World Motorsport"
     1 -> "Asia Pacific Super Cup"
@@ -2684,10 +2631,6 @@ private fun applyGodModeAction(current:Mm4SaveCodec.Document,action:String,templ
         }
         action=="official_f1_2026" -> {
             if(templateData==null || !applyOfficialF1Preset2026(data,templateData)) return null
-        }
-        action.startsWith("swap_teams|") -> {
-            val parts=action.split("|")
-            if(parts.size!=3 || !swapTeamsBetweenDivisions(data,parts[1],parts[2])) return null
         }
         action.startsWith("move_driver|") -> {
             val parts=action.split("|")
