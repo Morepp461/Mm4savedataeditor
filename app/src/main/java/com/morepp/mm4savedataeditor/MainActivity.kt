@@ -569,9 +569,17 @@ private fun EditorApp() {
                             Box(Modifier.weight(1f).height(4.dp).clip(CircleShape).background(if (index <= tutorialPage) Red else Color.White.copy(alpha = 0.16f)))
                         }
                     }
-                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Text(page.second, color = Gold, fontSize = 12.sp, fontWeight = FontWeight.Black, letterSpacing = 1.1.sp)
-                        Text(page.third, color = Color.White.copy(alpha = 0.82f), fontSize = 14.sp, lineHeight = 21.sp)
+                    AnimatedContent(
+                        targetState = tutorialPage,
+                        transitionSpec = {
+                            (fadeIn(tween(220)) + slideInVertically(tween(220)) { it / 6 }) togetherWith fadeOut(tween(160))
+                        },
+                        label = "tutorial-step-motion"
+                    ) { step ->
+                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Text(pages[step].second, color = Gold, fontSize = 12.sp, fontWeight = FontWeight.Black, letterSpacing = 1.1.sp)
+                            Text(pages[step].third, color = Color.White.copy(alpha = 0.82f), fontSize = 14.sp, lineHeight = 21.sp)
+                        }
                     }
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                         Text("LANGKAH ${tutorialPage + 1} DARI ${pages.size}", color = Muted, fontSize = 10.sp, fontWeight = FontWeight.Bold)
