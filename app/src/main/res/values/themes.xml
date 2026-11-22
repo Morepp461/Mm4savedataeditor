@@ -1,6 +1,6 @@
 <resources>
     <style name="Theme.MM4SaveDataEditor" parent="android:style/Theme.Material.NoActionBar">
-        <item name="android:fontFamily">sans</item>
+        <item name="android:fontFamily">sans-serif-condensed</item>
         <item name="android:colorAccent">@color/app_red</item>
         <item name="android:statusBarColor">@color/app_background</item>
         <item name="android:navigationBarColor">@color/app_background</item>

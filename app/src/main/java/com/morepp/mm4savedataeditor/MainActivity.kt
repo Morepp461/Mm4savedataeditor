@@ -6,6 +6,8 @@ import kotlin.math.cos
 import kotlin.math.PI
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.foundation.Canvas
 import android.os.Bundle
@@ -54,6 +56,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -792,7 +795,7 @@ private fun CareerWorkspace(
                 "Overview" -> OverviewPage(document, onSection)
                 "Drivers" -> DriverPage(document, selectedDriver, onDriver, onEdit)
                 "Driver Analytics" -> DriverAnalyticsPage(document)
-                "Championships" -> ChampionshipManagerPage(document)
+                "Championships" -> ChampionshipManagerPage(document, onEdit)
                 "Influence Actions" -> InfluenceActionsPage(document, onResetInfluenceCooldown)
                 "Career Finance Analytics" -> CareerFinanceAnalyticsPage(document)
                 "Manager Progression" -> ManagerProgressionPage(document, onApplyExperience)
@@ -1442,7 +1445,7 @@ private fun InfluenceActionsPage(doc: Mm4SaveCodec.Document, onResetCooldown: (I
 }
 
 @Composable
-private fun ChampionshipManagerPage(doc: Mm4SaveCodec.Document) {
+private fun ChampionshipManagerPage(doc: Mm4SaveCodec.Document, onEdit: (String, List<String>, JsonElement) -> Unit) {
     val championships = remember(doc.data) { championshipSummaries(doc.data) }
     var selectedKey by remember { mutableStateOf("") }
     var showChampionshipDetails by remember { mutableStateOf(false) }
@@ -1461,7 +1464,11 @@ private fun ChampionshipManagerPage(doc: Mm4SaveCodec.Document) {
                 Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                     Column(Modifier.weight(1f)) {
                         Text("KEJUARAAN", color = Muted, fontSize = 9.sp)
-                        Text(championships.size.toString(), fontSize = 22.sp, fontWeight = FontWeight.Black)
+                        AnimatedContent(
+                            targetState = championships.size,
+                            transitionSpec = { (slideInVertically { it / 2 } + fadeIn(tween(180))) togetherWith (slideOutVertically { -it / 2 } + fadeOut(tween(120))) },
+                            label = "championship-count"
+                        ) { count -> Text(count.toString(), fontSize = 22.sp, fontWeight = FontWeight.Black) }
                     }
                     Column(Modifier.weight(1f)) {
                         Text("TOTAL TIM", color = Muted, fontSize = 9.sp)
@@ -1495,6 +1502,26 @@ private fun ChampionshipManagerPage(doc: Mm4SaveCodec.Document) {
                 GlassCard(Modifier.fillMaxWidth()) {
                     Text("DETAIL KEJUARAAN", color = Gold, fontWeight = FontWeight.Bold, fontSize = 10.sp)
                     Text(championship.displayName, fontSize = 20.sp, fontWeight = FontWeight.Black)
+                    val editableName = listOf("name", "m_Name", "displayName", "title").firstOrNull { key ->
+                        championship.path.isNotEmpty() && resolvePath(doc.data, championship.path + key)?.isJsonPrimitive == true
+                    }
+                    if (editableName != null) {
+                        OutlinedButton(
+                            onClick = { resolvePath(doc.data, championship.path + editableName)?.let { onEdit("Game Data", championship.path + editableName, it) } },
+                            modifier = Modifier.fillMaxWidth()
+                        ) { Text("EDIT NAMA KEJUARAAN", fontSize = 10.sp) }
+                    }
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        listOf("tier" to "TIER", "series" to "SERIES", "category" to "CATEGORY", "m_EventNumber" to "EVENT").forEach { (field, label) ->
+                            val fieldPath = championship.path + field
+                            val fieldValue = resolvePath(doc.data, fieldPath)
+                            OutlinedButton(
+                                onClick = { fieldValue?.let { onEdit("Game Data", fieldPath, it) } },
+                                modifier = Modifier.weight(1f),
+                                enabled = fieldValue?.isJsonPrimitive == true
+                            ) { Text(label, fontSize = 8.sp) }
+                        }
+                    }
                     Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                         Column(Modifier.weight(1f)) {
                             Text("TIER", color = Muted, fontSize = 9.sp)
@@ -1521,8 +1548,37 @@ private fun ChampionshipManagerPage(doc: Mm4SaveCodec.Document) {
                             Text("${standing.wins} menang • ${standing.podiums} podium • ${standing.races} balapan • ${standing.dnfs} DNF", color = Muted, fontSize = 9.sp)
                         }
                         Column(horizontalAlignment = Alignment.End) {
-                            Text(standing.points.toString(), color = Gold, fontWeight = FontWeight.Black, fontSize = 17.sp)
+                            AnimatedContent(
+                                targetState = standing.points,
+                                transitionSpec = { (slideInVertically { it / 2 } + fadeIn(tween(180))) togetherWith (slideOutVertically { -it / 2 } + fadeOut(tween(120))) },
+                                label = "standing-points"
+                            ) { points -> Text(points.toString(), color = Gold, fontWeight = FontWeight.Black, fontSize = 17.sp) }
                             Text("POIN", color = Muted, fontSize = 8.sp)
+                        }
+                    }
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(5.dp)) {
+                        listOf("m_CurrentPosition" to "POS", "wins" to "WINS", "podiums" to "PODIUM", "races" to "RACES", "DNFs" to "DNF").forEach { (field, label) ->
+                            val fieldPath = standing.path + field
+                            val fieldValue = resolvePath(doc.data, fieldPath)
+                            TextButton(onClick = { fieldValue?.let { onEdit("Game Data", fieldPath, it) } }, enabled = fieldValue?.isJsonPrimitive == true, contentPadding = PaddingValues(horizontal = 3.dp, vertical = 0.dp)) {
+                                Text(label, fontSize = 8.sp, color = if (fieldValue?.isJsonPrimitive == true) Gold else Muted)
+                            }
+                        }
+                    }
+                    if (standing.pointPaths.isNotEmpty()) {
+                        Text("POIN PER EVENT", color = Muted, fontSize = 8.sp, fontWeight = FontWeight.Bold)
+                        LazyRow(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                            items(standing.pointPaths.size) { scoreIndex ->
+                                val scorePath = standing.pointPaths[scoreIndex]
+                                val scoreValue = resolvePath(doc.data, scorePath)
+                                TextButton(
+                                    onClick = { scoreValue?.let { onEdit("Game Data", scorePath, it) } },
+                                    enabled = scoreValue?.isJsonPrimitive == true,
+                                    contentPadding = PaddingValues(horizontal = 5.dp, vertical = 0.dp)
+                                ) {
+                                    Text("R${scoreIndex + 1} • ${scoreValue?.takeIf { it.isJsonPrimitive }?.asInt ?: 0}", fontSize = 9.sp, color = Gold)
+                                }
+                            }
                         }
                     }
                 }
@@ -1531,7 +1587,7 @@ private fun ChampionshipManagerPage(doc: Mm4SaveCodec.Document) {
                 item { Text("Klasemen tim belum tersedia pada kejuaraan ini.", color = Muted, fontSize = 11.sp) }
             }
         }
-        item { Text("Klasemen ditampilkan dari catatan hasil yang tersimpan. Halaman ini tidak mengubah posisi, poin, atau hasil balapan.", color = Muted, fontSize = 10.sp) }
+        item { Text("Perubahan metadata dan statistik hanya tersedia untuk field yang benar-benar ada di save.", color = Muted, fontSize = 10.sp) }
     }
     if (showChampionshipDetails && selected != null) {
         AlertDialog(
@@ -2828,6 +2884,7 @@ private fun GodModePage(doc:Mm4SaveCodec.Document,onAction:(String)->Unit,onEdit
 private fun GlassCard(modifier: Modifier = Modifier, content: @Composable ColumnScope.() -> Unit) {
     val shape = RoundedCornerShape(18.dp)
     var entered by remember { mutableStateOf(false) }
+    val edgeAlpha = 0.18f
     LaunchedEffect(Unit) { entered = true }
     val entrance by animateFloatAsState(
         targetValue = if (entered) 1f else 0.965f,
@@ -2840,7 +2897,7 @@ private fun GlassCard(modifier: Modifier = Modifier, content: @Composable Column
             scaleY = entrance
             alpha = entrance
         }.animateContentSize(animationSpec = tween(260)).clip(shape)
-            .border(1.dp, GlassEdge, shape)
+            .border(1.dp, Color.White.copy(alpha = edgeAlpha), shape)
             .background(Brush.linearGradient(listOf(Color(0xE02A3039), Color(0xC91A212A), Color(0xE0141A22))))
             .padding(1.dp)
             .clip(RoundedCornerShape(17.dp))

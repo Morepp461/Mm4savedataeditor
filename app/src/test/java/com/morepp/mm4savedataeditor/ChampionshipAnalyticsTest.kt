@@ -47,7 +47,8 @@ class ChampionshipAnalyticsTest {
 
     @Test
     fun resolvesChampionshipAndTeamStandingReferences() {
-        val result = championshipSummaries(fixture()).single()
+        val data = fixture()
+        val result = championshipSummaries(data).single()
         assertEquals(0, result.id)
         assertEquals(1, result.tier)
         assertEquals(3, result.eventNumber)
@@ -59,6 +60,19 @@ class ChampionshipAnalyticsTest {
         assertEquals(25, team.points)
         assertEquals(2, team.wins)
         assertEquals(2, team.podiums)
+        assertEquals(listOf("entityManager", "m_Entities", "[0]"), result.path)
+        assertEquals(listOf("entityManager", "m_Entities", "[0]", "standings", "m_Teams", "[0]"), team.path)
+        assertEquals(listOf("entityManager", "m_Entities", "[0]", "standings", "m_Teams", "[0]", "m_Points", "[0]"), team.pointPaths.first())
+        assertEquals(10, resolvePath(data, team.pointPaths.first())?.asInt)
+    }
+
+    @Test
+    fun championshipEditorPathsResolveToExistingFields() {
+        val data = fixture()
+        val summary = championshipSummaries(data).single()
+        assertEquals(3, resolvePath(data, summary.path + "m_EventNumber")?.asInt)
+        assertEquals(2, resolvePath(data, summary.standings.single().path + "wins")?.asInt)
+        assertEquals(25, summary.standings.single().points)
     }
 
     @Test

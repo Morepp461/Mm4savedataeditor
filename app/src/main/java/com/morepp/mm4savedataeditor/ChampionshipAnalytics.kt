@@ -10,7 +10,9 @@ internal data class ChampionshipTeamStanding(
     val wins: Int,
     val podiums: Int,
     val races: Int,
-    val dnfs: Int
+    val dnfs: Int,
+    val path: List<String>,
+    val pointPaths: List<List<String>>
 )
 
 internal data class ChampionshipSummary(
@@ -24,19 +26,21 @@ internal data class ChampionshipSummary(
     val teamCount: Int,
     val driverCount: Int,
     val raceCount: Int,
-    val standings: List<ChampionshipTeamStanding>
+    val standings: List<ChampionshipTeamStanding>,
+    val path: List<String>
 )
 
 internal fun championshipSummaries(data: JsonObject): List<ChampionshipSummary> {
     val idMap = mutableMapOf<String, JsonObject>()
-    fun collect(node: JsonElement) {
+    val idPaths = mutableMapOf<String, List<String>>()
+    fun collect(node: JsonElement, path: List<String> = emptyList()) {
         when {
             node.isJsonObject -> {
                 val obj = node.asJsonObject
-                obj.get("\$id")?.takeIf { it.isJsonPrimitive }?.asString?.let { idMap[it] = obj }
-                obj.entrySet().forEach { (_, value) -> collect(value) }
+                obj.get("\$id")?.takeIf { it.isJsonPrimitive }?.asString?.let { idMap[it] = obj; idPaths[it] = path }
+                obj.entrySet().forEach { (key, value) -> collect(value, path + key) }
             }
-            node.isJsonArray -> node.asJsonArray.forEach { collect(it) }
+            node.isJsonArray -> node.asJsonArray.forEachIndexed { index, value -> collect(value, path + "[$index]") }
         }
     }
     collect(data)
@@ -53,6 +57,7 @@ internal fun championshipSummaries(data: JsonObject): List<ChampionshipSummary> 
 
     return list.mapIndexedNotNull { index, reference ->
         val championship = resolve(reference) ?: return@mapIndexedNotNull null
+        val championshipPath = idPaths[championship.get("\$id")?.takeIf { it.isJsonPrimitive }?.asString] ?: emptyList()
         val standingsObject = championship.getAsJsonObject("standings")
         val teamRows = standingsObject?.get("m_Teams")?.takeIf { it.isJsonArray }?.asJsonArray
             ?.mapIndexedNotNull { rowIndex, row ->
@@ -72,7 +77,11 @@ internal fun championshipSummaries(data: JsonObject): List<ChampionshipSummary> 
                     wins = item.get("wins")?.takeIf { it.isJsonPrimitive && it.asJsonPrimitive.isNumber }?.asInt ?: 0,
                     podiums = item.get("podiums")?.takeIf { it.isJsonPrimitive && it.asJsonPrimitive.isNumber }?.asInt ?: 0,
                     races = item.get("races")?.takeIf { it.isJsonPrimitive && it.asJsonPrimitive.isNumber }?.asInt ?: 0,
-                    dnfs = item.get("DNFs")?.takeIf { it.isJsonPrimitive && it.asJsonPrimitive.isNumber }?.asInt ?: 0
+                    dnfs = item.get("DNFs")?.takeIf { it.isJsonPrimitive && it.asJsonPrimitive.isNumber }?.asInt ?: 0,
+                    path = championshipPath + "standings" + "m_Teams" + "[$rowIndex]",
+                    pointPaths = item.get("m_Points")?.takeIf { it.isJsonArray }?.asJsonArray
+                        ?.mapIndexed { scoreIndex, _ -> championshipPath + "standings" + "m_Teams" + "[$rowIndex]" + "m_Points" + "[$scoreIndex]" }
+                        .orEmpty()
                 )
             }.orEmpty().sortedBy { it.position }
 
@@ -87,7 +96,8 @@ internal fun championshipSummaries(data: JsonObject): List<ChampionshipSummary> 
             teamCount = championship.get("m_TeamIDs")?.takeIf { it.isJsonArray }?.asJsonArray?.size() ?: teamRows.size,
             driverCount = standingsObject?.get("m_Drivers")?.takeIf { it.isJsonArray }?.asJsonArray?.size() ?: 0,
             raceCount = championship.get("m_Races")?.takeIf { it.isJsonArray }?.asJsonArray?.size() ?: 0,
-            standings = teamRows
+            standings = teamRows,
+            path = idPaths[championship.get("\$id")?.takeIf { it.isJsonPrimitive }?.asString] ?: emptyList()
         )
     }.sortedWith(compareBy({ it.tier }, { it.series }, { it.id }))
 }
