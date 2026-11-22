@@ -47,7 +47,8 @@ class ChampionshipAnalyticsTest {
 
     @Test
     fun resolvesChampionshipAndTeamStandingReferences() {
-        val result = championshipSummaries(fixture()).single()
+        val data = fixture()
+        val result = championshipSummaries(data).single()
         assertEquals(0, result.id)
         assertEquals(1, result.tier)
         assertEquals(3, result.eventNumber)
