@@ -421,6 +421,20 @@ private fun EditorApp() {
                                 }
                             }
                         }
+                        ,
+                        onApplyExperience = { experience ->
+                            val latest = document ?: return@CareerWorkspace
+                            val updatedData = applyManagerExperience(latest.data, experience)
+                            if (updatedData == null) {
+                                scope.launch { snackbarHostState.showSnackbar("Experience di luar rentang level yang tersimpan. Save tidak diubah.") }
+                            } else {
+                                document = latest.copy(data = updatedData)
+                                hasChanges = true
+                                undoStack = emptyList()
+                                redoStack = emptyList()
+                                scope.launch { snackbarHostState.showSnackbar("Experience manager diperbarui mengikuti tabel level career.") }
+                            }
+                        }
                     )
                 }
             }
@@ -671,7 +685,8 @@ private fun CareerWorkspace(
     onEdit: (String, List<String>, JsonElement) -> Unit,
     onGodAction: (String) -> Unit,
     onApplyTeamColor: (List<String>, JsonObject) -> Unit,
-    onSupplierFieldChange: (List<String>, JsonElement) -> Unit
+    onSupplierFieldChange: (List<String>, JsonElement) -> Unit,
+    onApplyExperience: (Int) -> Unit
 ) {
     Column(Modifier.fillMaxSize()) {
         LazyRow(Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 4.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -696,7 +711,7 @@ private fun CareerWorkspace(
                 "Influence Actions" -> InfluenceActionsPage(document)
                 "Sponsor Database" -> SponsorDatabasePage(document)
                 "Career Finance Analytics" -> CareerFinanceAnalyticsPage(document)
-                "Manager Progression" -> ManagerProgressionPage(document)
+                "Manager Progression" -> ManagerProgressionPage(document, onApplyExperience)
                 "Staff" -> EntityCatalogPage(document, "staff", onEdit, onApplyTeamColor)
                 "Teams" -> EntityCatalogPage(document, "team", onEdit, onApplyTeamColor)
                 "Cars" -> EntityCatalogPage(document, "car", onEdit, onApplyTeamColor)
@@ -1911,27 +1926,60 @@ private fun CareerFinanceAnalyticsPage(doc: Mm4SaveCodec.Document) {
 }
 
 @Composable
-private fun ManagerProgressionPage(doc: Mm4SaveCodec.Document) {
-    val info = doc.info
-    val candidates = listOf("playerAge" to "Usia manager", "gameDate" to "Tanggal career",
-        "championshipTier" to "Jenjang championship").mapNotNull { (key, label) ->
-        info.get(key)?.takeIf { it.isJsonPrimitive }?.let { label to preview(it) }
-    }
+private fun ManagerProgressionPage(doc: Mm4SaveCodec.Document, onApplyExperience: (Int) -> Unit) {
+    val summary = remember(doc.data) { managerProgressionSummary(doc.data) }
+    var experienceInput by remember(summary) { mutableStateOf(summary?.experience?.toString().orEmpty()) }
+    val parsedExperience = experienceInput.toIntOrNull()
+    val canApply = summary != null && parsedExperience != null && parsedExperience >= 0
     LazyColumn(contentPadding = PaddingValues(14.dp), verticalArrangement = Arrangement.spacedBy(9.dp)) {
         item {
             GlassCard(Modifier.fillMaxWidth()) {
                 Text("MANAGER PROGRESSION", color = Gold, fontWeight = FontWeight.Black, fontSize = 11.sp)
                 Text("Perkembangan manager", fontSize = 21.sp, fontWeight = FontWeight.Black)
-                Text("Pemetaan level dan experience manager belum tersedia pada profil save yang terverifikasi.", color = Muted, fontSize = 11.sp)
+                Text("Level dan experience dibaca dari data career serta tabel level yang tersimpan di save.", color = Muted, fontSize = 11.sp)
             }
         }
-        if (candidates.isNotEmpty()) item {
-            GlassCard(Modifier.fillMaxWidth()) {
-                Text("INFORMASI CAREER TERKAIT", color = Gold, fontWeight = FontWeight.Bold, fontSize = 10.sp)
-                candidates.forEach { (label, value) -> InfoLine(label, value) }
+        if (summary != null) {
+            item {
+                GlassCard(Modifier.fillMaxWidth()) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                        Column(Modifier.weight(1f)) {
+                            Text("LEVEL SAAT INI", color = Muted, fontSize = 9.sp)
+                            Text(summary.level.toString() + " / " + summary.maximumLevel, color = Gold, fontSize = 24.sp, fontWeight = FontWeight.Black)
+                        }
+                        Column(Modifier.weight(1f)) {
+                            Text("EXPERIENCE", color = Muted, fontSize = 9.sp)
+                            Text(summary.experience.toString(), fontSize = 24.sp, fontWeight = FontWeight.Black)
+                        }
+                    }
+                    Divider(color = Color.White.copy(alpha = 0.12f))
+                    InfoLine("Awal rentang level", summary.baseExperience.toString())
+                    InfoLine("Batas level berikutnya", summary.maxExperience.toString())
+                    Text("Experience baru otomatis menentukan level dan batas level dari tabel career. Nilai di luar rentang tidak akan diterapkan.", color = Muted, fontSize = 10.sp)
+                }
             }
+            item {
+                GlassCard(Modifier.fillMaxWidth()) {
+                    Text("UBAH EXPERIENCE", color = Gold, fontWeight = FontWeight.Bold, fontSize = 10.sp)
+                    OutlinedTextField(
+                        value = experienceInput,
+                        onValueChange = { value -> experienceInput = value.filter(Char::isDigit).take(10) },
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true,
+                        label = { Text("Total experience") },
+                        keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = androidx.compose.ui.text.input.KeyboardType.Number)
+                    )
+                    Button(
+                        onClick = { parsedExperience?.let(onApplyExperience) },
+                        enabled = canApply && parsedExperience != summary.experience,
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = ButtonDefaults.buttonColors(containerColor = Red)
+                    ) { Text("TERAPKAN EXPERIENCE") }
+                }
+            }
+        } else {
+            item { Text("Data progresi manager tidak lengkap pada save ini. Tidak ada perubahan yang bisa diterapkan.", color = Muted, fontSize = 11.sp) }
         }
-        item { Text("Tidak ada level atau experience yang diedit. Fitur ini akan diaktifkan setelah field dan aturan progresinya dapat dipastikan dari save asli, agar tidak merusak career.", color = Muted, fontSize = 10.sp) }
     }
 }
 
