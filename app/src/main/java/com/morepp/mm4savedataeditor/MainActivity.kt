@@ -1532,7 +1532,7 @@ private fun ChampionshipManagerPage(doc: Mm4SaveCodec.Document, onEdit: (String,
                         listOf("m_CurrentPosition" to "POS", "wins" to "WINS", "podiums" to "PODIUM", "races" to "RACES", "DNFs" to "DNF").forEach { (field, label) ->
                             val fieldPath = standing.path + field
                             val fieldValue = resolvePath(doc.data, fieldPath)
-                            TextButton(onClick = { fieldValue?.let { onEdit("Career", fieldPath, it) } }, enabled = fieldValue?.isJsonPrimitive == true, contentPadding = PaddingValues(horizontal = 3.dp, vertical = 0.dp)) {
+                            TextButton(onClick = { fieldValue?.let { onEdit("Game Data", fieldPath, it) } }, enabled = fieldValue?.isJsonPrimitive == true, contentPadding = PaddingValues(horizontal = 3.dp, vertical = 0.dp)) {
                                 Text(label, fontSize = 8.sp, color = if (fieldValue?.isJsonPrimitive == true) Gold else Muted)
                             }
                         }
