@@ -3009,7 +3009,7 @@ private fun JsonBrowser(
     onEdit: (List<String>, JsonElement) -> Unit
 ) {
     var expanded by remember(root, moduleFilter) { mutableStateOf(setOf<String>()) }
-    val allNodes = remember(root) { flatten(root).filterNot { path -> path.lastOrNull()?.let(::isMetadataKey) == true } }
+    val allNodes = remember(root) { flatten(root).filterNot { entry -> entry.first.lastOrNull()?.let(::isMetadataKey) == true } }
     val matches = remember(allNodes, query, moduleFilter) {
         allNodes.filter { (path, value) ->
             (moduleFilter == null || path.firstOrNull() == moduleFilter) &&
@@ -3227,7 +3227,7 @@ internal fun flatten(root: JsonElement): List<Pair<List<String>, JsonElement>> {
     fun visit(node: JsonElement, path: List<String>) {
         if (path.isNotEmpty()) result += path to node
         when {
-            node.isJsonObject -> node.asJsonObject.entrySet().forEach { (key, child) ->
+            node.isJsonObject -> node.asJsonObject.entrySet().filterNot { isMetadataKey(it.key) }.forEach { (key, child) ->
                 visit(child, path + key)
             }
             node.isJsonArray -> node.asJsonArray.forEachIndexed { index, child ->
