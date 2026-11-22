@@ -10,62 +10,86 @@ class SupplierNetworkUnlockTest {
         """
         {
           "supplierNetworkManager": {
-            "m_NodeDictionary": {
-              "node-1": { "\$ref": "node-object-1" }
-            },
-            "m_StartNode": { "\$ref": "node-object-1" },
-            "m_TargetNodes": []
+            "m_NodeDictionary": [
+              {"Key": 0, "Value": {"\$ref": "node-1"}},
+              {"Key": 1, "Value": {"\$ref": "node-2"}}
+            ],
+            "m_SupplierUnlocked": [
+              {"Key": 0, "Value": 1},
+              {"Key": 1, "Value": 0},
+              {"Key": 2, "Value": 0}
+            ],
+            "m_SupplierAvailable": [
+              {"Key": 0, "Value": 1},
+              {"Key": 1, "Value": 0},
+              {"Key": 2, "Value": 0}
+            ]
           },
-          "nodeObjects": [
+          "supplierObjects": [
             {
-              "\$id": "node-object-1",
+              "\$id": "node-1",
+              "m_ID": 1,
               "m_IsOwned": $owned,
-              "m_HasOwnedBeenRevealed": $revealed
+              "m_HasOwnedBeenRevealed": $revealed,
+              "m_Nodes": [{"\$ref": "node-2"}]
+            },
+            {
+              "\$id": "node-2",
+              "m_ID": 2,
+              "m_IsOwned": false,
+              "m_HasOwnedBeenRevealed": false,
+              "m_Nodes": []
             }
-          ]
+          ],
+          "unrelated": {"m_IsOwned": false, "m_HasOwnedBeenRevealed": false}
         }
         """.trimIndent()
     ).asJsonObject
 
     @Test
-    fun unlocksOwnershipAndRevealIndependently() {
+    fun resolvesKeyValueArrayAndNestedReferences() {
         val data = sample(owned = false, revealed = true)
 
-        val recognized = unlockSupplierNetwork(data)
+        val count = unlockSupplierNetwork(data)
 
-        val node = data.getAsJsonArray("nodeObjects")[0].asJsonObject
-        assertEquals(1, recognized)
-        assertTrue(node.get("m_IsOwned").asBoolean)
-        assertTrue(node.get("m_HasOwnedBeenRevealed").asBoolean)
+        val nodes = data.getAsJsonArray("supplierObjects")
+        assertEquals(2, count)
+        for (i in 0 until nodes.size()) {
+            val node = nodes[i].asJsonObject
+            assertTrue(node.get("m_IsOwned").asBoolean)
+            assertTrue(node.get("m_HasOwnedBeenRevealed").asBoolean)
+        }
+        val unrelated = data.getAsJsonObject("unrelated")
+        assertTrue(!unrelated.get("m_IsOwned").asBoolean)
+        assertTrue(!unrelated.get("m_HasOwnedBeenRevealed").asBoolean)
     }
 
     @Test
-    fun revealOnlyChangeIsRecognizedAsSuccessfulNode() {
-        val data = sample(owned = true, revealed = false)
+    fun unlocksEverySupplierCategory() {
+        val data = sample(owned = true, revealed = true)
 
-        val recognized = unlockSupplierNetwork(data)
+        unlockSupplierNetwork(data)
 
-        val node = data.getAsJsonArray("nodeObjects")[0].asJsonObject
-        assertEquals(1, recognized)
-        assertTrue(node.get("m_IsOwned").asBoolean)
-        assertTrue(node.get("m_HasOwnedBeenRevealed").asBoolean)
+        val manager = data.getAsJsonObject("supplierNetworkManager")
+        for (field in listOf("m_SupplierUnlocked", "m_SupplierAvailable")) {
+            val values = manager.getAsJsonArray(field)
+            assertEquals(3, values.size())
+            for (entry in values) assertEquals(1, entry.asJsonObject.get("Value").asInt)
+        }
     }
 
     @Test
     fun alreadyUnlockedNetworkIsIdempotentlySuccessful() {
         val data = sample(owned = true, revealed = true)
 
-        val first = unlockSupplierNetwork(data)
-        val second = unlockSupplierNetwork(data)
-
-        assertEquals(1, first)
-        assertEquals(1, second)
+        assertEquals(2, unlockSupplierNetwork(data))
+        assertEquals(2, unlockSupplierNetwork(data))
     }
 
     @Test
     fun emptyDictionaryIsNotTreatedAsUnlocked() {
         val data = JsonParser.parseString(
-            """{"supplierNetworkManager":{"m_NodeDictionary":{}}}"""
+            """{"supplierNetworkManager":{"m_NodeDictionary":[]}}"""
         ).asJsonObject
 
         assertEquals(0, unlockSupplierNetwork(data))
