@@ -1237,8 +1237,11 @@ private fun SupplierNetworkPage(
     onFieldChange: (List<String>, JsonElement) -> Unit
 ) {
     val nodes = remember(doc.data) { supplierNetworkNodes(doc.data) }
-    var selectedKey by remember(doc.data) { mutableIntStateOf(nodes.firstOrNull()?.key ?: -1) }
-    var filter by remember(doc.data) { mutableStateOf("Semua") }
+    var selectedKey by remember { mutableIntStateOf(-1) }
+    var filter by remember { mutableStateOf("Semua") }
+    LaunchedEffect(doc.data) {
+        if (nodes.none { it.key == selectedKey }) selectedKey = nodes.firstOrNull()?.key ?: -1
+    }
     val selected = nodes.firstOrNull { it.key == selectedKey }
     val visibleNodes = when (filter) {
         "Dimiliki" -> nodes.filter { it.owned }
